@@ -1,0 +1,458 @@
+---
+import { supabase } from '../lib/supabase';
+import '../styles/global.css';
+
+const pageSize = 24;
+const requestedPage = Math.max(1, Number(Astro.url.searchParams.get('page') || '1'));
+const search = Astro.url.searchParams.get('q')?.trim() || '';
+const categorySlug = Astro.url.searchParams.get('category')?.trim() || '';
+const sort = Astro.url.searchParams.get('sort') || 'newest';
+
+const [{ data: categories }, { data: category }] = await Promise.all([
+  supabase
+    .from('categories')
+    .select('id, name, slug')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true }),
+  categorySlug
+    ? supabase
+        .from('categories')
+        .select('id, name, slug')
+        .eq('slug', categorySlug)
+        .eq('is_active', true)
+        .maybeSingle()
+    : Promise.resolve({ data: null })
+]);
+
+const from = (requestedPage - 1) * pageSize;
+const to = from + pageSize - 1;
+
+let query = supabase
+  .from('products')
+  .select(
+    'id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, category_id',
+    { count: 'exact' }
+  )
+  .eq('is_active', true);
+
+if (search) {
+  query = query.ilike('name', `%${search}%`);
+}
+
+if (category?.id) {
+  query = query.eq('category_id', category.id);
+}
+
+if (sort === 'price-asc') {
+  query = query.order('price', { ascending: true });
+} else if (sort === 'price-desc') {
+  query = query.order('price', { ascending: false });
+} else if (sort === 'name') {
+  query = query.order('name', { ascending: true });
+} else {
+  query = query.order('created_at', { ascending: false });
+}
+
+const { data: products, count, error } = await query.range(from, to);
+const totalProducts = count ?? 0;
+const totalPages = Math.max(1, Math.ceil(totalProducts / pageSize));
+const currentPage = Math.min(requestedPage, totalPages);
+
+function pageUrl(page: number) {
+  const params = new URLSearchParams();
+  if (search) params.set('q', search);
+  if (categorySlug) params.set('category', categorySlug);
+  if (sort !== 'newest') params.set('sort', sort);
+  if (page > 1) params.set('page', String(page));
+  const queryString = params.toString();
+  return `/products${queryString ? `?${queryString}` : ''}`;
+}
+
+const title = category
+  ? `${category.name} Toys | Clever Toys`
+  : search
+    ? `Search results for ${search} | Clever Toys`
+    : 'Shop Toys | Clever Toys';
+
+const description = category
+  ? `Shop ${category.name.toLowerCase()} toys at Clever Toys.`
+  : 'Shop toys for children of all ages at Clever Toys. Discover fun, educational and exciting toys.';
+
+const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
+---
+
+<head>
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <link rel="canonical" href={canonicalUrl} />
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content={canonicalUrl} />
+</head>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a href="/" class="logo">Clever Toys</a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a href="/">Home</a>
+      <a href="/products" aria-current="page">Shop</a>
+      <a href="/categories">Categories</a>
+      <a href="/cart" aria-label="Shopping cart">Cart</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="shop-hero">
+    <div class="container">
+      <p class="shop-eyebrow">Clever Toys</p>
+      <h1>{category ? category.name : search ? 'Search results' : 'Shop all toys'}</h1>
+      <p>Find fun, educational and exciting toys for every child.</p>
+    </div>
+  </section>
+
+  <section class="section shop-section">
+    <div class="container">
+      <div class="shop-toolbar">
+        <form class="search-form" method="get" action="/products">
+          <label class="sr-only" for="product-search">Search toys</label>
+          <input id="product-search" name="q" value={search} placeholder="Search toys..." type="search" />
+          {categorySlug && <input type="hidden" name="category" value={categorySlug} />}
+          {sort !== 'newest' && <input type="hidden" name="sort" value={sort} />}
+          <button class="button search-button" type="submit">Search</button>
+        </form>
+
+        <form method="get" action="/products" class="sort-form">
+          {search && <input type="hidden" name="q" value={search} />}
+          {categorySlug && <input type="hidden" name="category" value={categorySlug} />}
+          <label for="sort">Sort</label>
+          <select id="sort" name="sort" onchange="this.form.submit()">
+            <option value="newest" selected={sort === 'newest'}>Newest</option>
+            <option value="price-asc" selected={sort === 'price-asc'}>Price: Low to High</option>
+            <option value="price-desc" selected={sort === 'price-desc'}>Price: High to Low</option>
+            <option value="name" selected={sort === 'name'}>Name: A–Z</option>
+          </select>
+        </form>
+      </div>
+
+      <div class="category-pills" aria-label="Shop categories">
+        <a class:list={{ active: !categorySlug }} href="/products">All Toys</a>
+        {categories?.map((item) => (
+          <a class:list={{ active: item.slug === categorySlug }} href={`/products?category=${encodeURIComponent(item.slug)}`}>
+            {item.name}
+          </a>
+        ))}
+      </div>
+
+      <div class="shop-result-row">
+        <p>
+          {totalProducts === 0
+            ? 'No toys found.'
+            : `Showing ${from + 1}–${Math.min(from + (products?.length ?? 0), totalProducts)} of ${totalProducts} toys`}
+        </p>
+        {categorySlug && (
+          <a href="/products">Clear filters</a>
+        )}
+      </div>
+
+      {error ? (
+        <div class="empty-state">
+          <h2>We couldn't load the toys</h2>
+          <p>Please try again in a moment.</p>
+        </div>
+      ) : products?.length ? (
+        <div class="product-grid shop-grid">
+          {products.map((product) => {
+            const displayPrice = Number(product.sale_price ?? product.price);
+            const originalPrice = product.sale_price != null ? Number(product.price) : null;
+            const inStock = product.stock_quantity > 0;
+
+            return (
+              <article class="product-card shop-card">
+                <a href={`/product/${product.slug}`} class="product-image-link">
+                  {product.primary_image_url ? (
+                    <img class="product-image" src={product.primary_image_url} alt={product.name} loading="lazy" />
+                  ) : (
+                    <div class="product-placeholder"><span>No image yet</span></div>
+                  )}
+                  {product.sale_price != null && <span class="sale-badge">Sale</span>}
+                  {!inStock && <span class="stock-badge">Out of stock</span>}
+                </a>
+
+                <div class="product-info">
+                  <h2><a href={`/product/${product.slug}`}>{product.name}</a></h2>
+                  {product.short_description && <p>{product.short_description}</p>}
+                  <div class="shop-price">
+                    <span class="price">${displayPrice.toFixed(2)}</span>
+                    {originalPrice != null && <span class="shop-original-price">${originalPrice.toFixed(2)}</span>}
+                  </div>
+                  <a class="view-product" href={`/product/${product.slug}`}>
+                    {inStock ? 'View product' : 'View details'}
+                  </a>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div class="empty-state">
+          <h2>No toys found</h2>
+          <p>Try another search or browse all of our toys.</p>
+          <a class="button" href="/products">View all toys</a>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <nav class="pagination" aria-label="Product pagination">
+          {currentPage > 1 && <a href={pageUrl(currentPage - 1)}>← Previous</a>}
+          <span>Page {currentPage} of {totalPages}</span>
+          {currentPage < totalPages && <a href={pageUrl(currentPage + 1)}>Next →</a>}
+        </nav>
+      )}
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p>
+  </div>
+</footer>
+
+<style>
+  .shop-hero {
+    padding: 58px 0 48px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .shop-eyebrow {
+    margin: 0 0 10px;
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .shop-hero h1 {
+    margin: 0 0 12px;
+    font-size: clamp(2.3rem, 6vw, 4rem);
+    letter-spacing: -0.06em;
+  }
+
+  .shop-hero p:last-child {
+    margin: 0;
+    color: #64748b;
+    font-size: 1.05rem;
+  }
+
+  .shop-section {
+    padding-top: 36px;
+  }
+
+  .shop-toolbar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 14px;
+    align-items: end;
+    margin-bottom: 20px;
+  }
+
+  .search-form {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+  }
+
+  .search-form input,
+  .sort-form select {
+    min-height: 48px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    background: #fff;
+    padding: 0 14px;
+    font: inherit;
+  }
+
+  .search-button {
+    min-height: 48px;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .sort-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+  }
+
+  .sort-form label {
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .category-pills {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 20px;
+    scrollbar-width: thin;
+  }
+
+  .category-pills a {
+    flex: 0 0 auto;
+    padding: 9px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    background: #fff;
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+
+  .category-pills a:hover,
+  .category-pills a.active {
+    background: #111827;
+    color: #fff;
+    border-color: #111827;
+  }
+
+  .shop-result-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 18px;
+    color: #64748b;
+    font-size: 0.9rem;
+  }
+
+  .shop-result-row p { margin: 0; }
+  .shop-result-row a { font-weight: 700; color: #111827; }
+
+  .shop-grid { margin-top: 0; }
+
+  .shop-card { position: relative; }
+
+  .product-image-link {
+    position: relative;
+    display: block;
+  }
+
+  .sale-badge,
+  .stock-badge {
+    position: absolute;
+    top: 12px;
+    padding: 6px 9px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+  }
+
+  .sale-badge { left: 12px; }
+  .stock-badge { right: 12px; }
+
+  .shop-card .product-info h2 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+  }
+
+  .shop-price {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .shop-original-price {
+    color: #94a3b8;
+    font-size: 0.9rem;
+    text-decoration: line-through;
+  }
+
+  .view-product {
+    display: inline-block;
+    margin-top: 14px;
+    font-size: 0.88rem;
+    font-weight: 800;
+  }
+
+  .empty-state {
+    padding: 64px 20px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 18px;
+    text-align: center;
+  }
+
+  .empty-state h2 { margin: 0 0 8px; }
+  .empty-state p { margin: 0 0 20px; color: #64748b; }
+
+  .pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 18px;
+    margin-top: 40px;
+    font-size: 0.92rem;
+  }
+
+  .pagination a {
+    padding: 10px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    font-weight: 700;
+  }
+
+  .pagination span { color: #64748b; }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 700px) {
+    .shop-toolbar {
+      grid-template-columns: 1fr;
+    }
+
+    .sort-form {
+      justify-content: space-between;
+    }
+
+    .sort-form select {
+      flex: 1;
+    }
+
+    .shop-result-row {
+      align-items: flex-start;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .search-form {
+      grid-template-columns: 1fr;
+    }
+
+    .search-button {
+      width: 100%;
+    }
+
+    .shop-result-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>
