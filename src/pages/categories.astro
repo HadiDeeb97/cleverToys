@@ -1,0 +1,199 @@
+---
+import { supabase } from '../lib/supabase';
+import '../styles/global.css';
+
+const { data: categories, error } = await supabase
+  .from('categories')
+  .select('id, name, slug, description, image_url')
+  .eq('is_active', true)
+  .order('sort_order', { ascending: true });
+
+const title = 'Toy Categories | Clever Toys';
+const description = 'Browse Clever Toys by category and find the right toys for every child.';
+const canonicalUrl = new URL('/categories', Astro.site ?? Astro.url.origin).href;
+---
+
+<head>
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <link rel="canonical" href={canonicalUrl} />
+  <meta property="og:title" content={title} />
+  <meta property="og:description" content={description} />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content={canonicalUrl} />
+</head>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a href="/" class="logo">Clever Toys</a>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a href="/">Home</a>
+      <a href="/products">Shop</a>
+      <a href="/categories" aria-current="page">Categories</a>
+      <a href="/cart" aria-label="Shopping cart">Cart</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="category-hero">
+    <div class="container">
+      <p class="eyebrow">Clever Toys</p>
+      <h1>Shop by category</h1>
+      <p>Explore our toy collection and find something perfect for every child.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      {error ? (
+        <div class="category-empty">
+          <h2>We couldn't load the categories</h2>
+          <p>Please try again in a moment.</p>
+        </div>
+      ) : categories?.length ? (
+        <div class="category-page-grid">
+          {categories.map((category) => (
+            <a class="category-page-card" href={`/category/${category.slug}`}>
+              {category.image_url ? (
+                <img src={category.image_url} alt={category.name} loading="lazy" />
+              ) : (
+                <div class="category-page-placeholder" aria-hidden="true">
+                  <span>{category.name.slice(0, 1)}</span>
+                </div>
+              )}
+              <div class="category-page-info">
+                <h2>{category.name}</h2>
+                {category.description && <p>{category.description}</p>}
+                <span>Shop category →</span>
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <div class="category-empty">
+          <h2>No categories yet</h2>
+          <p>Our toy categories will appear here soon.</p>
+        </div>
+      )}
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p>
+  </div>
+</footer>
+
+<style>
+  .category-hero {
+    padding: 58px 0 48px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .category-hero .eyebrow {
+    margin: 0 0 10px;
+    color: #64748b;
+    font-size: 0.8rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .category-hero h1 {
+    margin: 0 0 12px;
+    font-size: clamp(2.3rem, 6vw, 4rem);
+    letter-spacing: -0.06em;
+  }
+
+  .category-hero p:last-child {
+    margin: 0;
+    color: #64748b;
+    font-size: 1.05rem;
+  }
+
+  .category-page-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+
+  .category-page-card {
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    background: #fff;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .category-page-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.09);
+  }
+
+  .category-page-card img,
+  .category-page-placeholder {
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    object-fit: cover;
+    background: #f1f5f9;
+  }
+
+  .category-page-placeholder {
+    display: grid;
+    place-items: center;
+  }
+
+  .category-page-placeholder span {
+    display: grid;
+    width: 70px;
+    height: 70px;
+    place-items: center;
+    border-radius: 50%;
+    background: #fff;
+    color: #64748b;
+    font-size: 2rem;
+    font-weight: 900;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  .category-page-info {
+    padding: 20px;
+  }
+
+  .category-page-info h2 {
+    margin: 0 0 8px;
+    font-size: 1.25rem;
+  }
+
+  .category-page-info p {
+    margin: 0 0 14px;
+    color: #64748b;
+    line-height: 1.6;
+  }
+
+  .category-page-info span {
+    font-size: 0.9rem;
+    font-weight: 800;
+  }
+
+  .category-empty {
+    padding: 64px 20px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 18px;
+    text-align: center;
+  }
+
+  .category-empty h2 { margin: 0 0 8px; }
+  .category-empty p { margin: 0; color: #64748b; }
+
+  @media (max-width: 800px) {
+    .category-page-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 520px) {
+    .category-page-grid { grid-template-columns: 1fr; }
+  }
+</style>
