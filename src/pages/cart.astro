@@ -6,8 +6,9 @@ import '../styles/global.css';
 <footer class="site-footer"><div class="container"><p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p></div></footer>
 <script>
 const root = document.querySelector('#cart-root');
-const read = () => { try { return JSON.parse(localStorage.getItem('clever-toys-cart') || '[]'); } catch { return []; } };
-const save = (cart) => localStorage.setItem('clever-toys-cart', JSON.stringify(cart));
+const KEY = 'cleverToysCart';
+const read = () => { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; } };
+const save = (cart) => localStorage.setItem(KEY, JSON.stringify(cart));
 const money = (n) => `$${Number(n).toFixed(2)}`;
 function render() {
  const cart = read();
