@@ -1,0 +1,31 @@
+---
+import { supabase } from '../lib/supabase';
+
+const { data: categories, error } = await supabase
+  .from('categories')
+  .select('id, name, slug')
+  .eq('is_active', true);
+---
+
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Supabase Test</title>
+  </head>
+
+  <body>
+    <h1>Supabase Connection Test</h1>
+
+    {error ? (
+      <p>Database error: {error.message}</p>
+    ) : (
+      <ul>
+        {categories?.map((category) => (
+          <li>
+            {category.name} — {category.slug}
+          </li>
+        ))}
+      </ul>
+    )}
+  </body>
+</html>

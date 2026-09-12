@@ -1,11 +1,140 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+import { supabase } from '../lib/supabase';
+import '../styles/global.css';
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+const { data: categories, error: categoriesError } = await supabase
+  .from('categories')
+  .select('id, name, slug, description')
+  .eq('is_active', true)
+  .order('sort_order', { ascending: true });
+
+const { data: featuredProducts, error: productsError } = await supabase
+  .from('products')
+  .select(`
+    id,
+    name,
+    slug,
+    price,
+    sale_price,
+    primary_image_url,
+    short_description
+  `)
+  .eq('is_active', true)
+  .eq('is_featured', true)
+  .order('created_at', { ascending: false })
+  .limit(8);
 ---
+<header class="site-header">
+  <div class="container header-inner">
+    <a href="/" class="logo">Clever Toys</a>
 
-<Layout>
-	<Welcome />
-</Layout>
+    <nav class="main-nav" aria-label="Main navigation">
+      <a href="/">Home</a>
+      <a href="/products">Shop</a>
+      <a href="/categories">Categories</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="container hero-content">
+      <h1>Play. Learn. Discover.</h1>
+
+      <p>
+        Discover fun, educational and exciting toys for children of all ages.
+      </p>
+
+      <a href="/products" class="button">Shop Now</a>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-header">
+        <h2>Shop by Category</h2>
+        <p>Find the perfect toy for every child.</p>
+      </div>
+
+      {categoriesError ? (
+        <p>Unable to load categories.</p>
+      ) : (
+        <div class="category-grid">
+          {categories?.map((category) => (
+            <a
+              href={`/category/${category.slug}`}
+              class="category-card"
+            >
+              <strong>{category.name}</strong>
+
+              {category.description && (
+                <p>{category.description}</p>
+              )}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-header">
+        <h2>Featured Toys</h2>
+        <p>Some of our favorite picks.</p>
+      </div>
+
+      {productsError ? (
+        <p>Unable to load products.</p>
+      ) : featuredProducts?.length ? (
+        <div class="product-grid">
+          {featuredProducts.map((product) => {
+            const displayPrice =
+              product.sale_price ?? product.price;
+
+            return (
+              <article class="product-card">
+                {product.primary_image_url ? (
+                  <img
+                    class="product-image"
+                    src={product.primary_image_url}
+                    alt={product.name}
+                    loading="lazy"
+                  />
+                ) : (
+                  <div class="product-placeholder">
+                    <span>No image yet</span>
+                  </div>
+                )}
+
+                <div class="product-info">
+                  <h3>
+                    <a href={`/product/${product.slug}`}>
+                      {product.name}
+                    </a>
+                  </h3>
+
+                  {product.short_description && (
+                    <p>{product.short_description}</p>
+                  )}
+
+                  <span class="price">
+                    ${displayPrice.toFixed(2)}
+                  </span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <p>No featured toys yet.</p>
+      )}
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p>
+  </div>
+</footer>
