@@ -1,5 +1,9 @@
 ---
 import '../../styles/global.css';
+import { env } from 'cloudflare:workers';
+
+const supabaseUrl = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
+const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
 ---
 
 <header class="site-header">
@@ -24,6 +28,7 @@ import '../../styles/global.css';
       <button id="logout" class="button secondary-button" type="button">Sign Out</button>
     </div>
 
+    <div id="admin-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
     <div id="guard" class="empty-state">Checking admin access…</div>
     <div id="admin-error" class="empty-state" hidden></div>
 
@@ -115,38 +120,41 @@ import '../../styles/global.css';
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
-  import { supabase } from '../../lib/supabase';
+  import { createClient } from '@supabase/supabase-js';
 
-  const $ = (selector) => document.querySelector(selector);
-  const guard = $('#guard');
-  const app = $('#admin-app');
-  const adminError = $('#admin-error');
-  const productForm = $('#product-form');
-  const productMessage = $('#product-message');
-  const categoryMessage = $('#category-message');
-  const productList = $('#product-list');
-  const categoryList = $('#category-list');
-  const categorySelect = $('#category-select');
+  const config = document.querySelector('#admin-config');
+  const url = config?.dataset.url;
+  const key = config?.dataset.key;
+  const guard = document.querySelector('#guard');
+  const app = document.querySelector('#admin-app');
+  const adminError = document.querySelector('#admin-error');
+  const productForm = document.querySelector('#product-form');
+  const productMessage = document.querySelector('#product-message');
+  const categoryMessage = document.querySelector('#category-message');
+  const productList = document.querySelector('#product-list');
+  const categoryList = document.querySelector('#category-list');
+  const categorySelect = document.querySelector('#category-select');
+  let supabase;
   let categories = [];
   let products = [];
   let variants = [];
 
-  const slugify = (value) => String(value || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-  function withTimeout(promise, ms = 10000) {
-    return Promise.race([
-      promise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('The admin check timed out. Please refresh and try again.')), ms))
-    ]);
-  }
+  const slugify = (value) => String(value || '').toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
 
   function showError(message) {
     guard.hidden = true;
     app.hidden = true;
     adminError.hidden = false;
     adminError.innerHTML = `<h2>Admin access could not be verified</h2><p>${esc(message)}</p><button class="button" id="retry-admin" type="button">Try again</button>`;
-    $('#retry-admin').onclick = () => location.reload();
+    document.querySelector('#retry-admin').onclick = () => location.reload();
+  }
+
+  async function withTimeout(promise, ms = 12000) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase did not respond within 12 seconds.')), ms))
+    ]);
   }
 
   async function load() {
@@ -163,7 +171,7 @@ import '../../styles/global.css';
   }
 
   function renderProducts() {
-    const q = ($('#product-search').value || '').toLowerCase();
+    const q = (document.querySelector('#product-search').value || '').toLowerCase();
     const list = products.filter((p) => p.name.toLowerCase().includes(q) || String(p.sku || '').toLowerCase().includes(q));
     productList.innerHTML = list.length ? list.map((p) => `<div class="admin-item"><div><strong>${esc(p.name)}</strong><small>${esc(p.sku || 'No SKU')} · $${Number(p.sale_price ?? p.price).toFixed(2)} · stock ${p.stock_quantity} ${p.is_active ? '' : '· inactive'}</small></div><div class="item-actions"><button class="small-button" data-edit="${p.id}" type="button">Edit</button><button class="small-button danger-button" data-delete="${p.id}" type="button">Delete</button></div></div>`).join('') : '<p>No products found.</p>';
     productList.querySelectorAll('[data-edit]').forEach((b) => b.onclick = () => editProduct(b.dataset.edit));
@@ -181,8 +189,7 @@ import '../../styles/global.css';
     for (const [k, v] of Object.entries(p)) {
       const el = productForm.elements.namedItem(k);
       if (!el) continue;
-      if (el.type === 'checkbox') el.checked = Boolean(v);
-      else el.value = v ?? '';
+      if (el.type === 'checkbox') el.checked = Boolean(v); else el.value = v ?? '';
     }
     productForm.elements.namedItem('category_id').value = p.category_id || '';
     productForm.elements.namedItem('id').value = p.id;
@@ -190,13 +197,13 @@ import '../../styles/global.css';
     if (r.error) { productMessage.textContent = r.error.message; return; }
     variants = r.data || [];
     renderVariants();
-    $('#product-form-title').textContent = 'Edit Product';
+    document.querySelector('#product-form-title').textContent = 'Edit Product';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function renderVariants() {
-    const box = $('#variant-list');
-    box.innerHTML = variants.map((v, i) => `<div class="variant-row" data-i="${i}"><input placeholder="Name (e.g. Red)" data-v="name" value="${esc(v.name)}"><input placeholder="SKU" data-v="sku" value="${esc(v.sku || '')}"><input placeholder="Price" type="number" step="0.01" min="0" data-v="price" value="${v.price ?? ''}"><input placeholder="Sale" type="number" step="0.01" min="0" data-v="sale_price" value="${v.sale_price ?? ''}"><input placeholder="Stock" type="number" min="0" data-v="stock_quantity" value="${v.stock_quantity ?? 0}"><button class="small-button danger-button" type="button" data-remove-variant="${i}">×</button></div>`).join('');
+    const box = document.querySelector('#variant-list');
+    box.innerHTML = variants.map((v, i) => `<div class="variant-row" data-i="${i}"><input placeholder="Name" data-v="name" value="${esc(v.name)}"><input placeholder="SKU" data-v="sku" value="${esc(v.sku || '')}"><input placeholder="Price" type="number" step="0.01" min="0" data-v="price" value="${v.price ?? ''}"><input placeholder="Sale" type="number" step="0.01" min="0" data-v="sale_price" value="${v.sale_price ?? ''}"><input placeholder="Stock" type="number" min="0" data-v="stock_quantity" value="${v.stock_quantity ?? 0}"><button class="small-button danger-button" type="button" data-remove-variant="${i}">×</button></div>`).join('');
     box.querySelectorAll('[data-remove-variant]').forEach((b) => b.onclick = () => { variants.splice(Number(b.dataset.removeVariant), 1); renderVariants(); });
   }
 
@@ -236,12 +243,12 @@ import '../../styles/global.css';
       const path = `${productId}/${Date.now()}-${i}.webp`;
       const up = await supabase.storage.from('product-images').upload(path, blob, { contentType: 'image/webp', upsert: false });
       if (up.error) throw new Error(up.error.message);
-      const { data: url } = supabase.storage.from('product-images').getPublicUrl(path);
-      const imageInsert = await supabase.from('product_images').insert({ product_id: productId, image_url: url.publicUrl, alt_text: files[i].name.replace(/\.[^.]+$/, ''), sort_order: i, is_primary: i === 0 });
-      if (imageInsert.error) throw new Error(imageInsert.error.message);
+      const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+      const ins = await supabase.from('product_images').insert({ product_id: productId, image_url: urlData.publicUrl, alt_text: files[i].name.replace(/\.[^.]+$/, ''), sort_order: i, is_primary: i === 0 });
+      if (ins.error) throw new Error(ins.error.message);
       if (i === 0) {
-        const update = await supabase.from('products').update({ primary_image_url: url.publicUrl }).eq('id', productId);
-        if (update.error) throw new Error(update.error.message);
+        const upProduct = await supabase.from('products').update({ primary_image_url: urlData.publicUrl }).eq('id', productId);
+        if (upProduct.error) throw new Error(upProduct.error.message);
       }
     }
   }
@@ -270,33 +277,28 @@ import '../../styles/global.css';
       is_active: fd.get('is_active') === 'on',
       updated_at: new Date().toISOString()
     };
-    const result = id
-      ? await supabase.from('products').update(data).eq('id', id).select().single()
-      : await supabase.from('products').insert(data).select().single();
+    const result = id ? await supabase.from('products').update(data).eq('id', id).select().single() : await supabase.from('products').insert(data).select().single();
     if (result.error) { productMessage.textContent = result.error.message; return; }
     const pid = result.data.id;
     try {
-      const files = [...$('#image-files').files];
+      const files = [...document.querySelector('#image-files').files];
       if (files.length) await uploadImages(pid, files);
       if (id) {
         const old = await supabase.from('product_variants').select('id').eq('product_id', pid);
         if (old.error) throw new Error(old.error.message);
-        for (const row of old.data || []) if (!variants.some((v) => v.id === row.id)) {
-          const del = await supabase.from('product_variants').delete().eq('id', row.id);
-          if (del.error) throw new Error(del.error.message);
-        }
+        for (const row of old.data || []) if (!variants.some((v) => v.id === row.id)) await supabase.from('product_variants').delete().eq('id', row.id);
       }
       for (const v of variants) {
-        if (!v.name) continue;
+        if (!String(v.name || '').trim()) continue;
         const vd = { product_id: pid, name: String(v.name), sku: String(v.sku || '') || null, price: v.price === '' ? null : Number(v.price), sale_price: v.sale_price === '' ? null : Number(v.sale_price), stock_quantity: Number(v.stock_quantity || 0), attributes: v.attributes || {}, is_active: v.is_active !== false, updated_at: new Date().toISOString() };
-        const r = v.id ? await supabase.from('product_variants').update(vd).eq('id', v.id) : await supabase.from('product_variants').insert(vd);
-        if (r.error) throw new Error(r.error.message);
+        const vr = v.id ? await supabase.from('product_variants').update(vd).eq('id', v.id) : await supabase.from('product_variants').insert(vd);
+        if (vr.error) throw new Error(vr.error.message);
       }
       productMessage.textContent = 'Saved successfully.';
       clearForm();
       await load();
     } catch (err) {
-      productMessage.textContent = err.message;
+      productMessage.textContent = err?.message || 'Save failed.';
     }
   });
 
@@ -306,26 +308,22 @@ import '../../styles/global.css';
     productForm.elements.namedItem('is_active').checked = true;
     variants = [];
     renderVariants();
-    $('#product-form-title').textContent = 'Add Product';
+    document.querySelector('#product-form-title').textContent = 'Add Product';
   }
 
-  $('#add-variant').onclick = () => {
-    readVariants();
-    variants.push({ name: '', sku: '', price: null, sale_price: null, stock_quantity: 0, attributes: {}, is_active: true });
-    renderVariants();
-  };
-  $('#cancel-edit').onclick = clearForm;
-  $('#product-search').oninput = renderProducts;
-  $('#logout').onclick = async () => { await supabase.auth.signOut(); location.href = '/login'; };
+  document.querySelector('#add-variant').onclick = () => { readVariants(); variants.push({ name: '', sku: '', price: null, sale_price: null, stock_quantity: 0, attributes: {}, is_active: true }); renderVariants(); };
+  document.querySelector('#cancel-edit').onclick = clearForm;
+  document.querySelector('#product-search').oninput = renderProducts;
+  document.querySelector('#logout').onclick = async () => { await supabase.auth.signOut(); location.href = '/login'; };
 
   document.querySelectorAll('.tab').forEach((b) => b.onclick = () => {
     document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
     b.classList.add('active');
     document.querySelectorAll('.admin-panel').forEach((x) => x.hidden = true);
-    $(`#${b.dataset.tab}-tab`).hidden = false;
+    document.querySelector(`#${b.dataset.tab}-tab`).hidden = false;
   });
 
-  $('#category-form').addEventListener('submit', async (e) => {
+  document.querySelector('#category-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const name = String(fd.get('name') || '').trim();
@@ -334,9 +332,9 @@ import '../../styles/global.css';
     if (!error) { e.currentTarget.reset(); await load(); }
   });
 
-  $('#import-btn').onclick = async () => {
-    const file = $('#excel-file').files?.[0];
-    const msg = $('#import-message');
+  document.querySelector('#import-btn').onclick = async () => {
+    const file = document.querySelector('#excel-file').files?.[0];
+    const msg = document.querySelector('#import-message');
     if (!file) { msg.textContent = 'Choose an Excel or CSV file first.'; return; }
     if (!window.XLSX) { msg.textContent = 'Excel reader is still loading. Please try again.'; return; }
     msg.textContent = 'Importing…';
@@ -350,59 +348,33 @@ import '../../styles/global.css';
           const name = String(row.name || row.Name || '').trim();
           if (!name) throw new Error('Missing name');
           const slug = slugify(row.slug || row.Slug || name);
-          let categoryId = null;
           const catName = String(row.category || row.Category || '').trim();
-          if (catName) categoryId = categories.find((x) => x.name.toLowerCase() === catName.toLowerCase())?.id || null;
-          const payload = {
-            name, slug, sku: String(row.sku || row.SKU || '').trim() || null, category_id: categoryId,
-            price: Number(row.price || row.Price || 0),
-            sale_price: (row.sale_price ?? row.SalePrice ?? '') === '' ? null : Number(row.sale_price ?? row.SalePrice),
-            stock_quantity: Number(row.stock_quantity ?? row.Stock ?? 0),
-            age_min: (row.age_min ?? '') === '' ? null : Number(row.age_min),
-            age_max: (row.age_max ?? '') === '' ? null : Number(row.age_max),
-            brand: String(row.brand || '').trim() || null,
-            short_description: String(row.short_description || '').trim(),
-            description: String(row.description || ''),
-            primary_image_url: String(row.primary_image_url || '').trim() || null,
-            seo_title: String(row.seo_title || '').trim() || null,
-            seo_description: String(row.seo_description || '').trim() || null,
-            is_active: String(row.is_active).toLowerCase() !== 'false',
-            is_featured: String(row.is_featured).toLowerCase() === 'true',
-            updated_at: new Date().toISOString()
-          };
+          const categoryId = categories.find((x) => x.name.toLowerCase() === catName.toLowerCase())?.id || null;
+          const payload = { name, slug, sku: String(row.sku || row.SKU || '').trim() || null, category_id: categoryId, price: Number(row.price || row.Price || 0), sale_price: (row.sale_price ?? row.SalePrice ?? '') === '' ? null : Number(row.sale_price ?? row.SalePrice), stock_quantity: Number(row.stock_quantity ?? row.Stock ?? 0), age_min: row.age_min === '' ? null : Number(row.age_min), age_max: row.age_max === '' ? null : Number(row.age_max), brand: String(row.brand || '').trim() || null, short_description: String(row.short_description || '').trim(), description: String(row.description || ''), primary_image_url: String(row.primary_image_url || '').trim() || null, seo_title: String(row.seo_title || '').trim() || null, seo_description: String(row.seo_description || '').trim() || null, is_active: String(row.is_active).toLowerCase() !== 'false', is_featured: String(row.is_featured).toLowerCase() === 'true', updated_at: new Date().toISOString() };
           const existing = products.find((p) => p.slug === slug);
-          const r = existing ? await supabase.from('products').update(payload).eq('id', existing.id) : await supabase.from('products').insert(payload).select().single();
+          const r = existing ? await supabase.from('products').update(payload).eq('id', existing.id).select().single() : await supabase.from('products').insert(payload).select().single();
           if (r.error) throw r.error;
-          existing ? updated++ : created++;
-          const p = existing || r.data;
+          const product = r.data;
           const urls = [row.image_1, row.image_2, row.image_3].map((x) => String(x || '').trim()).filter(Boolean);
-          if (urls.length) {
-            const imageRows = urls.map((url, i) => ({ product_id: p.id, image_url: url, alt_text: name, sort_order: i, is_primary: i === 0 }));
-            const ir = await supabase.from('product_images').insert(imageRows);
-            if (ir.error) throw ir.error;
-          }
+          if (urls.length) await supabase.from('product_images').insert(urls.map((image_url, i) => ({ product_id: product.id, image_url, alt_text: name, sort_order: i, is_primary: i === 0 })));
+          if (existing) updated++; else created++;
         } catch { failed++; }
       }
       msg.textContent = `Import complete: ${created} created, ${updated} updated, ${failed} failed.`;
       await load();
-    } catch (err) {
-      msg.textContent = err.message;
-    }
+    } catch (err) { msg.textContent = err?.message || 'Import failed.'; }
   };
 
   async function initAdmin() {
     try {
+      if (!url || !key) throw new Error('Supabase browser configuration is missing on the Worker.');
+      supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
       const { data: { user }, error: userError } = await withTimeout(supabase.auth.getUser());
       if (userError) throw new Error(userError.message);
       if (!user) { location.href = '/login'; return; }
-
-      const { data: isAdmin, error: adminCheckError } = await withTimeout(supabase.rpc('is_admin'));
-      if (adminCheckError) throw new Error(adminCheckError.message);
-      if (!isAdmin) {
-        showError('This account is not registered as an administrator.');
-        return;
-      }
-
+      const { data: isAdmin, error: adminErrorResult } = await withTimeout(supabase.rpc('is_admin'));
+      if (adminErrorResult) throw new Error(adminErrorResult.message);
+      if (!isAdmin) { showError('This account is not registered as an administrator.'); return; }
       guard.hidden = true;
       adminError.hidden = true;
       app.hidden = false;
@@ -417,5 +389,5 @@ import '../../styles/global.css';
 </script>
 
 <style>
-  .import-card{display:flex;justify-content:space-between;gap:24px;align-items:center;margin-bottom:24px;padding:22px;border:1px solid #e5e7eb;border-radius:16px;background:#fff}.import-card h2{margin:0 0 8px}.import-card p{margin:0;color:#64748b}.import-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.variant-box{margin:8px 0;padding:16px;border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc}.variant-row{display:grid;grid-template-columns:1.3fr 1fr .8fr .8fr .7fr auto;gap:7px;margin:8px 0}.variant-row input{min-width:0;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}.variant-box small{color:#64748b}.panel-title{font-weight:700}.panel-title{display:flex;justify-content:space-between;gap:12px;align-items:center}.panel-title h2,.panel-title h3{margin:0}.admin-item{display:flex;justify-content:space-between;gap:16px;align-items:center}.item-actions{display:flex;gap:8px}.empty-state{padding:28px;border:1px dashed #cbd5e1;border-radius:16px;text-align:center}.admin-head{display:flex;justify-content:space-between;align-items:center;gap:20px}.form-card{background:#fff}.tab{cursor:pointer}@media(max-width:850px){.import-card{display:block}.import-actions{margin-top:14px}.variant-row{grid-template-columns:1fr 1fr}.admin-head{align-items:flex-start}}
+  .import-card{display:flex;justify-content:space-between;gap:24px;align-items:center;margin-bottom:24px;padding:22px;border:1px solid #e5e7eb;border-radius:16px;background:#fff}.import-card h2{margin:0 0 8px}.import-card p{margin:0;color:#64748b}.import-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.variant-box{margin:8px 0;padding:16px;border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc}.variant-row{display:grid;grid-template-columns:1.3fr 1fr .8fr .8fr .7fr auto;gap:7px;margin:8px 0}.variant-row input{min-width:0;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}.variant-box small{color:#64748b}.panel-title{display:flex;justify-content:space-between;gap:12px;align-items:center}.panel-title h2,.panel-title h3{margin:0}.admin-item{display:flex;justify-content:space-between;gap:16px;align-items:center}.item-actions{display:flex;gap:8px}.empty-state{padding:28px;border:1px dashed #cbd5e1;border-radius:16px;text-align:center}.admin-head{display:flex;justify-content:space-between;align-items:center;gap:20px}.form-card{background:#fff}.tab{cursor:pointer}@media(max-width:850px){.import-card{display:block}.import-actions{margin-top:14px}.variant-row{grid-template-columns:1fr 1fr}.admin-head{align-items:flex-start}}
 </style>
