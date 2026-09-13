@@ -1,10 +1,14 @@
 ---
 import '../styles/global.css';
 ---
+<head>
+  <title>Sign In | Clever Toys</title>
+  <meta name="description" content="Sign in to your Clever Toys account or admin dashboard." />
+</head>
 <header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart">Cart</a></nav></div></header>
-<main class="section"><div class="container narrow"><div class="section-header"><h1>Sign in</h1><p>Access your Clever Toys account or admin dashboard.</p></div><form id="login-form" class="form-card"><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign In</button><p id="message" role="status"></p></form></div></main>
+<main class="section"><div class="container narrow"><div class="section-header"><h1>Sign in</h1><p>Access your Clever Toys account or admin dashboard.</p></div><form id="login-form" class="form-card"><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign In</button><p id="message" role="status"></p><p><a href="/forgot-password">Forgot your password?</a></p><p>New to Clever Toys? <a href="/register"><strong>Create an account</strong></a></p></form></div></main>
 <script>
 import { supabase } from '../lib/supabase';
-const form=document.querySelector('#login-form'); const msg=document.querySelector('#message');
-form.addEventListener('submit',async(e)=>{e.preventDefault();msg.textContent='Signing in…';const data=Object.fromEntries(new FormData(form));const {error}=await supabase.auth.signInWithPassword({email:String(data.email),password:String(data.password)});if(error){msg.textContent=error.message;return;}const {data:admin}=await supabase.rpc('is_admin');location.href=admin?'/admin':'/account';});
+const form=document.querySelector('#login-form');const msg=document.querySelector('#message');
+form?.addEventListener('submit',async(e)=>{e.preventDefault();msg.textContent='Signing in…';const data=Object.fromEntries(new FormData(form));const {error}=await supabase.auth.signInWithPassword({email:String(data.email),password:String(data.password)});if(error){msg.textContent=error.message;return;}const {data:admin}=await supabase.rpc('is_admin');location.href=admin?'/admin':'/account';});
 </script>
