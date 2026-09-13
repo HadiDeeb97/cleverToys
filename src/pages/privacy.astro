@@ -1,0 +1,9 @@
+---
+import '../styles/global.css';
+const title='Privacy Policy | Clever Toys';
+const description='Clever Toys privacy policy and information about customer data.';
+---
+<head><title>{title}</title><meta name="description" content={description}/><link rel="canonical" href={`${Astro.url.origin}/privacy`}/></head>
+<header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart">Cart</a></nav></div></header>
+<main class="section"><div class="container narrow"><div class="section-header"><h1>Privacy Policy</h1><p>How Clever Toys handles information provided through the store.</p></div><div class="form-card"><h2>Information we collect</h2><p>When you place an order, we may collect your name, phone number, delivery address and optional email address so we can process and deliver your order.</p><h2>How we use it</h2><p>We use order information to process purchases, contact customers about orders and provide customer support. We do not need payment-card information for cash-on-delivery orders.</p><h2>Accounts</h2><p>If you create an account, authentication is handled by our secure authentication provider. Your account lets you access your own order history.</p><h2>Data requests</h2><p>For questions about your information or to request correction, contact Clever Toys through the customer-support channel provided on the website.</p></div></div></main>
+<footer class="site-footer"><div class="container"><p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p></div></footer>
