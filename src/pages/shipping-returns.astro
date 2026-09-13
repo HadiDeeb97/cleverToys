@@ -1,0 +1,9 @@
+---
+import '../styles/global.css';
+const title='Shipping & Returns | Clever Toys';
+const description='Clever Toys delivery, order confirmation and returns information.';
+---
+<head><title>{title}</title><meta name="description" content={description}/><link rel="canonical" href={`${Astro.url.origin}/shipping-returns`}/></head>
+<header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart">Cart</a></nav></div></header>
+<main class="section"><div class="container narrow"><div class="section-header"><h1>Shipping & Returns</h1><p>Important information before placing your order.</p></div><div class="form-card"><h2>Delivery</h2><p>Orders are placed with cash on delivery. After an order is received, Clever Toys will contact you to confirm the order and delivery details.</p><h2>Delivery fee</h2><p>Any delivery fee is confirmed with you before the order is finalized.</p><h2>Returns and exchanges</h2><p>If an item arrives defective, contact us as soon as possible with your order number and details. Exchange requests should be made within 3 days of receiving the order.</p><h2>Important</h2><p>Products should be returned in the condition in which they were received. Final approval of a return or exchange is subject to inspection.</p></div></div></main>
+<footer class="site-footer"><div class="container"><p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p></div></footer>
