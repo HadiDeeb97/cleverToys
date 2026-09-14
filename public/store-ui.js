@@ -1,8 +1,8 @@
 (() => {
   const CART_KEY = 'cleverToysCart';
   const BADGE_CLASS = 'cart-count-badge';
-  const CART_ICON_CLASS = 'cart-icon';
   const STORE_NAME = 'Clever Toys';
+  const CART_ICON = '<span class="cart-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l1.8 10.2a2 2 0 0 0 2 1.8h7.8a2 2 0 0 0 2-1.7L20 8H6"/><circle cx="9" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg></span>';
   const branding = window.__CLEVER_BRANDING__ || {};
   const FALLBACK_LOGO = branding.logoUrl || '';
   const THEME_KEY = 'cleverToysTheme';
@@ -11,36 +11,23 @@
     try {
       const items = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
       return Array.isArray(items) ? items.filter(item => item && Number(item.quantity) > 0) : [];
-    } catch {
-      return [];
-    }
+    } catch { return []; }
   };
 
   const cartCount = () => readCart().reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0), 0);
 
-  const ensureCartIcon = link => {
-    let icon = link.querySelector(`.${CART_ICON_CLASS}`);
-    if (!icon) {
-      icon = document.createElement('span');
-      icon.className = CART_ICON_CLASS;
-      icon.setAttribute('aria-hidden', 'true');
-      icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l1.8 10.2a2 2 0 0 0 2 1.8h7.8a2 2 0 0 0 2-1.7L20 8H6"/><circle cx="9" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>';
-      link.prepend(icon);
-    }
+  const normalizeCartLink = link => {
+    link.classList.add('cart-link');
+    const href = link.getAttribute('href') || '/cart';
+    link.innerHTML = `${CART_ICON}<span class="cart-label">Cart</span><span class="${BADGE_CLASS}" aria-hidden="true"></span>`;
+    link.setAttribute('href', href);
   };
 
-  const updateCartBadges = () => {
+  const updateCartLinks = () => {
     const count = cartCount();
     document.querySelectorAll('a[href="/cart"], a[href="/cart/"]').forEach(link => {
-      link.classList.add('cart-link');
-      ensureCartIcon(link);
-      let badge = link.querySelector(`.${BADGE_CLASS}`);
-      if (!badge) {
-        badge = document.createElement('span');
-        badge.className = BADGE_CLASS;
-        badge.setAttribute('aria-hidden', 'true');
-        link.appendChild(badge);
-      }
+      normalizeCartLink(link);
+      const badge = link.querySelector(`.${BADGE_CLASS}`);
       badge.textContent = String(count);
       badge.hidden = count === 0;
       link.setAttribute('aria-label', count ? `Shopping cart, ${count} ${count === 1 ? 'item' : 'items'}` : 'Shopping cart');
@@ -54,23 +41,13 @@
       if (links.length === 0) {
         const cart = document.createElement('a');
         cart.href = '/cart';
-        cart.innerHTML = '<span class="cart-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l1.8 10.2a2 2 0 0 0 2 1.8h7.8a2 2 0 0 0 2-1.7L20 8H6"/><circle cx="9" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg></span><span class="cart-label">Cart</span>';
-        cart.setAttribute('aria-label', 'Shopping cart');
         nav.appendChild(cart);
-      } else if (links.length > 1) {
+        normalizeCartLink(cart);
+      } else {
         links.slice(1).forEach(link => link.remove());
       }
-      const cart = nav.querySelector('a[href="/cart"], a[href="/cart/"]');
-      if (cart) {
-        ensureCartIcon(cart);
-        if (!cart.querySelector('.cart-label')) {
-          const label = document.createElement('span');
-          label.className = 'cart-label';
-          label.textContent = 'Cart';
-          cart.appendChild(label);
-        }
-      }
     });
+    updateCartLinks();
   };
 
   const applyTheme = primary => {
@@ -95,9 +72,7 @@
   };
 
   const applyCachedThemeImmediately = () => {
-    const hex = branding.theme || (() => {
-      try { return localStorage.getItem(THEME_KEY) || ''; } catch { return ''; }
-    })();
+    const hex = branding.theme || (() => { try { return localStorage.getItem(THEME_KEY) || ''; } catch { return ''; } })();
     if (/^#[0-9a-f]{6}$/i.test(hex)) document.documentElement.style.setProperty('--brand-primary', hex);
   };
 
@@ -105,65 +80,50 @@
     try {
       const image = new Image();
       image.crossOrigin = 'anonymous';
-      image.src = `${url}${url.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      image.src = url;
       await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
-      const canvas = document.createElement('canvas');
-      canvas.width = 48;
-      canvas.height = 48;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return;
+      const canvas = document.createElement('canvas'); canvas.width = 48; canvas.height = 48;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true }); if (!ctx) return;
       ctx.drawImage(image, 0, 0, 48, 48);
-      const data = ctx.getImageData(0, 0, 48, 48).data;
-      const buckets = new Map();
+      const data = ctx.getImageData(0, 0, 48, 48).data; const buckets = new Map();
       for (let i = 0; i < data.length; i += 16) {
         if (data[i + 3] < 150) continue;
         const r = data[i], g = data[i + 1], b = data[i + 2];
-        const brightness = (r + g + b) / 3;
-        if (brightness > 242 || brightness < 18) continue;
-        const max = Math.max(r, g, b), min = Math.min(r, g, b);
-        if (max === 0 || (max - min) / max < 0.12) continue;
+        const brightness = (r + g + b) / 3; if (brightness > 242 || brightness < 18) continue;
+        const max = Math.max(r, g, b), min = Math.min(r, g, b); if (max === 0 || (max - min) / max < 0.12) continue;
         const key = [r, g, b].map(v => Math.max(0, Math.min(255, Math.round(v / 24) * 24))).join(',');
         buckets.set(key, (buckets.get(key) || 0) + 1);
       }
-      let best = null;
-      for (const [key, score] of buckets.entries()) if (!best || score > best.score) best = { key, score };
+      let best = null; for (const [key, score] of buckets.entries()) if (!best || score > best.score) best = { key, score };
       if (best) applyTheme(best.key.split(',').map(Number));
     } catch {}
   };
 
   const patchLogoElements = logoUrl => {
     document.querySelectorAll('.logo').forEach(logo => {
-      let image = logo.querySelector('.site-logo-image');
-      let text = logo.querySelector('.logo-text');
-      if (!image) {
-        image = document.createElement('img');
-        image.className = 'site-logo-image';
-        image.alt = STORE_NAME;
-        image.decoding = 'async';
-        image.hidden = true;
-        logo.prepend(image);
-      }
-      if (!text) {
-        text = document.createElement('span');
-        text.className = 'logo-text';
-        logo.appendChild(text);
-      }
-      text.textContent = STORE_NAME;
-      text.hidden = false;
-      if (logoUrl) {
-        image.src = logoUrl;
-        image.hidden = false;
-      }
+      let image = logo.querySelector('.site-logo-image'); let text = logo.querySelector('.logo-text');
+      if (!image) { image = document.createElement('img'); image.className = 'site-logo-image'; image.alt = STORE_NAME; image.decoding = 'async'; logo.prepend(image); }
+      if (!text) { text = document.createElement('span'); text.className = 'logo-text'; logo.appendChild(text); }
+      text.textContent = STORE_NAME; text.hidden = false;
+      if (logoUrl) { image.src = logoUrl; image.hidden = false; }
     });
   };
 
   const ensureStoreHeader = () => {
-    if (location.pathname.startsWith('/admin')) return;
-    if (document.querySelector('.site-header')) return;
-    const header = document.createElement('header');
-    header.className = 'site-header';
-    header.innerHTML = `<div class="container header-inner"><a href="/" class="logo"><img class="site-logo-image" src="${FALLBACK_LOGO}" alt="${STORE_NAME}" decoding="async"><span class="logo-text">${STORE_NAME}</span></a><nav class="main-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart" aria-label="Shopping cart"><span class="cart-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l1.8 10.2a2 2 0 0 0 2 1.8h7.8a2 2 0 0 0 2-1.7L20 8H6"/><circle cx="9" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg></span><span class="cart-label">Cart</span></a></nav></div>`;
+    if (location.pathname.startsWith('/admin') || document.querySelector('.site-header')) return;
+    const header = document.createElement('header'); header.className = 'site-header';
+    header.innerHTML = `<div class="container header-inner"><a href="/" class="logo"><img class="site-logo-image" src="${FALLBACK_LOGO}" alt="${STORE_NAME}" decoding="async"><span class="logo-text">${STORE_NAME}</span></a><nav class="main-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart"></a></nav></div>`;
     document.body.prepend(header);
+  };
+
+  const patchStorage = () => {
+    try {
+      if (localStorage.__cleverPatched) return;
+      const originalSet = localStorage.setItem.bind(localStorage); const originalRemove = localStorage.removeItem.bind(localStorage);
+      localStorage.__cleverPatched = true;
+      localStorage.setItem = (key, value) => { originalSet(key, value); if (key === CART_KEY) window.dispatchEvent(new CustomEvent('clever-cart-updated')); };
+      localStorage.removeItem = key => { originalRemove(key); if (key === CART_KEY) window.dispatchEvent(new CustomEvent('clever-cart-updated')); };
+    } catch {}
   };
 
   const init = () => {
@@ -171,40 +131,13 @@
     ensureStoreHeader();
     patchLogoElements(FALLBACK_LOGO);
     ensureCartLink();
-    updateCartBadges();
     if (FALLBACK_LOGO) extractLogoTheme(FALLBACK_LOGO);
   };
 
-  const patchStorage = () => {
-    try {
-      const originalSet = localStorage.setItem.bind(localStorage);
-      const originalRemove = localStorage.removeItem.bind(localStorage);
-      if (!localStorage.__cleverPatched) {
-        localStorage.__cleverPatched = true;
-        localStorage.setItem = (key, value) => {
-          originalSet(key, value);
-          if (key === CART_KEY) window.dispatchEvent(new CustomEvent('clever-cart-updated'));
-        };
-        localStorage.removeItem = key => {
-          originalRemove(key);
-          if (key === CART_KEY) window.dispatchEvent(new CustomEvent('clever-cart-updated'));
-        };
-      }
-    } catch {}
-  };
-
-  window.addEventListener('storage', event => {
-    if (event.key === CART_KEY) updateCartBadges();
-  });
-  window.addEventListener('clever-cart-updated', updateCartBadges);
-  window.addEventListener('cart-updated', updateCartBadges);
-  document.addEventListener('DOMContentLoaded', () => {
-    ensureStoreHeader();
-    patchLogoElements(FALLBACK_LOGO);
-    ensureCartLink();
-    updateCartBadges();
-  });
-
+  window.addEventListener('storage', event => { if (event.key === CART_KEY) updateCartLinks(); });
+  window.addEventListener('clever-cart-updated', updateCartLinks);
+  window.addEventListener('cart-updated', updateCartLinks);
+  document.addEventListener('DOMContentLoaded', () => { ensureStoreHeader(); patchLogoElements(FALLBACK_LOGO); ensureCartLink(); });
   patchStorage();
   init();
 })();
