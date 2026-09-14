@@ -159,11 +159,7 @@
     } catch {}
   };
 
-  const imageViewerState = {
-    images: [],
-    index: 0,
-    previousOverflow: ''
-  };
+  const imageViewerState = { images: [], index: 0, previousOverflow: '' };
 
   const ensureImageViewerStyles = () => {
     if (document.getElementById('clever-image-viewer-styles')) return;
@@ -182,13 +178,7 @@
       .clever-image-viewer-prev:hover,.clever-image-viewer-next:hover{transform:translateY(-50%) scale(1.04)}
       .clever-image-viewer-counter{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);padding:7px 11px;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;font-size:.82rem;line-height:1;backdrop-filter:blur(8px);z-index:2}
       .clever-image-viewer-hint{position:absolute;left:50%;top:14px;transform:translateX(-50%);padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);font-size:.75rem;z-index:2;pointer-events:none}
-      @media(max-width:767px){
-        .clever-image-viewer{padding:10px}
-        .clever-image-viewer-image{max-width:100%;max-height:88vh;border-radius:5px}
-        .clever-image-viewer-button{width:42px;height:42px}
-        .clever-image-viewer-prev{left:6px}.clever-image-viewer-next{right:6px}.clever-image-viewer-close{top:8px;right:8px}
-        .clever-image-viewer-hint{display:none}
-      }
+      @media(max-width:767px){.clever-image-viewer{padding:10px}.clever-image-viewer-image{max-width:100%;max-height:88vh;border-radius:5px}.clever-image-viewer-button{width:42px;height:42px}.clever-image-viewer-prev{left:6px}.clever-image-viewer-next{right:6px}.clever-image-viewer-close{top:8px;right:8px}.clever-image-viewer-hint{display:none}}
     `;
     document.head.appendChild(style);
   };
@@ -228,10 +218,7 @@
     const counter = viewer.querySelector('.clever-image-viewer-counter');
     const prev = viewer.querySelector('.clever-image-viewer-prev');
     const next = viewer.querySelector('.clever-image-viewer-next');
-    if (image) {
-      image.src = item.src;
-      image.alt = item.alt;
-    }
+    if (image) { image.src = item.src; image.alt = item.alt; }
     if (counter) counter.textContent = imageViewerState.images.length > 1 ? `${imageViewerState.index + 1} / ${imageViewerState.images.length}` : '';
     if (prev) prev.hidden = imageViewerState.images.length <= 1;
     if (next) next.hidden = imageViewerState.images.length <= 1;
@@ -254,45 +241,20 @@
       viewer.setAttribute('role', 'dialog');
       viewer.setAttribute('aria-modal', 'true');
       viewer.setAttribute('aria-hidden', 'true');
-      viewer.innerHTML = `
-        <button class="clever-image-viewer-button clever-image-viewer-close" type="button" aria-label="Close image viewer">×</button>
-        <button class="clever-image-viewer-button clever-image-viewer-prev" type="button" aria-label="Previous image">‹</button>
-        <div class="clever-image-viewer-image-wrap">
-          <img class="clever-image-viewer-image" alt="" decoding="async" draggable="false" />
-        </div>
-        <button class="clever-image-viewer-button clever-image-viewer-next" type="button" aria-label="Next image">›</button>
-        <div class="clever-image-viewer-counter" aria-live="polite"></div>
-        <div class="clever-image-viewer-hint">Click outside or press Esc to close</div>
-      `;
+      viewer.innerHTML = `<button class="clever-image-viewer-button clever-image-viewer-close" type="button" aria-label="Close image viewer">×</button><button class="clever-image-viewer-button clever-image-viewer-prev" type="button" aria-label="Previous image">‹</button><div class="clever-image-viewer-image-wrap"><img class="clever-image-viewer-image" alt="" decoding="async" draggable="false" /></div><button class="clever-image-viewer-button clever-image-viewer-next" type="button" aria-label="Next image">›</button><div class="clever-image-viewer-counter" aria-live="polite"></div><div class="clever-image-viewer-hint">Click outside or press Esc to close</div>`;
       document.body.appendChild(viewer);
-      viewer.addEventListener('click', event => {
-        if (event.target === viewer || event.target === viewer.querySelector('.clever-image-viewer-image-wrap')) closeImageViewer();
-      });
+      viewer.addEventListener('click', event => { if (event.target === viewer || event.target === viewer.querySelector('.clever-image-viewer-image-wrap')) closeImageViewer(); });
       viewer.querySelector('.clever-image-viewer-close')?.addEventListener('click', closeImageViewer);
       viewer.querySelector('.clever-image-viewer-prev')?.addEventListener('click', event => { event.stopPropagation(); showImageAt(imageViewerState.index - 1); });
       viewer.querySelector('.clever-image-viewer-next')?.addEventListener('click', event => { event.stopPropagation(); showImageAt(imageViewerState.index + 1); });
       document.addEventListener('keydown', event => {
         const open = document.getElementById('clever-image-viewer')?.classList.contains('is-open');
         if (!open) return;
-        if (event.key === 'Escape') closeImageViewer();
-        else if (event.key === 'ArrowLeft') showImageAt(imageViewerState.index - 1);
-        else if (event.key === 'ArrowRight') showImageAt(imageViewerState.index + 1);
+        if (event.key === 'Escape') closeImageViewer(); else if (event.key === 'ArrowLeft') showImageAt(imageViewerState.index - 1); else if (event.key === 'ArrowRight') showImageAt(imageViewerState.index + 1);
       });
-      let touchStartX = 0;
-      let touchStartY = 0;
-      viewer.addEventListener('touchstart', event => {
-        const touch = event.changedTouches[0];
-        touchStartX = touch.clientX;
-        touchStartY = touch.clientY;
-      }, { passive: true });
-      viewer.addEventListener('touchend', event => {
-        const touch = event.changedTouches[0];
-        const dx = touch.clientX - touchStartX;
-        const dy = touch.clientY - touchStartY;
-        if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) && imageViewerState.images.length > 1) {
-          showImageAt(imageViewerState.index + (dx < 0 ? 1 : -1));
-        }
-      }, { passive: true });
+      let touchStartX = 0; let touchStartY = 0;
+      viewer.addEventListener('touchstart', event => { const touch = event.changedTouches[0]; touchStartX = touch.clientX; touchStartY = touch.clientY; }, { passive: true });
+      viewer.addEventListener('touchend', event => { const touch = event.changedTouches[0]; const dx = touch.clientX - touchStartX; const dy = touch.clientY - touchStartY; if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) && imageViewerState.images.length > 1) showImageAt(imageViewerState.index + (dx < 0 ? 1 : -1)); }, { passive: true });
     }
 
     imageViewerState.images = getViewerImages();
@@ -307,7 +269,7 @@
   };
 
   const bindImageViewer = () => {
-    if (location.pathname.startsWith('/admin')) return;
+    if (location.pathname.startsWith('/admin') || location.pathname === '/products' || location.pathname === '/products/') return;
     document.querySelectorAll('img').forEach(img => {
       if (!(img instanceof HTMLImageElement)) return;
       if (img.closest('.clever-image-viewer') || img.classList.contains('site-logo-image') || img.closest('.logo') || img.closest('.clever-floating-controls')) return;
@@ -318,17 +280,8 @@
       img.setAttribute('tabindex', '0');
       img.setAttribute('role', 'button');
       img.setAttribute('aria-label', img.alt ? `View ${img.alt}` : 'View image');
-      img.addEventListener('click', event => {
-        event.preventDefault();
-        event.stopPropagation();
-        openImageViewer(img.currentSrc || img.src, img.alt || STORE_NAME);
-      });
-      img.addEventListener('keydown', event => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          openImageViewer(img.currentSrc || img.src, img.alt || STORE_NAME);
-        }
-      });
+      img.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); openImageViewer(img.currentSrc || img.src, img.alt || STORE_NAME); });
+      img.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openImageViewer(img.currentSrc || img.src, img.alt || STORE_NAME); } });
     });
   };
 
