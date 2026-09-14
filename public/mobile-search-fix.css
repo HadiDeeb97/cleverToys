@@ -1,0 +1,38 @@
+/* Mobile-only shop search layout fix */
+@media (max-width: 700px) {
+  .shop-toolbar .search-form {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .shop-toolbar .search-form input[type="search"] {
+    flex: 1 1 auto !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .shop-toolbar .search-form .search-button,
+  .shop-toolbar .search-form button[type="submit"] {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: 96px !important;
+    white-space: nowrap !important;
+  }
+}
+
+@media (max-width: 420px) {
+  .shop-toolbar .search-form {
+    gap: 7px !important;
+  }
+
+  .shop-toolbar .search-form .search-button,
+  .shop-toolbar .search-form button[type="submit"] {
+    min-width: 92px !important;
+    padding-inline: 12px !important;
+  }
+}
