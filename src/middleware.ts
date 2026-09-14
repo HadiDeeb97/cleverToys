@@ -25,7 +25,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify({ logoUrl, storeName: 'Clever Toys', theme: cookieTheme, useLogoColors })};</script>`;
   const earlyTheme = cookieTheme ? `<style id="clever-theme">:root{--brand-primary:${cookieTheme};--brand-primary-hover:color-mix(in srgb,${cookieTheme} 82%,#111827);--brand-soft:color-mix(in srgb,${cookieTheme} 9%,#fff);--brand-text-on-primary:#fff;--theme-accent:color-mix(in srgb,${cookieTheme} 55%,#fbbf24)}</style>` : '';
-  const storeScript = '<script src="/store-ui.js?v=20260915" defer></script>';
+  const storeScript = '<script src="/store-ui.js?v=20260915b" defer></script>';
   const adminBrandingLink = path.startsWith('/admin') && !path.startsWith('/admin/branding') ? '<a href="/admin/branding">Branding</a>' : '';
   let output = html;
 
@@ -48,5 +48,6 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const headers = new Headers(response.headers);
   headers.set('content-type', 'text/html; charset=utf-8');
   headers.delete('content-length');
+  if (path.startsWith('/admin')) headers.set('cache-control', 'no-store, no-cache, must-revalidate');
   return new Response(output, { status: response.status, statusText: response.statusText, headers });
 };
