@@ -1,14 +1,70 @@
 ---
 import '../styles/global.css';
+import { env } from 'cloudflare:workers';
+
+const supabaseUrl = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
+const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+const next = new URL(Astro.request.url).searchParams.get('next') || '';
+const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '';
 ---
 <head>
   <title>Sign In | Clever Toys</title>
   <meta name="description" content="Sign in to your Clever Toys account or admin dashboard." />
 </head>
 <header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart">Cart</a></nav></div></header>
-<main class="section"><div class="container narrow"><div class="section-header"><h1>Sign in</h1><p>Access your Clever Toys account or admin dashboard.</p></div><form id="login-form" class="form-card"><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign In</button><p id="message" role="status"></p><p><a href="/forgot-password">Forgot your password?</a></p><p>New to Clever Toys? <a href="/register"><strong>Create an account</strong></a></p></form></div></main>
+<main class="section"><div class="container narrow"><div class="section-header"><h1>Sign in</h1><p>Access your Clever Toys account or admin dashboard.</p></div><div id="login-config" data-url={supabaseUrl} data-key={supabaseKey} data-next={safeNext} hidden></div><form id="login-form" class="form-card"><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign In</button><p id="message" role="status"></p><p><a href="/forgot-password">Forgot your password?</a></p><p>New to Clever Toys? <a href="/register"><strong>Create an account</strong></a></p></form></div></main>
 <script>
-import { supabase } from '../lib/supabase';
-const form=document.querySelector('#login-form');const msg=document.querySelector('#message');
-form?.addEventListener('submit',async(e)=>{e.preventDefault();msg.textContent='Signing in…';const data=Object.fromEntries(new FormData(form));const {error}=await supabase.auth.signInWithPassword({email:String(data.email),password:String(data.password)});if(error){msg.textContent=error.message;return;}const {data:admin}=await supabase.rpc('is_admin');location.href=admin?'/admin':'/account';});
+  import { createClient } from '@supabase/supabase-js';
+
+  const config = document.querySelector('#login-config');
+  const url = config?.dataset.url;
+  const key = config?.dataset.key;
+  const next = config?.dataset.next || '';
+  const form = document.querySelector('#login-form');
+  const msg = document.querySelector('#message');
+
+  let supabase;
+
+  try {
+    if (!url || !key) throw new Error('Supabase browser configuration is missing on the Worker.');
+    supabase = createClient(url, key, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    });
+  } catch (error) {
+    msg.textContent = error?.message || 'Could not initialize sign-in.';
+  }
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!supabase) return;
+    msg.textContent = 'Signing in…';
+
+    const data = Object.fromEntries(new FormData(form));
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({
+      email: String(data.email).trim(),
+      password: String(data.password)
+    });
+
+    if (error) {
+      msg.textContent = error.message;
+      return;
+    }
+
+    if (!signInData.session) {
+      msg.textContent = 'Sign-in succeeded, but no auth session was created. Please try again.';
+      return;
+    }
+
+    const { data: admin, error: adminError } = await supabase.rpc('is_admin');
+    if (adminError) {
+      msg.textContent = adminError.message;
+      return;
+    }
+
+    location.href = next || (admin ? '/admin' : '/account');
+  });
 </script>
