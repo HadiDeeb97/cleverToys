@@ -45,7 +45,7 @@
     });
   };
 
-  const setColorTheme = (primary) => {
+  const setColorTheme = primary => {
     if (!primary || primary.length !== 3) return;
     const [r, g, b] = primary;
     const lighten = amount => primary.map(v => Math.round(v + (255 - v) * amount));
@@ -90,8 +90,13 @@
 
   const patchLogoElements = logoUrl => {
     document.querySelectorAll('.logo').forEach(logo => {
-      let image = logo.querySelector('.site-logo-image');
-      let text = logo.querySelector('.logo-text');
+      // Remove legacy/raw text nodes so "Clever Toys" is never duplicated.
+      [...logo.childNodes].forEach(node => {
+        if (node.nodeType === Node.TEXT_NODE) node.remove();
+      });
+
+      let image = logo.querySelector(':scope > .site-logo-image');
+      let text = logo.querySelector(':scope > .logo-text');
 
       if (!image) {
         image = document.createElement('img');
@@ -113,6 +118,8 @@
       if (logoUrl) {
         image.src = `${logoUrl}${logoUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
         image.hidden = false;
+      } else {
+        image.hidden = true;
       }
     });
   };
@@ -136,7 +143,6 @@
       }
     } catch {}
 
-    patchLogoElements(logoUrl);
     ensureStoreHeader();
     patchLogoElements(logoUrl);
     ensureCartLink();
@@ -174,6 +180,7 @@
     ensureStoreHeader();
     ensureCartLink();
     updateCartBadges();
+    loadBranding();
   });
 
   init();
