@@ -6,7 +6,27 @@
   const FALLBACK_LOGO = branding.logoUrl || '';
   const THEME_KEY = 'cleverToysTheme';
   const DEFAULT_THEME = { primary: '#111827', soft: '#f3f4f6', accent: '#fbbf24' };
-  const whatsappSvg = '<svg viewBox="0 0 32 32" focusable="false" aria-hidden="true"><path d="M16 3.2C9.1 3.2 3.5 8.8 3.5 15.7c0 2.2.6 4.4 1.8 6.3L3.2 28.8l6.9-2.1c1.8 1 3.8 1.5 5.9 1.5 6.9 0 12.5-5.6 12.5-12.5S22.9 3.2 16 3.2Zm0 22.8c-1.9 0-3.8-.5-5.4-1.5l-.4-.2-4.1 1.2 1.2-4-.3-.4c-1-1.6-1.5-3.5-1.5-5.4C5.5 9.9 10.2 5.2 16 5.2s10.5 4.7 10.5 10.5S21.8 26 16 26Zm5.8-7.8c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.7-1.7-2-.2-.3 0-.5.1-.7.1-.1.3-.3.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.6-.1-.2-.7-1.7-.9-2.3-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1 2.9 1.1 3.1c.1.2 2 3.1 4.9 4.3.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2.1-1.4.3-.7.3-1.3.2-1.4-.1-.1-.3-.2-.6-.4Z" fill="currentColor"/></svg>';
+  const whatsappSvg = '<svg viewBox="0 0 32 32" focusable="false" aria-hidden="true"><path d="M16 3.2C9.1 3.2 3.5 8.8 3.5 15.7c0 2.2.6 4.4 1.8 6.3L3.2 28.8l6.9-2.1c1.8 1 3.8 1.5 5.9 1.5 6.9 0 12.5-5.6 12.5-12.5S22.9 3.2 16 3.2Zm0 22.8c-1.9 0-3.8-.5-5.4-1.5l.4-.2-4.1 1.2 1.2-4-.3-.4c-1-1.6-1.5-3.5-1.5-5.4C5.5 9.9 10.2 5.2 16 5.2s10.5 4.7 10.5 10.5S21.8 26 16 26Zm5.8-7.8c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.7-1.7-2-.2-.3 0-.5.1-.7.1-.1.3-.3.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.6-.1-.2-.7-1.7-.9-2.3-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1 2.9 1.1 3.1c.1.2 2 3.1 4.9 4.3.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2.1-1.4.3-.7.3-1.3.2-1.4-.1-.1-.3-.2-.6-.4Z" fill="currentColor"/></svg>';
+  const MOBILE_CSS = `<style id="clever-mobile-ui">
+  html,body{overflow-x:hidden}
+  .container{width:min(100% - 20px,1180px)}
+  .site-header .header-inner{min-height:62px;gap:8px}
+  .site-header .logo{max-width:42%;font-size:1rem;gap:5px;overflow:hidden}
+  .site-header .logo-text{overflow:hidden;text-overflow:ellipsis}
+  .site-header .site-logo-image{max-width:108px;max-height:34px}
+  .site-header .main-nav{max-width:58%;gap:3px;overflow-x:auto;scrollbar-width:none;font-size:.72rem}
+  .site-header .main-nav::-webkit-scrollbar{display:none}
+  .site-header .main-nav a{padding:5px 4px;white-space:nowrap}
+  .hero{padding:38px 0}.hero h1{font-size:clamp(2rem,11vw,3rem);line-height:1}.hero p{font-size:.95rem;line-height:1.55;margin-bottom:20px}
+  .button{min-height:46px;padding:0 18px;border-radius:11px}.section{padding:34px 0}.section-header h1{font-size:2rem}.section-header h2{font-size:1.5rem}
+  .category-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.category-card{min-height:120px;padding:15px;border-radius:14px}
+  .product-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.product-card{border-radius:14px}.product-info{padding:13px}.product-info h3,.shop-card .product-info h2{font-size:.96rem;line-height:1.3}.product-info p{font-size:.82rem;line-height:1.45;margin-bottom:10px}.price{font-size:1.08rem}
+  .site-footer{padding:28px 0;margin-top:28px}.cart-item{grid-template-columns:68px minmax(0,1fr);gap:10px;padding:12px}.cart-item img,.cart-placeholder{width:68px;height:68px}.cart-summary,.checkout-summary{padding:16px}.checkout-layout{grid-template-columns:1fr;gap:16px}
+  .form-card{padding:16px;border-radius:14px}.form-card input,.form-card textarea,.form-card select{min-height:46px}.product-layout{grid-template-columns:1fr;gap:24px}.product-detail{padding-top:20px}.product-details h1{font-size:clamp(1.8rem,8vw,2.6rem)}.detail-price{font-size:1.7rem}.gallery-main{border-radius:16px}.purchase-row{grid-template-columns:84px minmax(0,1fr)}.purchase-box{padding:15px;margin-top:20px}
+  .shop-toolbar{grid-template-columns:1fr;gap:10px}.search-form{grid-template-columns:minmax(0,1fr) auto;gap:7px}.search-form input,.sort-form select{min-height:46px}.search-button{min-height:46px;padding:0 15px}.sort-form{width:100%}.sort-form select{flex:1}.category-pills{margin-right:-2px;margin-left:-2px}.shop-hero{padding:38px 0 32px}.shop-hero h1{font-size:clamp(2rem,9vw,3rem)}.shop-result-row{font-size:.82rem}.pagination{gap:10px;margin-top:28px;flex-wrap:wrap}
+  .admin-grid{grid-template-columns:1fr}.admin-head{gap:12px}.admin-tabs{margin-bottom:16px}.panel-title{gap:10px}#search{max-width:none!important;width:100%}.table-wrap{max-width:100%;overflow-x:auto}.clever-floating-cart,.clever-floating-whatsapp{width:52px;height:52px;bottom:calc(12px + env(safe-area-inset-bottom))}.clever-floating-cart{right:12px}.clever-floating-whatsapp{left:12px}
+  @media(max-width:420px){.product-grid{gap:9px}.product-info{padding:11px}.product-info h3,.shop-card .product-info h2{font-size:.9rem}.product-info p{font-size:.78rem}.site-logo-image{max-width:96px}.main-nav{max-width:60%;font-size:.68rem}.main-nav a:nth-child(3){display:none}.search-form{grid-template-columns:1fr auto}.search-button{padding:0 13px}.category-card{min-height:105px}}
+  </style>`;
   const readCart = () => { try { const items = JSON.parse(localStorage.getItem(CART_KEY) || '[]'); return Array.isArray(items) ? items.filter(i => i && Number(i.quantity) > 0) : []; } catch { return []; } };
   const cartCount = () => readCart().reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0), 0);
   const normalizeCartLink = link => { if (!(link instanceof HTMLAnchorElement)) return; link.classList.add('cart-link'); link.innerHTML = '<span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Cart</span><span class="cart-count-badge" aria-hidden="true"></span>'; };
@@ -15,52 +35,12 @@
   const ensureCartLinks = () => { if (location.pathname.startsWith('/admin')) return; document.querySelectorAll('.main-nav').forEach(nav => { const links = [...nav.querySelectorAll('a[href="/cart"],a[href="/cart/"]')]; if (!links.length) { const cart = document.createElement('a'); cart.href = '/cart'; nav.appendChild(cart); } const all = [...nav.querySelectorAll('a[href="/cart"],a[href="/cart/"]')]; all.slice(1).forEach(link => link.remove()); }); updateCartUI(); };
   const patchLogos = () => document.querySelectorAll('.logo').forEach(logo => { let image = logo.querySelector('.site-logo-image'); let text = logo.querySelector('.logo-text'); if (!image) { image = document.createElement('img'); image.className = 'site-logo-image'; image.alt = STORE_NAME; image.decoding = 'async'; logo.prepend(image); } if (!text) { text = document.createElement('span'); text.className = 'logo-text'; logo.appendChild(text); } text.textContent = STORE_NAME; if (FALLBACK_LOGO) { image.src = FALLBACK_LOGO; image.hidden = false; } });
   const validHex = value => /^#[0-9a-f]{6}$/i.test(String(value || ''));
-  const applyTheme = theme => {
-    if (!theme || !validHex(theme.primary) || !validHex(theme.soft) || !validHex(theme.accent)) return false;
-    const root = document.documentElement;
-    root.style.setProperty('--brand-primary', theme.primary);
-    root.style.setProperty('--brand-primary-hover', theme.primary);
-    root.style.setProperty('--brand-soft', theme.soft);
-    root.style.setProperty('--theme-accent', theme.accent);
-    root.style.setProperty('--brand-text-on-primary', '#fff');
-    try { localStorage.setItem(THEME_KEY, theme.primary); } catch {}
-    return true;
-  };
-  const resetTheme = () => {
-    const root = document.documentElement;
-    root.style.setProperty('--brand-primary', DEFAULT_THEME.primary);
-    root.style.setProperty('--brand-primary-hover', DEFAULT_THEME.primary);
-    root.style.setProperty('--brand-soft', DEFAULT_THEME.soft);
-    root.style.setProperty('--theme-accent', DEFAULT_THEME.accent);
-    root.style.setProperty('--brand-text-on-primary', '#fff');
-    try { localStorage.removeItem(THEME_KEY); } catch {}
-  };
-  const applyCachedThemeImmediately = () => {
-    if (branding.useLogoColors === true) return;
-    if (branding.publishedTheme && applyTheme(branding.publishedTheme)) return;
-    const primary = branding.theme || (() => { try { return localStorage.getItem(THEME_KEY) || ''; } catch { return ''; } })();
-    if (validHex(primary)) document.documentElement.style.setProperty('--brand-primary', primary);
-  };
-  const loadGlobalTheme = async () => {
-    if (!FALLBACK_LOGO) return;
-    try {
-      const base = FALLBACK_LOGO.split('/storage/v1/object/public/product-images/branding/')[0];
-      const response = await fetch(`${base}/storage/v1/object/public/product-images/branding/theme.json?theme=${Date.now()}`, { cache: 'no-store' });
-      if (!response.ok) return;
-      const raw = await response.text();
-      const config = JSON.parse(raw);
-      if (config?.mode === 'theme' && applyTheme(config.theme)) return;
-      if (config?.mode === 'logo') resetTheme();
-    } catch {}
-  };
-  const refresh = () => { if (location.pathname.startsWith('/admin')) return; patchLogos(); ensureCartLinks(); ensureControls(); updateCartUI(); };
-  applyCachedThemeImmediately();
-  refresh();
-  loadGlobalTheme().then(refresh);
-  window.addEventListener('storage', e => { if (e.key === CART_KEY) refresh(); });
-  window.addEventListener('clever-cart-updated', refresh);
-  window.addEventListener('cart-updated', refresh);
-  window.addEventListener('pageshow', refresh);
-  document.addEventListener('DOMContentLoaded', refresh);
-  setInterval(refresh, 500);
+  const applyTheme = theme => { if (!theme || !validHex(theme.primary) || !validHex(theme.soft) || !validHex(theme.accent)) return false; const root = document.documentElement; root.style.setProperty('--brand-primary', theme.primary); root.style.setProperty('--brand-primary-hover', theme.primary); root.style.setProperty('--brand-soft', theme.soft); root.style.setProperty('--theme-accent', theme.accent); root.style.setProperty('--brand-text-on-primary', '#fff'); try { localStorage.setItem(THEME_KEY, theme.primary); } catch {} return true; };
+  const resetTheme = () => { const root = document.documentElement; root.style.setProperty('--brand-primary', DEFAULT_THEME.primary); root.style.setProperty('--brand-primary-hover', DEFAULT_THEME.primary); root.style.setProperty('--brand-soft', DEFAULT_THEME.soft); root.style.setProperty('--theme-accent', DEFAULT_THEME.accent); root.style.setProperty('--brand-text-on-primary', '#fff'); try { localStorage.removeItem(THEME_KEY); } catch {} };
+  const applyCachedThemeImmediately = () => { if (branding.useLogoColors === true) return; if (branding.publishedTheme && applyTheme(branding.publishedTheme)) return; const primary = branding.theme || (() => { try { return localStorage.getItem(THEME_KEY) || ''; } catch { return ''; } })(); if (validHex(primary)) document.documentElement.style.setProperty('--brand-primary', primary); };
+  const loadGlobalTheme = async () => { if (!FALLBACK_LOGO) return; try { const base = FALLBACK_LOGO.split('/storage/v1/object/public/product-images/branding/')[0]; const response = await fetch(`${base}/storage/v1/object/public/product-images/branding/theme.json?theme=${Date.now()}`, { cache: 'no-store' }); if (!response.ok) return; const raw = await response.text(); const config = JSON.parse(raw); if (config?.mode === 'theme' && applyTheme(config.theme)) return; if (config?.mode === 'logo') resetTheme(); } catch {} };
+  const injectMobileCSS = () => { if (document.getElementById('clever-mobile-ui')) return; document.head.insertAdjacentHTML('beforeend', MOBILE_CSS); };
+  const refresh = () => { if (location.pathname.startsWith('/admin')) return; injectMobileCSS(); patchLogos(); ensureCartLinks(); ensureControls(); updateCartUI(); };
+  applyCachedThemeImmediately(); refresh(); loadGlobalTheme().then(refresh);
+  window.addEventListener('storage', e => { if (e.key === CART_KEY) refresh(); }); window.addEventListener('clever-cart-updated', refresh); window.addEventListener('cart-updated', refresh); window.addEventListener('pageshow', refresh); document.addEventListener('DOMContentLoaded', refresh); setInterval(refresh, 500);
 })();
