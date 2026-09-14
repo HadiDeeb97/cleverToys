@@ -6,7 +6,7 @@ const slug = Astro.params.slug;
 const { data: product, error } = await supabase.from('products').select(`id,name,slug,sku,short_description,description,price,sale_price,stock_quantity,age_min,age_max,brand,primary_image_url,seo_title,seo_description,categories:category_id(id,name,slug),product_images(id,image_url,alt_text,sort_order,is_primary),product_variants(id,name,sku,price,sale_price,stock_quantity,attributes,is_active)`).eq('slug', slug).eq('is_active', true).maybeSingle();
 if (error || !product) Astro.response.status = 404;
 const images = product ? [...(product.primary_image_url ? [{ id:'primary', image_url:product.primary_image_url, alt_text:product.name, sort_order:-1, is_primary:true }] : []), ...(product.product_images ?? [])].filter((image,index,all)=>all.findIndex(item=>item.image_url===image.image_url)===index).sort((a,b)=>a.sort_order-b.sort_order) : [];
-const variants = (product?.product_variants ?? []).filter((v) => v.is_active).map((v) => ({ ...v, price: v.price ?? Number(product?.price ?? 0), displayPrice: Number(v.sale_price ?? v.price ?? product?.sale_price ?? product?.price ?? 0), originalPrice: v.sale_price != null ? Number(v.price ?? product?.price ?? 0) : null }));
+const variants = (product?.product_variants ?? []).filter((v) => v.is_active).map((v) => ({ ...v, displayPrice: Number(v.sale_price ?? v.price ?? product?.sale_price ?? product?.price ?? 0), originalPrice: v.sale_price != null ? Number(v.price ?? product?.price ?? 0) : null }));
 const baseDisplayPrice = product ? Number(product.sale_price ?? product.price) : 0;
 const baseOriginalPrice = product?.sale_price != null ? Number(product.price) : null;
 const inStock = Boolean(product && product.stock_quantity > 0);
