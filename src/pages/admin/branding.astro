@@ -60,87 +60,24 @@ function applyColors(primary,soft,accent,label){document.documentElement.style.s
 async function publishConfig(payload,successText,errorPrefix){
   if(!supabase){publishStatus.textContent='Admin access is still being verified.';return false;}
   publishStatus.textContent='Publishing store colors for all visitors…';
-  const blob=new Blob([JSON.stringify(payload)],{type:'application/octet-stream'});
-  // The Storage bucket accepts image MIME types only. We store the JSON body using an accepted MIME type;
-  // the middleware reads the response body as JSON, so the object remains a lightweight global config file.
+  const blob=new Blob([JSON.stringify(payload)],{type:'image/webp'});
   const r=await supabase.storage.from('product-images').upload('branding/theme.json',blob,{contentType:'image/webp',cacheControl:'0',upsert:true});
   if(r.error){publishStatus.textContent=`${errorPrefix}: ${r.error.message}`;return false;}
   publishStatus.textContent=successText;return true;
 }
-async function publishTheme(theme){
-  return publishConfig({mode:'theme',theme:{id:theme.id,name:theme.name,primary:theme.primary,soft:theme.soft,accent:theme.accent},updated_at:new Date().toISOString()},`${theme.name} is now live for all visitors.`,'Could not publish theme');
-}
-async function publishLogoMode(){
-  return publishConfig({mode:'logo',theme:null,updated_at:new Date().toISOString()},'Logo colors are now live for all visitors.','Could not publish color mode');
-}
-function selectTheme(theme){
-  logoToggle.checked=false;
-  setCookie('cleverThemeMode','theme');
-  setCookie('cleverTheme',theme.primary);
-  setCookie('cleverUseLogoColors','false');
-  applyColors(theme.primary,theme.soft,theme.accent,theme.name+' active');
-  grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.toggle('selected',el.dataset.id===theme.id));
-  if(supabase) publishTheme(theme);
-}
-function renderThemes(){
-  grid.innerHTML=themes.map(t=>`<button type="button" class="theme-choice" data-id="${t.id}" aria-label="Use ${t.name} theme"><span class="theme-colors" style="background:${t.soft}"><i style="background:${t.primary}"></i><i style="background:${t.accent}"></i><b>${t.emoji}</b></span><strong>${t.name}</strong><small>${t.desc}</small></button>`).join('');
-  grid.querySelectorAll('.theme-choice').forEach(btn=>btn.onclick=()=>{const t=themes.find(x=>x.id===btn.dataset.id);if(t)selectTheme(t);});
-}
-async function setLogoMode(enabled){
-  logoToggle.checked=enabled;
-  setCookie('cleverUseLogoColors',enabled?'true':'false');
-  if(enabled){
-    deleteCookie('cleverThemeMode');
-    grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.remove('selected'));
-    applyColors('#111827','#f3f4f6','#fbbf24','Logo colors active');
-    if(supabase) await publishLogoMode();
-  } else {
-    const saved=decodeURIComponent(cookie('cleverTheme')).toLowerCase();
-    const t=themes.find(x=>x.primary.toLowerCase()===saved)||themes[0];
-    selectTheme(t);
-  }
-}
+async function publishTheme(theme){return publishConfig({mode:'theme',theme:{id:theme.id,name:theme.name,primary:theme.primary,soft:theme.soft,accent:theme.accent},updated_at:new Date().toISOString()},`${theme.name} is now live for all visitors.`,'Could not publish theme');}
+async function publishLogoMode(){return publishConfig({mode:'logo',theme:null,updated_at:new Date().toISOString()},'Logo colors are now live for all visitors.','Could not publish color mode');}
+function selectTheme(theme){logoToggle.checked=false;setCookie('cleverThemeMode','theme');setCookie('cleverTheme',theme.primary);setCookie('cleverUseLogoColors','false');applyColors(theme.primary,theme.soft,theme.accent,theme.name+' active');grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.toggle('selected',el.dataset.id===theme.id));if(supabase)publishTheme(theme);}
+function renderThemes(){grid.innerHTML=themes.map(t=>`<button type="button" class="theme-choice" data-id="${t.id}" aria-label="Use ${t.name} theme"><span class="theme-colors" style="background:${t.soft}"><i style="background:${t.primary}"></i><i style="background:${t.accent}"></i><b>${t.emoji}</b></span><strong>${t.name}</strong><small>${t.desc}</small></button>`).join('');grid.querySelectorAll('.theme-choice').forEach(btn=>btn.onclick=()=>{const t=themes.find(x=>x.id===btn.dataset.id);if(t)selectTheme(t);});}
+async function setLogoMode(enabled){logoToggle.checked=enabled;setCookie('cleverUseLogoColors',enabled?'true':'false');if(enabled){deleteCookie('cleverThemeMode');grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.remove('selected'));applyColors('#111827','#f3f4f6','#fbbf24','Logo colors active');if(supabase)await publishLogoMode();}else{const saved=decodeURIComponent(cookie('cleverTheme')).toLowerCase();const t=themes.find(x=>x.primary.toLowerCase()===saved)||themes[0];selectTheme(t);}}
 renderThemes();
-const savedLogo=cookie('cleverUseLogoColors');
-const savedTheme=decodeURIComponent(cookie('cleverTheme')).toLowerCase();
-const initial=themes.find(t=>t.primary.toLowerCase()===savedTheme)||themes[0];
-if(savedLogo==='true'){logoToggle.checked=true;applyColors('#111827','#f3f4f6','#fbbf24','Logo colors active');}
-else{selectTheme(initial);}
-logoToggle.onchange=()=>setLogoMode(logoToggle.checked);
-document.querySelector('#reset-theme').onclick=()=>setLogoMode(true);
-async function initAuth(){
-  try{
-    if(!url||!key) throw new Error('Supabase browser configuration is missing.');
-    supabase=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-    const sessionResult=await supabase.auth.getSession();
-    if(sessionResult.error) throw new Error(sessionResult.error.message);
-    if(!sessionResult.data.session?.user){authStatus.textContent='Please sign in to manage branding.';location.href='/login?next=%2Fadmin%2Fbranding';return;}
-    const adminResult=await supabase.rpc('is_admin');
-    if(adminResult.error) throw new Error(adminResult.error.message);
-    if(!adminResult.data){authStatus.textContent='Access denied.';return;}
-    authStatus.textContent='Admin access verified';
-    saveBtn.disabled=false;
-  }catch(e){authStatus.textContent=e?.message||'Unable to verify admin access.';}
-}
+const savedLogo=cookie('cleverUseLogoColors');const savedTheme=decodeURIComponent(cookie('cleverTheme')).toLowerCase();const initial=themes.find(t=>t.primary.toLowerCase()===savedTheme)||themes[0];
+if(savedLogo==='true'){logoToggle.checked=true;applyColors('#111827','#f3f4f6','#fbbf24','Logo colors active');}else{selectTheme(initial);}
+logoToggle.onchange=()=>setLogoMode(logoToggle.checked);document.querySelector('#reset-theme').onclick=()=>setLogoMode(true);
+async function initAuth(){try{if(!url||!key)throw new Error('Supabase browser configuration is missing.');supabase=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const sessionResult=await supabase.auth.getSession();if(sessionResult.error)throw new Error(sessionResult.error.message);if(!sessionResult.data.session?.user){authStatus.textContent='Please sign in to manage branding.';location.href='/login?next=%2Fadmin%2Fbranding';return;}const adminResult=await supabase.rpc('is_admin');if(adminResult.error)throw new Error(adminResult.error.message);if(!adminResult.data){authStatus.textContent='Access denied.';return;}authStatus.textContent='Admin access verified';saveBtn.disabled=false;}catch(e){authStatus.textContent=e?.message||'Unable to verify admin access.';}}
 initAuth();
 document.querySelector('#logout').onclick=async()=>{if(supabase)await supabase.auth.signOut();location.href='/login';};
-saveBtn.onclick=async()=>{
-  const file=document.querySelector('#logo-file').files?.[0];
-  if(!file){message.textContent='Choose a logo file first.';return;}
-  message.textContent='Uploading logo…';saveBtn.disabled=true;
-  try{
-    const bmp=await createImageBitmap(file),max=1800,scale=Math.min(1,max/Math.max(bmp.width,bmp.height)),canvas=document.createElement('canvas');
-    canvas.width=Math.max(1,Math.round(bmp.width*scale));canvas.height=Math.max(1,Math.round(bmp.height*scale));
-    const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Could not prepare the logo.');
-    ctx.drawImage(bmp,0,0,canvas.width,canvas.height);
-    const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Could not convert the logo to WebP.')),'image/webp',.92));
-    const up=await supabase.storage.from('product-images').upload('branding/logo.webp',blob,{contentType:'image/webp',upsert:true,cacheControl:'0'});
-    if(up.error)throw new Error(up.error.message);
-    preview.src=`${logoUrl}?v=${Date.now()}`;
-    message.textContent='Logo updated successfully.';
-  }catch(e){message.textContent=e?.message||'Unable to upload the logo.';}
-  finally{saveBtn.disabled=false;}
-};
+saveBtn.onclick=async()=>{const file=document.querySelector('#logo-file').files?.[0];if(!file){message.textContent='Choose a logo file first.';return;}message.textContent='Uploading logo…';saveBtn.disabled=true;try{const bmp=await createImageBitmap(file),max=1800,scale=Math.min(1,max/Math.max(bmp.width,bmp.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bmp.width*scale));canvas.height=Math.max(1,Math.round(bmp.height*scale));const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Could not prepare the logo.');ctx.drawImage(bmp,0,0,canvas.width,canvas.height);const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Could not convert the logo to WebP.')),'image/webp',.92));const up=await supabase.storage.from('product-images').upload('branding/logo.webp',blob,{contentType:'image/webp',upsert:true,cacheControl:'0'});if(up.error)throw new Error(up.error.message);preview.src=`${logoUrl}?v=${Date.now()}`;message.textContent='Logo updated successfully.';}catch(e){message.textContent=e?.message||'Unable to upload the logo.';}finally{saveBtn.disabled=false;}};
 </script>
 <style>
 .branding-page{max-width:860px}.branding-page .admin-head{margin-bottom:28px}.branding-page .admin-head h1{margin:0 0 7px}.branding-page .admin-head p{margin:0;color:#64748b}.branding-page{display:grid;gap:20px}.branding-card{gap:16px}.section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}.section-heading h2{margin:0 0 5px}.section-heading p:last-child{margin:0;color:#64748b}.auth-status,.theme-status{font-size:.84rem;font-weight:800;color:var(--brand-primary);white-space:nowrap}.publish-status{margin:0;padding:10px 12px;border-radius:10px;background:var(--brand-soft);color:#475569;font-size:.9rem}.switch-row{display:flex!important;align-items:center;justify-content:space-between;gap:18px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:14px;background:#f8fafc}.switch-row span{display:grid;gap:4px}.switch-row small{color:#64748b}.switch-row input{appearance:none;width:50px;height:28px;border-radius:999px;background:#cbd5e1;position:relative;cursor:pointer;transition:.2s;flex:0 0 auto}.switch-row input::after{content:'';position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:.2s}.switch-row input:checked{background:var(--brand-primary)}.switch-row input:checked::after{transform:translateX(22px)}.logo-preview{min-height:190px;display:grid;place-items:center;padding:28px;border:1px dashed #cbd5e1;border-radius:16px;background:linear-gradient(135deg,#f8fafc,#fff)}.logo-preview img{max-width:min(100%,420px);max-height:160px;object-fit:contain}.theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.theme-choice{appearance:none;text-align:left;border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:0;overflow:hidden;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.theme-choice:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(15,23,42,.08)}.theme-choice.selected{border-color:var(--brand-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand-primary) 15%,transparent)}.theme-colors{height:72px;display:flex;align-items:center;padding:14px;gap:7px}.theme-colors i{width:20px;height:20px;border-radius:50%;box-shadow:0 0 0 2px #fff}.theme-colors b{margin-left:auto;font-size:28px}.theme-choice strong,.theme-choice small{display:block;padding-left:14px;padding-right:14px}.theme-choice strong{padding-top:12px}.theme-choice small{padding-top:3px;padding-bottom:14px;color:#64748b}.theme-preview{overflow:hidden;border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}.preview-scene{height:115px;background:var(--preview-soft,#f3e8ff);position:relative;overflow:hidden}.preview-cloud{position:absolute;left:16%;top:25px;font-size:34px}.preview-sun{position:absolute;right:14%;top:16px;font-size:36px}.preview-ball{position:absolute;left:52%;bottom:-4px;font-size:38px}.preview-cube{position:absolute;right:28%;bottom:2px;font-size:34px}.preview-content{padding:22px}.preview-badge{display:inline-flex;padding:5px 9px;border-radius:999px;background:var(--preview-accent,#fbbf24);color:#111827;font-size:.72rem;font-weight:900;letter-spacing:.08em}.preview-content h3{margin:12px 0 5px}.preview-content p{margin:0 0 15px;color:#64748b}.preview-actions{display:flex;gap:8px;align-items:center}.preview-button,.preview-chip{display:inline-flex;padding:9px 12px;border-radius:10px;font-size:.82rem;font-weight:800}.preview-button{background:var(--preview-primary,#7c3aed);color:#fff}.preview-chip{background:var(--preview-soft,#f3e8ff);color:#475569}.section-heading>div{min-width:0}@media(max-width:720px){.theme-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.section-heading{flex-direction:column}.auth-status,.theme-status{white-space:normal}}@media(max-width:520px){.theme-grid{grid-template-columns:1fr}}
