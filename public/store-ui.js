@@ -2,7 +2,9 @@
   const CART_KEY = 'cleverToysCart';
   const BADGE_CLASS = 'cart-count-badge';
   const STORE_NAME = 'Clever Toys';
-  const FALLBACK_LOGO = '';
+  const branding = window.__CLEVER_BRANDING__ || {};
+  const FALLBACK_LOGO = branding.logoUrl || '';
+  const THEME_KEY = 'cleverToysTheme';
 
   const readCart = () => {
     try {
@@ -45,17 +47,32 @@
     });
   };
 
-  const setColorTheme = primary => {
-    if (!primary || primary.length !== 3) return;
-    const [r, g, b] = primary;
-    const lighten = amount => primary.map(v => Math.round(v + (255 - v) * amount));
-    const darken = amount => primary.map(v => Math.round(v * (1 - amount)));
-    const toHex = rgb => '#' + rgb.map(v => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+  const applyTheme = primary => {
+    if (!Array.isArray(primary) || primary.length !== 3) return;
+    const [r, g, b] = primary.map(Number);
+    const clamp = value => Math.max(0, Math.min(255, Math.round(value)));
+    const lighten = amount => primary.map(v => clamp(v + (255 - v) * amount));
+    const darken = amount => primary.map(v => clamp(v * (1 - amount)));
+    const toHex = rgb => '#' + rgb.map(clamp).map(v => v.toString(16).padStart(2, '0')).join('');
+    const hex = toHex(primary);
+    const hover = toHex(darken(.12));
+    const soft = toHex(lighten(.88));
     const text = (0.299 * r + 0.587 * g + 0.114 * b) > 165 ? '#111827' : '#ffffff';
-    document.documentElement.style.setProperty('--brand-primary', toHex(primary));
-    document.documentElement.style.setProperty('--brand-primary-hover', toHex(darken(.12)));
-    document.documentElement.style.setProperty('--brand-soft', toHex(lighten(.88)));
+    document.documentElement.style.setProperty('--brand-primary', hex);
+    document.documentElement.style.setProperty('--brand-primary-hover', hover);
+    document.documentElement.style.setProperty('--brand-soft', soft);
     document.documentElement.style.setProperty('--brand-text-on-primary', text);
+    try {
+      localStorage.setItem(THEME_KEY, hex);
+      document.cookie = `cleverTheme=${encodeURIComponent(hex)}; Max-Age=31536000; Path=/; SameSite=Lax`;
+    } catch {}
+  };
+
+  const applyCachedThemeImmediately = () => {
+    const hex = branding.theme || (() => {
+      try { return localStorage.getItem(THEME_KEY) || ''; } catch { return ''; }
+    })();
+    if (/^#[0-9a-f]{6}$/i.test(hex)) document.documentElement.style.setProperty('--brand-primary', hex);
   };
 
   const extractLogoTheme = async url => {
@@ -84,42 +101,32 @@
       }
       let best = null;
       for (const [key, score] of buckets.entries()) if (!best || score > best.score) best = { key, score };
-      if (best) setColorTheme(best.key.split(',').map(Number));
+      if (best) applyTheme(best.key.split(',').map(Number));
     } catch {}
   };
 
   const patchLogoElements = logoUrl => {
     document.querySelectorAll('.logo').forEach(logo => {
-      // Remove legacy/raw text nodes so "Clever Toys" is never duplicated.
-      [...logo.childNodes].forEach(node => {
-        if (node.nodeType === Node.TEXT_NODE) node.remove();
-      });
-
-      let image = logo.querySelector(':scope > .site-logo-image');
-      let text = logo.querySelector(':scope > .logo-text');
-
+      let image = logo.querySelector('.site-logo-image');
+      let text = logo.querySelector('.logo-text');
       if (!image) {
         image = document.createElement('img');
         image.className = 'site-logo-image';
         image.alt = STORE_NAME;
+        image.decoding = 'async';
         image.hidden = true;
         logo.prepend(image);
       }
-
       if (!text) {
         text = document.createElement('span');
         text.className = 'logo-text';
         logo.appendChild(text);
       }
-
       text.textContent = STORE_NAME;
       text.hidden = false;
-
       if (logoUrl) {
-        image.src = `${logoUrl}${logoUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+        image.src = logoUrl;
         image.hidden = false;
-      } else {
-        image.hidden = true;
       }
     });
   };
@@ -129,25 +136,17 @@
     if (document.querySelector('.site-header')) return;
     const header = document.createElement('header');
     header.className = 'site-header';
-    header.innerHTML = `<div class="container header-inner"><a href="/" class="logo"><img class="site-logo-image" alt="${STORE_NAME}" hidden><span class="logo-text">${STORE_NAME}</span></a><nav class="main-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart" aria-label="Shopping cart">Cart</a></nav></div>`;
+    header.innerHTML = `<div class="container header-inner"><a href="/" class="logo"><img class="site-logo-image" src="${FALLBACK_LOGO}" alt="${STORE_NAME}" decoding="async"><span class="logo-text">${STORE_NAME}</span></a><nav class="main-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart" aria-label="Shopping cart">Cart</a></nav></div>`;
     document.body.prepend(header);
   };
 
-  const loadBranding = async () => {
-    let logoUrl = FALLBACK_LOGO;
-    try {
-      const response = await fetch('/api/branding', { cache: 'no-store' });
-      if (response.ok) {
-        const data = await response.json();
-        logoUrl = data.logo_url || '';
-      }
-    } catch {}
-
+  const init = () => {
+    applyCachedThemeImmediately();
     ensureStoreHeader();
-    patchLogoElements(logoUrl);
+    patchLogoElements(FALLBACK_LOGO);
     ensureCartLink();
     updateCartBadges();
-    if (logoUrl) await extractLogoTheme(logoUrl);
+    if (FALLBACK_LOGO) extractLogoTheme(FALLBACK_LOGO);
   };
 
   const patchStorage = () => {
@@ -165,23 +164,18 @@
     } catch {}
   };
 
-  const init = () => {
-    patchStorage();
-    ensureStoreHeader();
-    ensureCartLink();
-    updateCartBadges();
-    loadBranding();
-  };
-
-  window.addEventListener('storage', event => { if (event.key === CART_KEY) updateCartBadges(); });
+  window.addEventListener('storage', event => {
+    if (event.key === CART_KEY) updateCartBadges();
+  });
   window.addEventListener('clever-cart-updated', updateCartBadges);
   window.addEventListener('cart-updated', updateCartBadges);
   document.addEventListener('DOMContentLoaded', () => {
     ensureStoreHeader();
+    patchLogoElements(FALLBACK_LOGO);
     ensureCartLink();
     updateCartBadges();
-    loadBranding();
   });
 
+  patchStorage();
   init();
 })();
