@@ -24,8 +24,23 @@ import '../../styles/global.css';
     <div class="form-card">
       <h2>Download template</h2>
       <p>The file includes all supported product columns plus an example product and an Instructions sheet.</p>
-      <a class="button" href="/clever-toys-product-import-template.xls" download>Download Excel Template</a>
+      <button id="download-template" class="button" type="button">Download Excel Template</button>
+      <p id="message" role="status"></p>
       <p><a href="/admin">← Back to Products &amp; Categories</a></p>
     </div>
   </div>
 </main>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script>
+  document.querySelector('#download-template').onclick = () => {
+    const message=document.querySelector('#message');
+    if(!window.XLSX){message.textContent='Excel tools are still loading. Please try again.';return;}
+    const headers=['name','slug','sku','category','price','sale_price','stock_quantity','age_min','age_max','brand','short_description','description','primary_image_url','image_1','image_2','image_3','seo_title','seo_description','is_active','is_featured'];
+    const rows=[headers,['Piano Game','piano-game','CT-001','Educational Toys',8.8,'',30,3,8,'Clever Toys','Fun educational piano game for kids.','A fun educational piano game designed for children.','','','','','Piano Game for Kids | Clever Toys','Buy the Piano Game for kids from Clever Toys Lebanon.',true,false]];
+    const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=headers.map(h=>({wch:Math.max(14,Math.min(35,h.length+5))}));
+    const instructions=[['Column','Instructions'],['name','Required product name'],['slug','URL-friendly slug such as piano-game'],['sku','Optional unique SKU'],['category','Existing category name'],['price','Regular USD price'],['sale_price','Optional sale price'],['stock_quantity','Available stock quantity'],['age_min','Optional minimum age'],['age_max','Optional maximum age'],['brand','Optional brand'],['short_description','Short product description'],['description','Full product description'],['primary_image_url','Optional public image URL'],['image_1','Optional public image URL'],['image_2','Optional public image URL'],['image_3','Optional public image URL'],['seo_title','SEO title'],['seo_description','SEO meta description'],['is_active','TRUE or FALSE'],['is_featured','TRUE or FALSE']];
+    const wi=XLSX.utils.aoa_to_sheet(instructions);wi['!cols']=[{wch:24},{wch:80}];
+    const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Products');XLSX.utils.book_append_sheet(wb,wi,'Instructions');XLSX.writeFile(wb,'Clever_Toys_Product_Import_Template.xlsx');message.textContent='Template downloaded.';
+  };
+</script>
