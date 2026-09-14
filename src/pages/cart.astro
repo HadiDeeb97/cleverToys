@@ -5,25 +5,16 @@ import '../styles/global.css';
 <main class="section"><div class="container"><div class="section-header"><h1>Your Cart</h1><p>Review your items before checkout.</p></div><div id="cart-root"></div></div></main>
 <footer class="site-footer"><div class="container"><p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p></div></footer>
 <script>
-const root=document.querySelector('#cart-root');
-const KEY='cleverToysCart';
+const root=document.querySelector('#cart-root');const KEY='cleverToysCart';
 const read=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]').map(i=>({...i,quantity:Math.max(1,Number(i.quantity)||1)}));}catch{return[];}};
-const save=(cart)=>localStorage.setItem(KEY,JSON.stringify(cart));
+const save=(cart)=>{localStorage.setItem(KEY,JSON.stringify(cart));window.dispatchEvent(new CustomEvent('clever-cart-updated'));window.dispatchEvent(new CustomEvent('cart-updated'));};
 const money=(n)=>`$${Number(n).toFixed(2)}`;
 const esc=(v)=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
 const updateCartCount=()=>{const total=read().reduce((sum,item)=>sum+Number(item.quantity||0),0);const el=document.querySelector('#cart-count');if(el){el.textContent=String(total);el.hidden=total===0;}};
-function render(){
- const cart=read(); updateCartCount();
- if(!cart.length){root.innerHTML='<div class="empty-state"><h2>Your cart is empty</h2><p>Add some toys to get started.</p><a class="button" href="/products">Continue Shopping</a></div>';return;}
- const subtotal=cart.reduce((s,i)=>s+Number(i.price)*Number(i.quantity),0);
- root.innerHTML=`<div class="cart-list">${cart.map((i,idx)=>`<article class="cart-item"><div>${i.image?`<img src="${esc(i.image)}" alt="${esc(i.name)}">`:'<div class="cart-placeholder">Toy</div>'}</div><div class="cart-item-info"><h2><a href="/product/${encodeURIComponent(i.slug)}">${esc(i.name)}</a></h2>${i.variantName?`<p class="cart-variant">Option: ${esc(i.variantName)}</p>`:''}<p>${money(i.price)} each</p><div class="quantity-control"><button type="button" aria-label="Decrease quantity" data-minus="${idx}">−</button><strong>${i.quantity}</strong><button type="button" aria-label="Increase quantity" data-plus="${idx}">+</button><button type="button" class="remove-link" data-remove="${idx}">Remove</button></div>${Number.isFinite(Number(i.maxStock))?`<small>Available: ${Number(i.maxStock)}</small>`:''}</div><strong class="line-total">${money(Number(i.price)*Number(i.quantity))}</strong></article>`).join('')}</div><div class="cart-summary"><div><span>Subtotal</span><strong>${money(subtotal)}</strong></div><p>Delivery fee will be calculated at checkout.</p><p class="checkout-question">Ready to place your order?</p><a class="button" href="/checkout">Proceed to Checkout</a></div>`;
- root.querySelectorAll('[data-minus]').forEach(b=>b.onclick=()=>{const c=read();const i=Number(b.dataset.minus);c[i].quantity=Math.max(1,c[i].quantity-1);save(c);render();});
- root.querySelectorAll('[data-plus]').forEach(b=>b.onclick=()=>{const c=read();const i=Number(b.dataset.plus);const max=Number(c[i].maxStock);c[i].quantity=Number.isFinite(max)&&max>0?Math.min(c[i].quantity+1,max):c[i].quantity+1;save(c);render();});
- root.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{const c=read();c.splice(Number(b.dataset.remove),1);save(c);render();});
-}
-render();
-window.addEventListener('storage',render);
+function render(){const cart=read();updateCartCount();if(!cart.length){root.innerHTML='<div class="empty-state"><h2>Your cart is empty</h2><p>Add some toys to get started.</p><a class="button" href="/products">Continue Shopping</a></div>';return;}const subtotal=cart.reduce((s,i)=>s+Number(i.price)*Number(i.quantity),0);root.innerHTML=`<div class="cart-list">${cart.map((i,idx)=>`<article class="cart-item"><div>${i.image?`<img src="${esc(i.image)}" alt="${esc(i.name)}" loading="lazy">`:'<div class="cart-placeholder">Toy</div>'}</div><div class="cart-item-info"><h2><a href="/product/${encodeURIComponent(i.slug)}">${esc(i.name)}</a></h2>${i.variantName?`<p class="cart-variant">Option: ${esc(i.variantName)}</p>`:''}<p>${money(i.price)} each</p><div class="quantity-control"><button type="button" aria-label="Decrease quantity" data-minus="${idx}">−</button><strong>${i.quantity}</strong><button type="button" aria-label="Increase quantity" data-plus="${idx}">+</button><button type="button" class="remove-link" data-remove="${idx}">Remove</button></div>${Number.isFinite(Number(i.maxStock))?`<small>Available: ${Number(i.maxStock)}</small>`:''}</div><strong class="line-total">${money(Number(i.price)*Number(i.quantity))}</strong></article>`).join('')}</div><div class="cart-summary"><div><span>Subtotal</span><strong>${money(subtotal)}</strong></div><p>Delivery fee will be calculated at checkout.</p><p class="checkout-question">Ready to place your order?</p><a class="button" href="/checkout">Proceed to Checkout</a></div>`;
+root.querySelectorAll('[data-minus]').forEach(b=>b.onclick=()=>{const c=read();const i=Number(b.dataset.minus);c[i].quantity=Math.max(1,c[i].quantity-1);save(c);render();});
+root.querySelectorAll('[data-plus]').forEach(b=>b.onclick=()=>{const c=read();const i=Number(b.dataset.plus);const max=Number(c[i].maxStock);c[i].quantity=Number.isFinite(max)&&max>0?Math.min(c[i].quantity+1,max):c[i].quantity+1;save(c);render();});
+root.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{const c=read();c.splice(Number(b.dataset.remove),1);save(c);render();});}
+render();window.addEventListener('storage',render);window.addEventListener('clever-cart-updated',render);
 </script>
-<style>
-.cart-variant{margin:.2rem 0;color:#475569;font-size:.9rem}.cart-item small{display:block;margin-top:6px;color:#64748b}.cart-link{display:inline-flex;align-items:center;gap:6px}.cart-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#111827;color:#fff;font-size:.72rem;font-weight:800;line-height:1}.checkout-question{font-weight:700;margin:12px 0}
-</style>
+<style>.cart-variant{margin:.2rem 0;color:#475569;font-size:.9rem}.cart-item small{display:block;margin-top:6px;color:#64748b}.cart-link{display:inline-flex;align-items:center;gap:6px}.cart-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#111827;color:#fff;font-size:.72rem;font-weight:800;line-height:1}.checkout-question{font-weight:700;margin:12px 0}</style>
