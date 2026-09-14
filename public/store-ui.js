@@ -1,6 +1,7 @@
 (() => {
   const CART_KEY = 'cleverToysCart';
   const BADGE_CLASS = 'cart-count-badge';
+  const CART_ICON_CLASS = 'cart-icon';
   const STORE_NAME = 'Clever Toys';
   const branding = window.__CLEVER_BRANDING__ || {};
   const FALLBACK_LOGO = branding.logoUrl || '';
@@ -17,10 +18,22 @@
 
   const cartCount = () => readCart().reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0), 0);
 
+  const ensureCartIcon = link => {
+    let icon = link.querySelector(`.${CART_ICON_CLASS}`);
+    if (!icon) {
+      icon = document.createElement('span');
+      icon.className = CART_ICON_CLASS;
+      icon.setAttribute('aria-hidden', 'true');
+      icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l1.8 10.2a2 2 0 0 0 2 1.8h7.8a2 2 0 0 0 2-1.7L20 8H6"/><circle cx="9" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg>';
+      link.prepend(icon);
+    }
+  };
+
   const updateCartBadges = () => {
     const count = cartCount();
     document.querySelectorAll('a[href="/cart"], a[href="/cart/"]').forEach(link => {
       link.classList.add('cart-link');
+      ensureCartIcon(link);
       let badge = link.querySelector(`.${BADGE_CLASS}`);
       if (!badge) {
         badge = document.createElement('span');
@@ -37,12 +50,25 @@
   const ensureCartLink = () => {
     if (location.pathname.startsWith('/admin')) return;
     document.querySelectorAll('.main-nav').forEach(nav => {
-      if (!nav.querySelector('a[href="/cart"], a[href="/cart/"]')) {
+      const links = [...nav.querySelectorAll('a[href="/cart"], a[href="/cart/"]')];
+      if (links.length === 0) {
         const cart = document.createElement('a');
         cart.href = '/cart';
-        cart.textContent = 'Cart';
+        cart.innerHTML = '<span class="cart-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l1.8 10.2a2 2 0 0 0 2 1.8h7.8a2 2 0 0 0 2-1.7L20 8H6"/><circle cx="9" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg></span><span class="cart-label">Cart</span>';
         cart.setAttribute('aria-label', 'Shopping cart');
         nav.appendChild(cart);
+      } else if (links.length > 1) {
+        links.slice(1).forEach(link => link.remove());
+      }
+      const cart = nav.querySelector('a[href="/cart"], a[href="/cart/"]');
+      if (cart) {
+        ensureCartIcon(cart);
+        if (!cart.querySelector('.cart-label')) {
+          const label = document.createElement('span');
+          label.className = 'cart-label';
+          label.textContent = 'Cart';
+          cart.appendChild(label);
+        }
       }
     });
   };
@@ -136,7 +162,7 @@
     if (document.querySelector('.site-header')) return;
     const header = document.createElement('header');
     header.className = 'site-header';
-    header.innerHTML = `<div class="container header-inner"><a href="/" class="logo"><img class="site-logo-image" src="${FALLBACK_LOGO}" alt="${STORE_NAME}" decoding="async"><span class="logo-text">${STORE_NAME}</span></a><nav class="main-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart" aria-label="Shopping cart">Cart</a></nav></div>`;
+    header.innerHTML = `<div class="container header-inner"><a href="/" class="logo"><img class="site-logo-image" src="${FALLBACK_LOGO}" alt="${STORE_NAME}" decoding="async"><span class="logo-text">${STORE_NAME}</span></a><nav class="main-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart" aria-label="Shopping cart"><span class="cart-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2l1.8 10.2a2 2 0 0 0 2 1.8h7.8a2 2 0 0 0 2-1.7L20 8H6"/><circle cx="9" cy="20" r="1.2"/><circle cx="17" cy="20" r="1.2"/></svg></span><span class="cart-label">Cart</span></a></nav></div>`;
     document.body.prepend(header);
   };
 
@@ -153,14 +179,17 @@
     try {
       const originalSet = localStorage.setItem.bind(localStorage);
       const originalRemove = localStorage.removeItem.bind(localStorage);
-      localStorage.setItem = (key, value) => {
-        originalSet(key, value);
-        if (key === CART_KEY) window.dispatchEvent(new CustomEvent('clever-cart-updated'));
-      };
-      localStorage.removeItem = key => {
-        originalRemove(key);
-        if (key === CART_KEY) window.dispatchEvent(new CustomEvent('clever-cart-updated'));
-      };
+      if (!localStorage.__cleverPatched) {
+        localStorage.__cleverPatched = true;
+        localStorage.setItem = (key, value) => {
+          originalSet(key, value);
+          if (key === CART_KEY) window.dispatchEvent(new CustomEvent('clever-cart-updated'));
+        };
+        localStorage.removeItem = key => {
+          originalRemove(key);
+          if (key === CART_KEY) window.dispatchEvent(new CustomEvent('clever-cart-updated'));
+        };
+      }
     } catch {}
   };
 
