@@ -1,0 +1,86 @@
+<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Styles>
+    <Style ss:ID="Header">
+      <Font ss:Bold="1" ss:Color="#FFFFFF"/>
+      <Interior ss:Color="#1F2937" ss:Pattern="Solid"/>
+      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+    </Style>
+    <Style ss:ID="Note">
+      <Font ss:Italic="1" ss:Color="#666666"/>
+    </Style>
+  </Styles>
+  <Worksheet ss:Name="Products">
+    <Table>
+      <Row>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">name</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">slug</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">sku</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">category</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">price</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">sale_price</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">stock_quantity</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">age_min</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">age_max</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">brand</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">short_description</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">description</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">primary_image_url</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">image_1</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">image_2</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">image_3</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">seo_title</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">seo_description</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">is_active</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">is_featured</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">Piano Game</Data></Cell>
+        <Cell><Data ss:Type="String">piano-game</Data></Cell>
+        <Cell><Data ss:Type="String">CT-001</Data></Cell>
+        <Cell><Data ss:Type="String">Educational Toys</Data></Cell>
+        <Cell><Data ss:Type="Number">8.80</Data></Cell>
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell><Data ss:Type="Number">30</Data></Cell>
+        <Cell><Data ss:Type="Number">3</Data></Cell>
+        <Cell><Data ss:Type="Number">8</Data></Cell>
+        <Cell><Data ss:Type="String">Clever Toys</Data></Cell>
+        <Cell><Data ss:Type="String">Fun educational piano game for kids.</Data></Cell>
+        <Cell><Data ss:Type="String">A fun and engaging piano game designed for children.</Data></Cell>
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell><Data ss:Type="String"></Data></Cell>
+        <Cell><Data ss:Type="String">Piano Game for Kids | Clever Toys</Data></Cell>
+        <Cell><Data ss:Type="String">Buy the Piano Game for kids from Clever Toys Lebanon.</Data></Cell>
+        <Cell><Data ss:Type="Boolean">1</Data></Cell>
+        <Cell><Data ss:Type="Boolean">0</Data></Cell>
+      </Row>
+    </Table>
+  </Worksheet>
+  <Worksheet ss:Name="Instructions">
+    <Table>
+      <Row>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">Column</Data></Cell>
+        <Cell ss:StyleID="Header"><Data ss:Type="String">What to enter</Data></Cell>
+      </Row>
+      <Row><Cell><Data ss:Type="String">name</Data></Cell><Cell><Data ss:Type="String">Required product name.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">slug</Data></Cell><Cell><Data ss:Type="String">URL-friendly name, e.g. piano-game.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">sku</Data></Cell><Cell><Data ss:Type="String">Optional unique SKU.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">category</Data></Cell><Cell><Data ss:Type="String">Category name exactly as it exists in the admin panel.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">price</Data></Cell><Cell><Data ss:Type="String">Regular price in USD.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">sale_price</Data></Cell><Cell><Data ss:Type="String">Optional sale price.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">stock_quantity</Data></Cell><Cell><Data ss:Type="String">Available stock quantity.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">age_min / age_max</Data></Cell><Cell><Data ss:Type="String">Optional recommended age range.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">brand</Data></Cell><Cell><Data ss:Type="String">Optional brand.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">short_description</Data></Cell><Cell><Data ss:Type="String">Short description.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">description</Data></Cell><Cell><Data ss:Type="String">Full product description.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">primary_image_url / image_1 / image_2 / image_3</Data></Cell><Cell><Data ss:Type="String">Optional public image URLs. For local images, upload them in the product editor after import.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">seo_title</Data></Cell><Cell><Data ss:Type="String">Optional SEO title.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">seo_description</Data></Cell><Cell><Data ss:Type="String">Optional SEO meta description.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">is_active</Data></Cell><Cell><Data ss:Type="String">TRUE or FALSE.</Data></Cell></Row>
+      <Row><Cell><Data ss:Type="String">is_featured</Data></Cell><Cell><Data ss:Type="String">TRUE or FALSE.</Data></Cell></Row>
+    </Table>
+  </Worksheet>
+</Workbook>
