@@ -22,7 +22,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const cookieTheme = safeHex(themeMatch ? decodeURIComponent(themeMatch[1]) : null);
 
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify({ logoUrl, storeName: 'Clever Toys', theme: cookieTheme })};</script>`;
-  const earlyTheme = cookieTheme ? `<style id="clever-theme">:root{--brand-primary:${cookieTheme};}</style>` : '';
+  const earlyTheme = cookieTheme ? `<style id="clever-theme">:root{--brand-primary:${cookieTheme};--brand-primary-hover:color-mix(in srgb,${cookieTheme} 82%,#111827);--brand-soft:color-mix(in srgb,${cookieTheme} 9%,#fff);--brand-text-on-primary:#fff;--theme-accent:color-mix(in srgb,${cookieTheme} 55%,#fbbf24)}</style>` : '';
   const storeScript = '<script src="/store-ui.js?v=20260915" defer></script>';
   const adminBrandingLink = path.startsWith('/admin') && !path.startsWith('/admin/branding') ? '<a href="/admin/branding">Branding</a>' : '';
   let output = html;
