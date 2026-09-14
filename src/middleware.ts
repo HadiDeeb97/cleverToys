@@ -25,7 +25,8 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify({ logoUrl, storeName: 'Clever Toys', theme: cookieTheme, useLogoColors })};</script>`;
   const earlyTheme = cookieTheme ? `<style id="clever-theme">:root{--brand-primary:${cookieTheme};--brand-primary-hover:color-mix(in srgb,${cookieTheme} 82%,#111827);--brand-soft:color-mix(in srgb,${cookieTheme} 9%,#fff);--brand-text-on-primary:#fff;--theme-accent:color-mix(in srgb,${cookieTheme} 55%,#fbbf24)}</style>` : '';
-  const storeScript = '<script src="/store-ui.js?v=20260915b" defer></script>';
+  const requiredFieldStyle = `<style id="clever-required-fields">.form-card label:has(input:required),.form-card label:has(textarea:required),.form-card label:has(select:required){position:relative;padding-left:13px!important}.form-card label:has(input:required)::after,.form-card label:has(textarea:required)::after,.form-card label:has(select:required)::after{content:'*';position:absolute;left:0;top:0;margin:0;color:#e11d48;font-weight:900;font-size:1em;line-height:1.25;pointer-events:none}.form-card label:has(input:required) input,.form-card label:has(textarea:required) textarea,.form-card label:has(select:required) select{margin-top:0}@media(max-width:640px){.form-card label:has(input:required),.form-card label:has(textarea:required),.form-card label:has(select:required){padding-left:12px!important}}</style>`;
+  const storeScript = '<script src="/store-ui.js?v=20260915"></script>';
   const adminBrandingLink = path.startsWith('/admin') && !path.startsWith('/admin/branding') ? '<a href="/admin/branding">Branding</a>' : '';
   let output = html;
 
@@ -34,7 +35,8 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     output = output.replace(/<a([^>]*class=[\"']logo[\"'][^>]*)>[\s\S]*?<\/a>/gi, `<a$1>${logoMarkup}</a>`);
   }
 
-  if (!output.includes('/store-ui.js')) output = output.replace('</head>', `${earlyTheme}${storeConfig}${storeScript}</head>`);
+  if (!output.includes('/store-ui.js')) output = output.replace('</head>', `${earlyTheme}${storeConfig}${requiredFieldStyle}${storeScript}</head>`);
+  else if (!output.includes('clever-required-fields')) output = output.replace('</head>', `${earlyTheme}${storeConfig}${requiredFieldStyle}</head>`);
 
   if (!path.startsWith('/admin')) {
     const whatsappHref = 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product';
@@ -47,7 +49,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   const headers = new Headers(response.headers);
   headers.set('content-type', 'text/html; charset=utf-8');
+  headers.set('cache-control', 'no-store');
   headers.delete('content-length');
-  if (path.startsWith('/admin')) headers.set('cache-control', 'no-store, no-cache, must-revalidate');
   return new Response(output, { status: response.status, statusText: response.statusText, headers });
 };
