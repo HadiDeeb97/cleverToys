@@ -1,15 +1,43 @@
 ---
 import '../styles/global.css';
+import { env } from 'cloudflare:workers';
+
+const supabaseUrl = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
+const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
 ---
 <head>
   <title>Create Account | Clever Toys</title>
   <meta name="description" content="Create your Clever Toys customer account to track your orders and manage your details." />
 </head>
 <header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart">Cart</a><a href="/login">Sign in</a></nav></div></header>
-<main class="section"><div class="container narrow"><div class="section-header"><h1>Create your account</h1><p>Save your details and track your Clever Toys orders.</p></div><form id="register-form" class="form-card"><label>Full name<input name="full_name" required autocomplete="name"></label><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label>Confirm password<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label><button class="button" type="submit">Create Account</button><p id="message" role="status"></p><p>Already have an account? <a href="/login"><strong>Sign in</strong></a></p></form></div></main>
+<main class="section"><div class="container narrow"><div class="section-header"><h1>Create your account</h1><p>Save your details and track your Clever Toys orders.</p></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><form id="register-form" class="form-card"><label>Full name<input name="full_name" required autocomplete="name"></label><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label>Confirm password<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label><button class="button" type="submit">Create Account</button><p id="message" role="status"></p><p>Already have an account? <a href="/login"><strong>Sign in</strong></a></p></form></div></main>
 <script>
-import { supabase } from '../lib/supabase';
-const form=document.querySelector('#register-form');
-const msg=document.querySelector('#message');
-form?.addEventListener('submit',async(e)=>{e.preventDefault();const data=Object.fromEntries(new FormData(form));const password=String(data.password||'');if(password!==String(data.confirm_password||'')){msg.textContent='Passwords do not match.';return;}msg.textContent='Creating your account…';const {data:result,error}=await supabase.auth.signUp({email:String(data.email),password,options:{data:{full_name:String(data.full_name)}}});if(error){msg.textContent=error.message;return;}if(result.session){location.href='/account';}else{msg.textContent='Account created. Check your email to confirm your account, then sign in.';}});
+import { createClient } from '@supabase/supabase-js';
+const config = document.querySelector('#auth-config');
+const url = config?.dataset.url;
+const key = config?.dataset.key;
+const form = document.querySelector('#register-form');
+const msg = document.querySelector('#message');
+let supabase;
+try {
+  if (!url || !key) throw new Error('Supabase browser configuration is missing.');
+  supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+} catch (error) {
+  msg.textContent = error?.message || 'Could not initialize account creation.';
+}
+form?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!supabase) return;
+  const data = Object.fromEntries(new FormData(form));
+  const password = String(data.password || '');
+  if (password !== String(data.confirm_password || '')) { msg.textContent = 'Passwords do not match.'; return; }
+  msg.textContent = 'Creating your account…';
+  const { data: result, error } = await supabase.auth.signUp({
+    email: String(data.email).trim(), password,
+    options: { data: { full_name: String(data.full_name).trim() } }
+  });
+  if (error) { msg.textContent = error.message; return; }
+  if (result.session) location.href = '/account';
+  else msg.textContent = 'Account created. Check your email to confirm your account, then sign in.';
+});
 </script>
