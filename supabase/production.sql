@@ -106,3 +106,25 @@ DROP POLICY IF EXISTS "Customers can insert their own profile" ON public.custome
 CREATE POLICY "Customers can insert their own profile" ON public.customer_profiles FOR INSERT TO authenticated WITH CHECK (auth.uid()=id);
 DROP POLICY IF EXISTS "Customers can update their own profile" ON public.customer_profiles;
 CREATE POLICY "Customers can update their own profile" ON public.customer_profiles FOR UPDATE TO authenticated USING (auth.uid()=id) WITH CHECK (auth.uid()=id);
+
+-- Multiple categories per product
+CREATE TABLE IF NOT EXISTS public.product_categories (
+  product_id uuid NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  category_id uuid NOT NULL REFERENCES public.categories(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (product_id, category_id)
+);
+
+CREATE INDEX IF NOT EXISTS product_categories_category_id_idx ON public.product_categories(category_id);
+CREATE INDEX IF NOT EXISTS product_categories_product_id_idx ON public.product_categories(product_id);
+
+ALTER TABLE public.product_categories ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public can view product categories" ON public.product_categories;
+CREATE POLICY "Public can view product categories" ON public.product_categories FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "Admins can manage product categories" ON public.product_categories;
+CREATE POLICY "Admins can manage product categories" ON public.product_categories FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+-- Keep current single-category data as the initial primary category mapping.
+INSERT INTO public.product_categories (product_id, category_id)
+SELECT id, category_id FROM public.products WHERE category_id IS NOT NULL
+ON CONFLICT (product_id, category_id) DO NOTHING;
