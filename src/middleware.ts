@@ -1,8 +1,8 @@
 import type { MiddlewareHandler } from 'astro';
 import { env } from 'cloudflare:workers';
 
-const safeHex = (value: string | null) => {
-  const match = value?.match(/^#[0-9a-fA-F]{6}$/);
+const safeHex = (value: unknown) => {
+  const match = String(value ?? '').match(/^#[0-9a-fA-F]{6}$/);
   return match ? match[0].toLowerCase() : null;
 };
 
@@ -17,16 +17,24 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const path = context.url.pathname;
   const base = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
   const logoUrl = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/logo.webp` : '';
-  const cookieHeader = context.request.headers.get('cookie') || '';
-  const themeMatch = cookieHeader.match(/(?:^|;\s*)cleverTheme=([^;]+)/);
-  const logoModeMatch = cookieHeader.match(/(?:^|;\s*)cleverUseLogoColors=([^;]+)/);
-  const useLogoColors = logoModeMatch ? decodeURIComponent(logoModeMatch[1]) !== 'false' : true;
-  const cookieTheme = useLogoColors ? null : safeHex(themeMatch ? decodeURIComponent(themeMatch[1]) : null);
+  const themeUrl = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/theme.json` : '';
+  let published = { mode: 'logo', theme: null as null | { primary: string; soft: string; accent: string; id?: string; name?: string } };
+  if (themeUrl) {
+    try {
+      const r = await fetch(themeUrl, { cf: { cacheTtl: 30, cacheEverything: true } });
+      if (r.ok) {
+        const d = await r.json() as any;
+        if (d?.mode === 'theme' && safeHex(d?.theme?.primary) && safeHex(d?.theme?.soft) && safeHex(d?.theme?.accent)) {
+          published = { mode: 'theme', theme: { primary: safeHex(d.theme.primary)!, soft: safeHex(d.theme.soft)!, accent: safeHex(d.theme.accent)!, id: d.theme.id, name: d.theme.name } };
+        }
+      }
+    } catch {}
+  }
 
-  const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify({ logoUrl, storeName: 'Clever Toys', theme: cookieTheme, useLogoColors })};</script>`;
-  const earlyTheme = cookieTheme ? `<style id="clever-theme">:root{--brand-primary:${cookieTheme};--brand-primary-hover:color-mix(in srgb,${cookieTheme} 82%,#111827);--brand-soft:color-mix(in srgb,${cookieTheme} 9%,#fff);--brand-text-on-primary:#fff;--theme-accent:color-mix(in srgb,${cookieTheme} 55%,#fbbf24)}</style>` : '';
+  const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify({logoUrl,storeName:'Clever Toys',theme:published.theme?.primary||null,useLogoColors:published.mode!=='theme',publishedTheme:published.theme})};</script>`;
+  const earlyTheme = published.mode==='theme' && published.theme ? `<style id="clever-theme">:root{--brand-primary:${published.theme.primary};--brand-primary-hover:${published.theme.primary};--brand-soft:${published.theme.soft};--brand-text-on-primary:#fff;--theme-accent:${published.theme.accent}}</style>` : '';
   const requiredFieldStyle = `<style id="clever-required-fields">.form-card label:has(input:required),.form-card label:has(textarea:required),.form-card label:has(select:required){position:relative;padding-left:13px!important}.form-card label:has(input:required)::after,.form-card label:has(textarea:required)::after,.form-card label:has(select:required)::after{content:'*';position:absolute;left:0;top:0;margin:0;color:#e11d48;font-weight:900;font-size:1em;line-height:1.25;pointer-events:none}.form-card label:has(input:required) input,.form-card label:has(textarea:required) textarea,.form-card label:has(select:required) select{margin-top:0}@media(max-width:640px){.form-card label:has(input:required),.form-card label:has(textarea:required),.form-card label:has(select:required){padding-left:12px!important}}</style>`;
-  const storeScript = '<script src="/store-ui.js?v=20260915"></script>';
+  const storeScript = '<script src="/store-ui.js?v=20260915-globaltheme2"></script>';
   const adminBrandingLink = path.startsWith('/admin') && !path.startsWith('/admin/branding') ? '<a href="/admin/branding">Branding</a>' : '';
   let output = html;
 
@@ -34,7 +42,6 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     const logoMarkup = `<img class="site-logo-image" src="${escapeAttr(logoUrl)}" alt="Clever Toys" decoding="async"><span class="logo-text">Clever Toys</span>`;
     output = output.replace(/<a([^>]*class=[\"']logo[\"'][^>]*)>[\s\S]*?<\/a>/gi, `<a$1>${logoMarkup}</a>`);
   }
-
   if (!output.includes('/store-ui.js')) output = output.replace('</head>', `${earlyTheme}${storeConfig}${requiredFieldStyle}${storeScript}</head>`);
   else if (!output.includes('clever-required-fields')) output = output.replace('</head>', `${earlyTheme}${storeConfig}${requiredFieldStyle}</head>`);
 
@@ -44,12 +51,11 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     const controls = `<div class="clever-floating-controls" aria-hidden="false"><a id="clever-floating-cart" class="clever-floating-cart" href="/cart" title="View your cart" aria-label="Shopping cart"><span class="floating-cart-icon" aria-hidden="true">🛒</span><span class="floating-cart-count" aria-hidden="true" hidden>0</span></a><a id="clever-floating-whatsapp" class="clever-floating-whatsapp" href="${whatsappHref}" target="_blank" rel="noopener noreferrer" aria-label="Chat with Clever Toys on WhatsApp" title="Chat with us on WhatsApp"><svg viewBox="0 0 32 32" focusable="false" aria-hidden="true"><path d="M16 3.2C9.1 3.2 3.5 8.8 3.5 15.7c0 2.2.6 4.4 1.8 6.3L3.2 28.8l6.9-2.1c1.8 1 3.8 1.5 5.9 1.5 6.9 0 12.5-5.6 12.5-12.5S22.9 3.2 16 3.2Zm0 22.8c-1.9 0-3.8-.5-5.4-1.5l-.4-.2-4.1 1.2 1.2-4-.3-.4c-1-1.6-1.5-3.5-1.5-5.4C5.5 9.9 10.2 5.2 16 5.2s10.5 4.7 10.5 10.5S21.8 26 16 26Zm5.8-7.8c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.7-1.7-2-.2-.3 0-.5.1-.7.1-.1.3-.3.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.6-.1-.2-.7-1.7-.9-2.3-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1 2.9 1.1 3.1c.1.2 2 3.1 4.9 4.3.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2.1-1.4.3-.7.3-1.3.2-1.4-.1-.1-.3-.2-.6-.4Z" fill="currentColor"/></svg></a></div>`;
     if (!output.includes('clever-floating-controls')) output = output.replace('</body>', `${floatingStyles}${controls}</body>`);
   }
-
   if (adminBrandingLink && output.includes('</nav>') && !output.includes('/admin/branding')) output = output.replace('</nav>', `${adminBrandingLink}</nav>`);
 
   const headers = new Headers(response.headers);
-  headers.set('content-type', 'text/html; charset=utf-8');
-  headers.set('cache-control', 'no-store');
+  headers.set('content-type','text/html; charset=utf-8');
+  headers.set('cache-control','no-store');
   headers.delete('content-length');
-  return new Response(output, { status: response.status, statusText: response.statusText, headers });
+  return new Response(output,{status:response.status,statusText:response.statusText,headers});
 };
