@@ -5,9 +5,9 @@ const supabaseUrl = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
 const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
 const logoUrl = supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/logo.webp` : '';
 ---
-<header class="site-header"><div class="container header-inner"><a class="logo" href="/admin">Clever Toys Admin</a><nav class="main-nav"><a href="/admin">Products</a><a href="/admin/dashboard">Dashboard</a><a href="/admin/orders">Orders</a><a href="/">Store</a></nav></div></header>
+<header class="site-header"><div class="container header-inner"><a class="logo" href="/admin">Clever Toys Admin</a><nav class="main-nav"><a href="/admin">Products</a><a href="/admin/orders">Orders</a><a href="/">Store</a></nav></div></header>
 <main class="section"><div class="container branding-page">
-  <div class="admin-head"><div><p class="eyebrow">Store appearance</p><h1>Branding &amp; Theme</h1><p>Choose how Clever Toys gets its colors.</p></div><button id="logout" class="button secondary-button" type="button">Sign Out</button></div>
+  <div class="admin-head"><div><p class="eyebrow">Store appearance</p><h1>Branding &amp; Theme</h1><p>Choose how Clever Toys gets its colors. Theme settings apply to every visitor.</p></div><button id="logout" class="button secondary-button" type="button">Sign Out</button></div>
   <div id="cfg" data-url={supabaseUrl} data-key={supabaseKey} data-logo={logoUrl} hidden></div>
 
   <section class="form-card branding-card">
@@ -49,16 +49,17 @@ function cookie(name){return document.cookie.match(new RegExp('(?:^|;\\s*)'+name
 function setCookie(name,value){document.cookie=`${name}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/; SameSite=Lax`;}
 function deleteCookie(name){document.cookie=`${name}=; Max-Age=0; Path=/; SameSite=Lax`;}
 function applyColors(primary,soft,accent,label){document.documentElement.style.setProperty('--brand-primary',primary);document.documentElement.style.setProperty('--brand-soft',soft);document.documentElement.style.setProperty('--theme-accent',accent);document.documentElement.style.setProperty('--brand-primary-hover',primary);themePreview?.style.setProperty('--preview-primary',primary);themePreview?.style.setProperty('--preview-soft',soft);themePreview?.style.setProperty('--preview-accent',accent);status.textContent=label;}
-function selectTheme(theme,save=true){if(save){setCookie('cleverThemeMode','theme');setCookie('cleverTheme',theme.primary);setCookie('cleverUseLogoColors','false');}logoToggle.checked=false;applyColors(theme.primary,theme.soft,theme.accent,theme.name+' active');grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.toggle('selected',el.dataset.id===theme.id));}
-function renderThemes(){grid.innerHTML=themes.map(t=>`<button type="button" class="theme-choice" data-id="${t.id}" aria-label="Use ${t.name} theme"><span class="theme-colors" style="background:${t.soft}"><i style="background:${t.primary}"></i><i style="background:${t.accent}"></i><b>${t.emoji}</b></span><strong>${t.name}</strong><small>${t.desc}</small></button>`).join('');grid.querySelectorAll('.theme-choice').forEach(btn=>btn.onclick=()=>{const t=themes.find(x=>x.id===btn.dataset.id);if(t)selectTheme(t,true);});}
-function setLogoMode(enabled){logoToggle.checked=enabled;setCookie('cleverUseLogoColors',enabled?'true':'false');if(enabled){deleteCookie('cleverThemeMode');applyColors('#111827','#f3f4f6','#fbbf24','Logo colors active');grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.remove('selected'));}else{const saved=decodeURIComponent(cookie('cleverTheme')).toLowerCase();const t=themes.find(x=>x.primary.toLowerCase()===saved)||themes[0];selectTheme(t,true);}}
+function selectTheme(theme){setCookie('cleverThemeMode','theme');setCookie('cleverTheme',theme.primary);setCookie('cleverUseLogoColors','false');logoToggle.checked=false;applyColors(theme.primary,theme.soft,theme.accent,theme.name+' active');grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.toggle('selected',el.dataset.id===theme.id));if(supabase)saveGlobalTheme({mode:'theme',theme});}
+function renderThemes(){grid.innerHTML=themes.map(t=>`<button type="button" class="theme-choice" data-id="${t.id}" aria-label="Use ${t.name} theme"><span class="theme-colors" style="background:${t.soft}"><i style="background:${t.primary}"></i><i style="background:${t.accent}"></i><b>${t.emoji}</b></span><strong>${t.name}</strong><small>${t.desc}</small></button>`).join('');grid.querySelectorAll('.theme-choice').forEach(btn=>btn.onclick=()=>{const t=themes.find(x=>x.id===btn.dataset.id);if(t)selectTheme(t);});}
+function setLogoMode(enabled,persist=true){logoToggle.checked=enabled;if(persist)setCookie('cleverUseLogoColors',enabled?'true':'false');if(enabled){deleteCookie('cleverThemeMode');applyColors('#111827','#f3f4f6','#fbbf24','Logo colors active');grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.remove('selected'));if(persist&&supabase)saveGlobalTheme({mode:'logo'});}else{const saved=decodeURIComponent(cookie('cleverTheme')).toLowerCase();const t=themes.find(x=>x.primary.toLowerCase()===saved)||themes[0];if(persist)selectTheme(t);else{applyColors(t.primary,t.soft,t.accent,t.name+' active');grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.toggle('selected',el.dataset.id===t.id));}}}
+async function saveGlobalTheme(config){try{const blob=new Blob([JSON.stringify(config)],{type:'application/json'});const r=await supabase.storage.from('product-images').upload('branding/theme.json',blob,{contentType:'application/json',upsert:true,cacheControl:'30'});if(r.error){status.textContent='Local preview only — '+r.error.message;return;}status.textContent=config.mode==='logo'?'Logo colors active — published to storefront':'Theme active — published to storefront';}catch(e){status.textContent=e?.message||'Theme preview applied locally, but could not publish it.';}}
 renderThemes();
 const savedLogo=cookie('cleverUseLogoColors');
 const savedTheme=decodeURIComponent(cookie('cleverTheme')).toLowerCase();
 const initial=themes.find(t=>t.primary.toLowerCase()===savedTheme)||themes[0];
-if(savedLogo==='true') setLogoMode(true); else selectTheme(initial,false);
-logoToggle.onchange=()=>setLogoMode(logoToggle.checked);
-document.querySelector('#reset-theme').onclick=()=>{deleteCookie('cleverTheme');deleteCookie('cleverThemeMode');deleteCookie('cleverUseLogoColors');selectTheme(themes[0],true);};
+if(savedLogo==='true') setLogoMode(true,false); else setLogoMode(false,false);
+logoToggle.onchange=()=>setLogoMode(logoToggle.checked,true);
+document.querySelector('#reset-theme').onclick=()=>{deleteCookie('cleverTheme');deleteCookie('cleverThemeMode');setCookie('cleverUseLogoColors','true');setLogoMode(true,true);};
 async function initAuth(){
   try{
     if(!url||!key) throw new Error('Supabase browser configuration is missing.');
