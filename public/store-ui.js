@@ -159,12 +159,186 @@
     } catch {}
   };
 
+  const imageViewerState = {
+    images: [],
+    index: 0,
+    previousOverflow: ''
+  };
+
+  const ensureImageViewerStyles = () => {
+    if (document.getElementById('clever-image-viewer-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'clever-image-viewer-styles';
+    style.textContent = `
+      .clever-image-viewer{position:fixed;inset:0;z-index:20000;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.94);padding:18px;touch-action:none}
+      .clever-image-viewer.is-open{display:flex}
+      .clever-image-viewer-image-wrap{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%;max-width:1400px}
+      .clever-image-viewer-image{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;border-radius:8px;user-select:none;-webkit-user-drag:none;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+      .clever-image-viewer-button{position:absolute;border:0;display:grid;place-items:center;width:46px;height:46px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;cursor:pointer;backdrop-filter:blur(8px);transition:background .15s,transform .15s;z-index:2}
+      .clever-image-viewer-button:hover{background:rgba(255,255,255,.24);transform:scale(1.04)}
+      .clever-image-viewer-close{top:12px;right:12px;font-size:26px}
+      .clever-image-viewer-prev{left:12px;top:50%;transform:translateY(-50%);font-size:30px}
+      .clever-image-viewer-next{right:12px;top:50%;transform:translateY(-50%);font-size:30px}
+      .clever-image-viewer-prev:hover,.clever-image-viewer-next:hover{transform:translateY(-50%) scale(1.04)}
+      .clever-image-viewer-counter{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);padding:7px 11px;border-radius:999px;background:rgba(0,0,0,.45);color:#fff;font-size:.82rem;line-height:1;backdrop-filter:blur(8px);z-index:2}
+      .clever-image-viewer-hint{position:absolute;left:50%;top:14px;transform:translateX(-50%);padding:6px 10px;border-radius:999px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);font-size:.75rem;z-index:2;pointer-events:none}
+      @media(max-width:767px){
+        .clever-image-viewer{padding:10px}
+        .clever-image-viewer-image{max-width:100%;max-height:88vh;border-radius:5px}
+        .clever-image-viewer-button{width:42px;height:42px}
+        .clever-image-viewer-prev{left:6px}.clever-image-viewer-next{right:6px}.clever-image-viewer-close{top:8px;right:8px}
+        .clever-image-viewer-hint{display:none}
+      }
+    `;
+    document.head.appendChild(style);
+  };
+
+  const getViewerImages = () => {
+    const seen = new Set();
+    return [...document.querySelectorAll('img')]
+      .filter(img => {
+        if (!(img instanceof HTMLImageElement)) return false;
+        if (!img.currentSrc && !img.src) return false;
+        if (img.closest('.clever-image-viewer')) return false;
+        if (img.classList.contains('site-logo-image') || img.closest('.logo')) return false;
+        if (img.closest('.clever-floating-controls')) return false;
+        if (img.closest('button') && img.closest('button')?.getAttribute('aria-label')?.toLowerCase().includes('delete')) return false;
+        const url = img.currentSrc || img.src;
+        if (!url || seen.has(url)) return false;
+        if (img.width < 60 || img.height < 60) return false;
+        seen.add(url);
+        return true;
+      })
+      .map(img => ({ src: img.currentSrc || img.src, alt: img.alt || STORE_NAME }));
+  };
+
+  const closeImageViewer = () => {
+    const viewer = document.getElementById('clever-image-viewer');
+    if (!viewer) return;
+    viewer.classList.remove('is-open');
+    viewer.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = imageViewerState.previousOverflow;
+  };
+
+  const renderImageViewer = () => {
+    const viewer = document.getElementById('clever-image-viewer');
+    if (!viewer || !imageViewerState.images.length) return;
+    const item = imageViewerState.images[imageViewerState.index];
+    const image = viewer.querySelector('.clever-image-viewer-image');
+    const counter = viewer.querySelector('.clever-image-viewer-counter');
+    const prev = viewer.querySelector('.clever-image-viewer-prev');
+    const next = viewer.querySelector('.clever-image-viewer-next');
+    if (image) {
+      image.src = item.src;
+      image.alt = item.alt;
+    }
+    if (counter) counter.textContent = imageViewerState.images.length > 1 ? `${imageViewerState.index + 1} / ${imageViewerState.images.length}` : '';
+    if (prev) prev.hidden = imageViewerState.images.length <= 1;
+    if (next) next.hidden = imageViewerState.images.length <= 1;
+  };
+
+  const showImageAt = index => {
+    if (!imageViewerState.images.length) return;
+    const total = imageViewerState.images.length;
+    imageViewerState.index = (index + total) % total;
+    renderImageViewer();
+  };
+
+  const openImageViewer = (clickedSrc, clickedAlt) => {
+    ensureImageViewerStyles();
+    let viewer = document.getElementById('clever-image-viewer');
+    if (!viewer) {
+      viewer = document.createElement('div');
+      viewer.id = 'clever-image-viewer';
+      viewer.className = 'clever-image-viewer';
+      viewer.setAttribute('role', 'dialog');
+      viewer.setAttribute('aria-modal', 'true');
+      viewer.setAttribute('aria-hidden', 'true');
+      viewer.innerHTML = `
+        <button class="clever-image-viewer-button clever-image-viewer-close" type="button" aria-label="Close image viewer">×</button>
+        <button class="clever-image-viewer-button clever-image-viewer-prev" type="button" aria-label="Previous image">‹</button>
+        <div class="clever-image-viewer-image-wrap">
+          <img class="clever-image-viewer-image" alt="" decoding="async" draggable="false" />
+        </div>
+        <button class="clever-image-viewer-button clever-image-viewer-next" type="button" aria-label="Next image">›</button>
+        <div class="clever-image-viewer-counter" aria-live="polite"></div>
+        <div class="clever-image-viewer-hint">Click outside or press Esc to close</div>
+      `;
+      document.body.appendChild(viewer);
+      viewer.addEventListener('click', event => {
+        if (event.target === viewer || event.target === viewer.querySelector('.clever-image-viewer-image-wrap')) closeImageViewer();
+      });
+      viewer.querySelector('.clever-image-viewer-close')?.addEventListener('click', closeImageViewer);
+      viewer.querySelector('.clever-image-viewer-prev')?.addEventListener('click', event => { event.stopPropagation(); showImageAt(imageViewerState.index - 1); });
+      viewer.querySelector('.clever-image-viewer-next')?.addEventListener('click', event => { event.stopPropagation(); showImageAt(imageViewerState.index + 1); });
+      document.addEventListener('keydown', event => {
+        const open = document.getElementById('clever-image-viewer')?.classList.contains('is-open');
+        if (!open) return;
+        if (event.key === 'Escape') closeImageViewer();
+        else if (event.key === 'ArrowLeft') showImageAt(imageViewerState.index - 1);
+        else if (event.key === 'ArrowRight') showImageAt(imageViewerState.index + 1);
+      });
+      let touchStartX = 0;
+      let touchStartY = 0;
+      viewer.addEventListener('touchstart', event => {
+        const touch = event.changedTouches[0];
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+      }, { passive: true });
+      viewer.addEventListener('touchend', event => {
+        const touch = event.changedTouches[0];
+        const dx = touch.clientX - touchStartX;
+        const dy = touch.clientY - touchStartY;
+        if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) && imageViewerState.images.length > 1) {
+          showImageAt(imageViewerState.index + (dx < 0 ? 1 : -1));
+        }
+      }, { passive: true });
+    }
+
+    imageViewerState.images = getViewerImages();
+    if (!imageViewerState.images.length) imageViewerState.images = [{ src: clickedSrc, alt: clickedAlt || STORE_NAME }];
+    const clickedIndex = imageViewerState.images.findIndex(item => item.src === clickedSrc);
+    imageViewerState.index = clickedIndex >= 0 ? clickedIndex : 0;
+    imageViewerState.previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    viewer.classList.add('is-open');
+    viewer.setAttribute('aria-hidden', 'false');
+    renderImageViewer();
+  };
+
+  const bindImageViewer = () => {
+    if (location.pathname.startsWith('/admin')) return;
+    document.querySelectorAll('img').forEach(img => {
+      if (!(img instanceof HTMLImageElement)) return;
+      if (img.closest('.clever-image-viewer') || img.classList.contains('site-logo-image') || img.closest('.logo') || img.closest('.clever-floating-controls')) return;
+      if (img.dataset.cleverViewerBound === 'true') return;
+      if (img.width < 60 && img.height < 60) return;
+      img.dataset.cleverViewerBound = 'true';
+      img.classList.add('clever-image-clickable');
+      img.setAttribute('tabindex', '0');
+      img.setAttribute('role', 'button');
+      img.setAttribute('aria-label', img.alt ? `View ${img.alt}` : 'View image');
+      img.addEventListener('click', event => {
+        event.preventDefault();
+        event.stopPropagation();
+        openImageViewer(img.currentSrc || img.src, img.alt || STORE_NAME);
+      });
+      img.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          openImageViewer(img.currentSrc || img.src, img.alt || STORE_NAME);
+        }
+      });
+    });
+  };
+
   const refresh = () => {
     detectDevice();
     if (location.pathname.startsWith('/admin')) return;
     patchLogos();
     ensureCartLinks();
     ensureControls();
+    bindImageViewer();
     updateCartUI();
   };
 
