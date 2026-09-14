@@ -5,7 +5,6 @@ import { env } from 'cloudflare:workers';
 const supabaseUrl = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
 const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
 ---
-
 <header class="site-header">
   <div class="container header-inner">
     <a href="/admin" class="logo">Clever Toys Admin</a>
@@ -36,14 +35,15 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
       <section class="import-card">
         <div>
           <h2>Excel import</h2>
-          <p>Columns: name, slug, sku, category, price, sale_price, stock_quantity, age_min, age_max, brand, short_description, description, primary_image_url, image_1, image_2, image_3, seo_title, seo_description, is_active, is_featured.</p>
-          <small>For local image files, import the product first, then upload images in its editor.</small>
+          <p>Use the template below for bulk product entry. The importer supports product data, SEO fields and image URLs.</p>
+          <small>Local image files cannot be stored inside Excel. Import your products first, then upload local images in the product editor.</small>
         </div>
         <div class="import-actions">
+          <button id="download-template" class="button secondary-button" type="button">Download Excel Template</button>
           <input id="excel-file" type="file" accept=".xlsx,.xls,.csv" />
           <button id="import-btn" class="button" type="button">Import Excel</button>
         </div>
-        <p id="import-message"></p>
+        <p id="import-message" role="status"></p>
       </section>
 
       <div class="admin-tabs">
@@ -78,6 +78,8 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
             <label>Brand<input name="brand" /></label>
             <label>Short description<textarea name="short_description" rows="2"></textarea></label>
             <label>Description<textarea name="description" rows="5"></textarea></label>
+            <label>SEO title<input name="seo_title" maxlength="70" /></label>
+            <label>SEO description<textarea name="seo_description" rows="3" maxlength="170"></textarea></label>
             <label>Product images<input id="image-files" type="file" accept="image/jpeg,image/png,image/webp" multiple /></label>
             <label class="check"><input name="is_featured" type="checkbox" /> Featured product</label>
             <label class="check"><input name="is_active" type="checkbox" checked /> Active</label>
@@ -85,7 +87,7 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
               <button class="button" type="submit">Save Product</button>
               <button id="cancel-edit" class="button secondary-button" type="button">Clear</button>
             </div>
-            <p id="product-message"></p>
+            <p id="product-message" role="status"></p>
           </form>
 
           <div>
@@ -106,7 +108,7 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
             <label>Slug<input name="slug" required /></label>
             <label>Description<textarea name="description" rows="3"></textarea></label>
             <button class="button" type="submit">Add Category</button>
-            <p id="category-message"></p>
+            <p id="category-message" role="status"></p>
           </form>
           <div>
             <h2>Categories</h2>
@@ -253,10 +255,25 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
     }
   }
 
+  async function saveVariants(productId) {
+    readVariants();
+    const old = await supabase.from('product_variants').select('id').eq('product_id', productId);
+    if (old.error) throw new Error(old.error.message);
+    for (const row of old.data || []) if (!variants.some((v) => v.id === row.id)) {
+      const del = await supabase.from('product_variants').delete().eq('id', row.id);
+      if (del.error) throw new Error(del.error.message);
+    }
+    for (const v of variants) {
+      if (!String(v.name || '').trim()) continue;
+      const payload = { product_id: productId, name: String(v.name).trim(), sku: String(v.sku || '').trim() || null, price: v.price === '' || v.price == null ? null : Number(v.price), sale_price: v.sale_price === '' || v.sale_price == null ? null : Number(v.sale_price), stock_quantity: Number(v.stock_quantity || 0), attributes: v.attributes || {}, is_active: v.is_active !== false, updated_at: new Date().toISOString() };
+      const result = v.id ? await supabase.from('product_variants').update(payload).eq('id', v.id) : await supabase.from('product_variants').insert(payload);
+      if (result.error) throw new Error(result.error.message);
+    }
+  }
+
   productForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     productMessage.textContent = 'Saving…';
-    readVariants();
     const fd = new FormData(productForm);
     const id = String(fd.get('id') || '');
     const name = String(fd.get('name') || '').trim();
@@ -273,32 +290,24 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
       brand: String(fd.get('brand') || '') || null,
       short_description: String(fd.get('short_description') || ''),
       description: String(fd.get('description') || ''),
+      seo_title: String(fd.get('seo_title') || '') || null,
+      seo_description: String(fd.get('seo_description') || '') || null,
       is_featured: fd.get('is_featured') === 'on',
       is_active: fd.get('is_active') === 'on',
       updated_at: new Date().toISOString()
     };
     const result = id ? await supabase.from('products').update(data).eq('id', id).select().single() : await supabase.from('products').insert(data).select().single();
     if (result.error) { productMessage.textContent = result.error.message; return; }
-    const pid = result.data.id;
+    const productId = result.data.id;
     try {
       const files = [...document.querySelector('#image-files').files];
-      if (files.length) await uploadImages(pid, files);
-      if (id) {
-        const old = await supabase.from('product_variants').select('id').eq('product_id', pid);
-        if (old.error) throw new Error(old.error.message);
-        for (const row of old.data || []) if (!variants.some((v) => v.id === row.id)) await supabase.from('product_variants').delete().eq('id', row.id);
-      }
-      for (const v of variants) {
-        if (!String(v.name || '').trim()) continue;
-        const vd = { product_id: pid, name: String(v.name), sku: String(v.sku || '') || null, price: v.price === '' ? null : Number(v.price), sale_price: v.sale_price === '' ? null : Number(v.sale_price), stock_quantity: Number(v.stock_quantity || 0), attributes: v.attributes || {}, is_active: v.is_active !== false, updated_at: new Date().toISOString() };
-        const vr = v.id ? await supabase.from('product_variants').update(vd).eq('id', v.id) : await supabase.from('product_variants').insert(vd);
-        if (vr.error) throw new Error(vr.error.message);
-      }
+      if (files.length) await uploadImages(productId, files);
+      await saveVariants(productId);
       productMessage.textContent = 'Saved successfully.';
       clearForm();
       await load();
-    } catch (err) {
-      productMessage.textContent = err?.message || 'Save failed.';
+    } catch (error) {
+      productMessage.textContent = error?.message || 'Save failed.';
     }
   });
 
@@ -314,14 +323,8 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
   document.querySelector('#add-variant').onclick = () => { readVariants(); variants.push({ name: '', sku: '', price: null, sale_price: null, stock_quantity: 0, attributes: {}, is_active: true }); renderVariants(); };
   document.querySelector('#cancel-edit').onclick = clearForm;
   document.querySelector('#product-search').oninput = renderProducts;
-  document.querySelector('#logout').onclick = async () => { await supabase.auth.signOut(); location.href = '/login'; };
-
-  document.querySelectorAll('.tab').forEach((b) => b.onclick = () => {
-    document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
-    b.classList.add('active');
-    document.querySelectorAll('.admin-panel').forEach((x) => x.hidden = true);
-    document.querySelector(`#${b.dataset.tab}-tab`).hidden = false;
-  });
+  document.querySelector('#logout').onclick = async () => { if (supabase) await supabase.auth.signOut(); location.href = '/login'; };
+  document.querySelectorAll('.tab').forEach((b) => b.onclick = () => { document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active')); b.classList.add('active'); document.querySelectorAll('.admin-panel').forEach((x) => x.hidden = true); document.querySelector(`#${b.dataset.tab}-tab`).hidden = false; });
 
   document.querySelector('#category-form').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -331,6 +334,21 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
     categoryMessage.textContent = error?.message || 'Category added.';
     if (!error) { e.currentTarget.reset(); await load(); }
   });
+
+  document.querySelector('#download-template').onclick = () => {
+    if (!window.XLSX) { document.querySelector('#import-message').textContent = 'Excel tools are still loading. Please try again.'; return; }
+    const headers = ['name','slug','sku','category','price','sale_price','stock_quantity','age_min','age_max','brand','short_description','description','primary_image_url','image_1','image_2','image_3','seo_title','seo_description','is_active','is_featured'];
+    const rows = [headers, ['Piano Game','piano-game','CT-001','Educational Toys',8.8,'',30,3,8,'Clever Toys','Fun educational piano game for kids.','A fun educational piano game designed for children.','','','','','Piano Game for Kids | Clever Toys','Buy the Piano Game for kids from Clever Toys Lebanon.',true,false]];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = headers.map((h) => ({ wch: Math.max(14, Math.min(35, h.length + 5)) }));
+    const instructions = [['Column','Instructions'],['name','Required product name'],['slug','URL-friendly slug such as piano-game'],['sku','Optional unique SKU'],['category','Existing category name'],['price','Regular USD price'],['sale_price','Optional sale price'],['stock_quantity','Available stock quantity'],['age_min','Optional minimum age'],['age_max','Optional maximum age'],['brand','Optional brand'],['short_description','Short product description'],['description','Full product description'],['primary_image_url','Optional public image URL'],['image_1','Optional public image URL'],['image_2','Optional public image URL'],['image_3','Optional public image URL'],['seo_title','SEO title'],['seo_description','SEO meta description'],['is_active','TRUE or FALSE'],['is_featured','TRUE or FALSE']];
+    const wi = XLSX.utils.aoa_to_sheet(instructions);
+    wi['!cols'] = [{ wch: 24 }, { wch: 80 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Products');
+    XLSX.utils.book_append_sheet(wb, wi, 'Instructions');
+    XLSX.writeFile(wb, 'Clever_Toys_Product_Import_Template.xlsx');
+  };
 
   document.querySelector('#import-btn').onclick = async () => {
     const file = document.querySelector('#excel-file').files?.[0];
@@ -348,30 +366,59 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
           const name = String(row.name || row.Name || '').trim();
           if (!name) throw new Error('Missing name');
           const slug = slugify(row.slug || row.Slug || name);
-          const catName = String(row.category || row.Category || '').trim();
-          const categoryId = categories.find((x) => x.name.toLowerCase() === catName.toLowerCase())?.id || null;
-          const payload = { name, slug, sku: String(row.sku || row.SKU || '').trim() || null, category_id: categoryId, price: Number(row.price || row.Price || 0), sale_price: (row.sale_price ?? row.SalePrice ?? '') === '' ? null : Number(row.sale_price ?? row.SalePrice), stock_quantity: Number(row.stock_quantity ?? row.Stock ?? 0), age_min: row.age_min === '' ? null : Number(row.age_min), age_max: row.age_max === '' ? null : Number(row.age_max), brand: String(row.brand || '').trim() || null, short_description: String(row.short_description || '').trim(), description: String(row.description || ''), primary_image_url: String(row.primary_image_url || '').trim() || null, seo_title: String(row.seo_title || '').trim() || null, seo_description: String(row.seo_description || '').trim() || null, is_active: String(row.is_active).toLowerCase() !== 'false', is_featured: String(row.is_featured).toLowerCase() === 'true', updated_at: new Date().toISOString() };
+          const categoryName = String(row.category || row.Category || '').trim().toLowerCase();
+          const categoryId = categories.find((x) => x.name.toLowerCase() === categoryName)?.id || null;
+          const rawSale = row.sale_price ?? row.SalePrice ?? '';
+          const payload = {
+            name,
+            slug,
+            sku: String(row.sku || row.SKU || '').trim() || null,
+            category_id: categoryId,
+            price: Number(row.price || row.Price || 0),
+            sale_price: rawSale === '' ? null : Number(rawSale),
+            stock_quantity: Number(row.stock_quantity ?? row.Stock ?? 0),
+            age_min: row.age_min === '' ? null : Number(row.age_min),
+            age_max: row.age_max === '' ? null : Number(row.age_max),
+            brand: String(row.brand || '').trim() || null,
+            short_description: String(row.short_description || ''),
+            description: String(row.description || ''),
+            primary_image_url: String(row.primary_image_url || '').trim() || null,
+            seo_title: String(row.seo_title || '').trim() || null,
+            seo_description: String(row.seo_description || '').trim() || null,
+            is_active: String(row.is_active).toLowerCase() !== 'false',
+            is_featured: String(row.is_featured).toLowerCase() === 'true',
+            updated_at: new Date().toISOString()
+          };
           const existing = products.find((p) => p.slug === slug);
-          const r = existing ? await supabase.from('products').update(payload).eq('id', existing.id).select().single() : await supabase.from('products').insert(payload).select().single();
-          if (r.error) throw r.error;
-          const product = r.data;
+          const result = existing ? await supabase.from('products').update(payload).eq('id', existing.id).select().single() : await supabase.from('products').insert(payload).select().single();
+          if (result.error) throw result.error;
+          const product = result.data;
           const urls = [row.image_1, row.image_2, row.image_3].map((x) => String(x || '').trim()).filter(Boolean);
-          if (urls.length) await supabase.from('product_images').insert(urls.map((image_url, i) => ({ product_id: product.id, image_url, alt_text: name, sort_order: i, is_primary: i === 0 })));
+          if (urls.length) {
+            const imageRows = urls.map((image_url, i) => ({ product_id: product.id, image_url, alt_text: name, sort_order: i, is_primary: i === 0 }));
+            const imageResult = await supabase.from('product_images').insert(imageRows);
+            if (imageResult.error) throw imageResult.error;
+          }
           if (existing) updated++; else created++;
-        } catch { failed++; }
+        } catch (error) {
+          console.error('Product import row failed', error);
+          failed++;
+        }
       }
       msg.textContent = `Import complete: ${created} created, ${updated} updated, ${failed} failed.`;
       await load();
-    } catch (err) { msg.textContent = err?.message || 'Import failed.'; }
+    } catch (error) {
+      msg.textContent = error?.message || 'Import failed.';
+    }
   };
 
   async function initAdmin() {
     try {
       if (!url || !key) throw new Error('Supabase browser configuration is missing on the Worker.');
       supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
-      const { data: { user }, error: userError } = await withTimeout(supabase.auth.getUser());
-      if (userError) throw new Error(userError.message);
-      if (!user) { location.href = '/login'; return; }
+      const { data: { session }, error: sessionError } = await withTimeout(supabase.auth.getSession());
+      if (sessionError) throw new Error(sessionError.message);
+      if (!session?.user) { location.href = `/login?next=${encodeURIComponent('/admin')}`; return; }
       const { data: isAdmin, error: adminErrorResult } = await withTimeout(supabase.rpc('is_admin'));
       if (adminErrorResult) throw new Error(adminErrorResult.message);
       if (!isAdmin) { showError('This account is not registered as an administrator.'); return; }
@@ -389,5 +436,5 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
 </script>
 
 <style>
-  .import-card{display:flex;justify-content:space-between;gap:24px;align-items:center;margin-bottom:24px;padding:22px;border:1px solid #e5e7eb;border-radius:16px;background:#fff}.import-card h2{margin:0 0 8px}.import-card p{margin:0;color:#64748b}.import-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.variant-box{margin:8px 0;padding:16px;border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc}.variant-row{display:grid;grid-template-columns:1.3fr 1fr .8fr .8fr .7fr auto;gap:7px;margin:8px 0}.variant-row input{min-width:0;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}.variant-box small{color:#64748b}.panel-title{display:flex;justify-content:space-between;gap:12px;align-items:center}.panel-title h2,.panel-title h3{margin:0}.admin-item{display:flex;justify-content:space-between;gap:16px;align-items:center}.item-actions{display:flex;gap:8px}.empty-state{padding:28px;border:1px dashed #cbd5e1;border-radius:16px;text-align:center}.admin-head{display:flex;justify-content:space-between;align-items:center;gap:20px}.form-card{background:#fff}.tab{cursor:pointer}@media(max-width:850px){.import-card{display:block}.import-actions{margin-top:14px}.variant-row{grid-template-columns:1fr 1fr}.admin-head{align-items:flex-start}}
+  .import-card{display:flex;justify-content:space-between;gap:24px;align-items:center;margin-bottom:24px;padding:22px;border:1px solid #e5e7eb;border-radius:16px;background:#fff}.import-card h2{margin:0 0 8px}.import-card p{margin:0;color:#64748b}.import-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.variant-box{margin:8px 0;padding:16px;border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc}.variant-row{display:grid;grid-template-columns:1.3fr 1fr .8fr .8fr .7fr auto;gap:7px;margin:8px 0}.variant-row input{min-width:0;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font:inherit}.variant-box small{color:#64748b}.panel-title{display:flex;justify-content:space-between;gap:12px;align-items:center}.panel-title h2,.panel-title h3{margin:0}.admin-item{display:flex;justify-content:space-between;gap:16px;align-items:center}.item-actions{display:flex;gap:8px}.empty-state{padding:28px;border:1px dashed #cbd5e1;border-radius:16px;text-align:center}.admin-head{display:flex;justify-content:space-between;align-items:center;gap:20px}.tab{cursor:pointer}.form-card{background:#fff}@media(max-width:850px){.import-card{display:block}.import-actions{margin-top:14px}.variant-row{grid-template-columns:1fr 1fr}.admin-head{align-items:flex-start}}
 </style>
