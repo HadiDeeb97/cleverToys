@@ -116,7 +116,7 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
   </div></section>
 </main>
 
-<div class="quick-view-modal" id="quick-view-modal" aria-hidden="true">
+<div class="quick-view-modal" id="quick-view-modal" aria-hidden="true" inert>
   <div class="quick-view-backdrop" data-quick-view-close></div>
   <section class="quick-view-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-view-title">
     <button class="quick-view-close" type="button" aria-label="Close quick view" data-quick-view-close>×</button>
@@ -152,10 +152,10 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
   const original = document.getElementById('quick-view-original');
   const stock = document.getElementById('quick-view-stock');
   const link = document.getElementById('quick-view-link');
-
   const filterToggle = document.getElementById('filter-toggle');
   const filterPanel = document.getElementById('filter-panel');
   const filterClose = document.getElementById('filter-close');
+  let quickViewOpener = null;
 
   const setFilterOpen = open => {
     if (!filterPanel || !filterToggle) return;
@@ -169,12 +169,18 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
 
   const closeQuickView = () => {
     if (!modal) return;
+    const returnFocus = quickViewOpener;
+    quickViewOpener = null;
     modal.classList.remove('is-open');
     modal.setAttribute('aria-hidden', 'true');
+    modal.setAttribute('inert', '');
     document.body.style.overflow = '';
+    if (returnFocus && document.contains(returnFocus)) {
+      requestAnimationFrame(() => returnFocus.focus({ preventScroll: true }));
+    }
   };
 
-  const openQuickView = (card) => {
+  const openQuickView = (card, opener) => {
     if (!modal || !card) return;
     const imageEl = card.querySelector('.product-image');
     const titleEl = card.querySelector('.product-info h2');
@@ -183,6 +189,7 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
     const originalEl = card.querySelector('.shop-original-price');
     const productLink = card.querySelector('.view-product');
     const unavailable = Boolean(card.querySelector('.stock-badge'));
+    quickViewOpener = opener instanceof HTMLElement ? opener : document.activeElement;
     if (imageEl) { image.src = imageEl.currentSrc || imageEl.src; image.alt = imageEl.alt || ''; }
     title.textContent = titleEl?.textContent?.trim() || 'Product';
     description.textContent = descriptionEl?.textContent?.trim() || '';
@@ -193,16 +200,18 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
     stock.textContent = unavailable ? 'Out of stock' : 'In stock';
     stock.style.color = unavailable ? '#b91c1c' : '#15803d';
     link.href = productLink?.getAttribute('href') || '#';
-    modal.classList.add('is-open');
+    modal.removeAttribute('inert');
     modal.setAttribute('aria-hidden', 'false');
+    modal.classList.add('is-open');
     document.body.style.overflow = 'hidden';
+    requestAnimationFrame(() => modal.querySelector('.quick-view-close')?.focus({ preventScroll: true }));
   };
 
   document.querySelectorAll('[data-quick-view="true"]').forEach(trigger => {
     trigger.addEventListener('click', event => {
       event.preventDefault();
       event.stopPropagation();
-      openQuickView(trigger.closest('.product-card'));
+      openQuickView(trigger.closest('.product-card'), trigger);
     });
   });
 
