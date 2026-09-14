@@ -72,15 +72,30 @@
   }
 
   .shop-toolbar { gap: 12px !important; }
-  .shop-toolbar .search-form { width: 100% !important; gap: 8px !important; }
+
+  /* On phones, search is a full-width input with a full-width button below it. */
+  .shop-toolbar .search-form {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    align-items: stretch !important;
+  }
   .shop-toolbar .search-form input[type="search"] {
+    width: 100% !important;
+    min-width: 0 !important;
     min-height: 58px !important;
     font-size: 1.08rem !important;
     padding: 15px 16px !important;
   }
   .shop-toolbar .search-form .search-button,
   .shop-toolbar .search-form button[type="submit"] {
-    min-width: 104px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 58px !important;
+    padding-inline: 16px !important;
+    white-space: nowrap !important;
   }
 
   .toolbar-actions {
@@ -94,6 +109,35 @@
   .filter-button { width: 100% !important; font-size: 1.05rem !important; }
   .sort-form,
   .sort-form select { font-size: 1.05rem !important; }
+
+  /* The desktop rule hides the filter panel above 900px. Override it for touch devices. */
+  .filter-panel:not([hidden]) {
+    display: block !important;
+  }
+  .filter-panel[hidden] {
+    display: none !important;
+  }
+  .filter-panel {
+    margin: 0 0 18px !important;
+    padding: 18px !important;
+    border-radius: 18px !important;
+  }
+  .filter-panel-head strong { font-size: 1.08rem !important; }
+  .filter-close { width: 46px !important; height: 46px !important; font-size: 27px !important; }
+  .filter-options {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+  .filter-options a {
+    min-height: 52px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 10px 12px !important;
+    font-size: 1rem !important;
+    text-align: center !important;
+  }
 
   .section { padding: 50px 0 !important; }
   .section-header h1 { font-size: 2.45rem !important; }
