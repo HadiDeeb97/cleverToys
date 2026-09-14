@@ -32,6 +32,7 @@ const { data: featuredProducts, error: productsError } = await supabase
       <a href="/">Home</a>
       <a href="/products">Shop</a>
       <a href="/categories">Categories</a>
+      <a href="/cart" class="cart-link" aria-label="Shopping cart"></a>
     </nav>
   </div>
 </header>
@@ -61,15 +62,9 @@ const { data: featuredProducts, error: productsError } = await supabase
       ) : (
         <div class="category-grid">
           {categories?.map((category) => (
-            <a
-              href={`/category/${category.slug}`}
-              class="category-card"
-            >
+            <a href={`/category/${category.slug}`} class="category-card">
               <strong>{category.name}</strong>
-
-              {category.description && (
-                <p>{category.description}</p>
-              )}
+              {category.description && <p>{category.description}</p>}
             </a>
           ))}
         </div>
@@ -89,38 +84,18 @@ const { data: featuredProducts, error: productsError } = await supabase
       ) : featuredProducts?.length ? (
         <div class="product-grid">
           {featuredProducts.map((product) => {
-            const displayPrice =
-              product.sale_price ?? product.price;
-
+            const displayPrice = product.sale_price ?? product.price;
             return (
               <article class="product-card">
                 {product.primary_image_url ? (
-                  <img
-                    class="product-image"
-                    src={product.primary_image_url}
-                    alt={product.name}
-                    loading="lazy"
-                  />
+                  <img class="product-image" src={product.primary_image_url} alt={product.name} loading="lazy" />
                 ) : (
-                  <div class="product-placeholder">
-                    <span>No image yet</span>
-                  </div>
+                  <div class="product-placeholder"><span>No image yet</span></div>
                 )}
-
                 <div class="product-info">
-                  <h3>
-                    <a href={`/product/${product.slug}`}>
-                      {product.name}
-                    </a>
-                  </h3>
-
-                  {product.short_description && (
-                    <p>{product.short_description}</p>
-                  )}
-
-                  <span class="price">
-                    ${displayPrice.toFixed(2)}
-                  </span>
+                  <h3><a href={`/product/${product.slug}`}>{product.name}</a></h3>
+                  {product.short_description && <p>{product.short_description}</p>}
+                  <span class="price">${displayPrice.toFixed(2)}</span>
                 </div>
               </article>
             );
@@ -138,3 +113,48 @@ const { data: featuredProducts, error: productsError } = await supabase
     <p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p>
   </div>
 </footer>
+
+<style>
+  .whatsapp-home-fallback { position: fixed; left: 18px; bottom: 18px; z-index: 9999; width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: #25D366; color: #fff; box-shadow: 0 10px 28px rgba(15,23,42,.24); }
+  .whatsapp-home-fallback span { font-size: 30px; line-height: 1; }
+  @media (max-width: 640px) { .whatsapp-home-fallback { left: 12px; bottom: 12px; width: 52px; height: 52px; } }
+</style>
+
+<a class="whatsapp-home-fallback" href="https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product" target="_blank" rel="noopener noreferrer" aria-label="Chat with Clever Toys on WhatsApp" title="Chat with us on WhatsApp"><span aria-hidden="true">☏</span></a>
+
+<script>
+  const CART_KEY = 'cleverToysCart';
+  const CART_HREF = '/cart';
+  const WHATSAPP_URL = 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product';
+  const readCount = () => {
+    try {
+      const items = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
+      return Array.isArray(items) ? items.reduce((sum, item) => sum + Math.max(0, Number(item?.quantity) || 0), 0) : 0;
+    } catch { return 0; }
+  };
+  const ensureHomeCart = () => {
+    const nav = document.querySelector('.main-nav');
+    if (!nav) return;
+    let cart = nav.querySelector(`a[href="${CART_HREF}"]`);
+    if (!cart) {
+      cart = document.createElement('a');
+      cart.href = CART_HREF;
+      nav.appendChild(cart);
+    }
+    cart.className = 'cart-link';
+    cart.innerHTML = '<span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Cart</span><span class="cart-count-badge" aria-hidden="true"></span>';
+    const count = readCount();
+    const badge = cart.querySelector('.cart-count-badge');
+    if (badge) { badge.textContent = String(count); badge.hidden = count === 0; }
+    cart.setAttribute('aria-label', count ? `Shopping cart, ${count} ${count === 1 ? 'item' : 'items'}` : 'Shopping cart');
+  };
+  const ensureHomeWhatsApp = () => {
+    document.querySelectorAll('.whatsapp-home-fallback').forEach(el => el.setAttribute('href', WHATSAPP_URL));
+  };
+  const refresh = () => { ensureHomeCart(); ensureHomeWhatsApp(); };
+  refresh();
+  window.addEventListener('storage', refresh);
+  window.addEventListener('clever-cart-updated', refresh);
+  window.addEventListener('cart-updated', refresh);
+  setInterval(() => { const current = readCount(); const badge = document.querySelector('.main-nav .cart-count-badge'); if (badge && badge.textContent !== String(current)) refresh(); }, 500);
+</script>
