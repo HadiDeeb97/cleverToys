@@ -1,6 +1,5 @@
 ---
 import { supabase } from '../lib/supabase';
-import '../styles/global.css';
 
 const [{ data: categories, error: categoriesError }, { data: featuredProducts, error: productsError }] = await Promise.all([
   supabase.from('categories').select('id,name,slug,description').eq('is_active', true).order('sort_order', { ascending: true }),
@@ -10,10 +9,7 @@ const siteUrl = new URL('/', Astro.site ?? Astro.url.origin).href;
 const title = 'Clever Toys Lebanon | Educational & Fun Toys for Kids';
 const description = 'Shop fun, educational and exciting toys in Lebanon. Discover quality toys for babies, kids and growing learners at Clever Toys.';
 const webSiteSchema = {
-  '@context':'https://schema.org',
-  '@type':'WebSite',
-  name:'Clever Toys',
-  url:siteUrl,
+  '@context':'https://schema.org','@type':'WebSite',name:'Clever Toys',url:siteUrl,
   potentialAction:{'@type':'SearchAction',target:`${new URL('/products', Astro.site ?? Astro.url.origin).href}?q={search_term_string}`, 'query-input':'required name=search_term_string'}
 };
 ---
@@ -21,116 +17,35 @@ const webSiteSchema = {
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#111827" />
   <meta name="format-detection" content="telephone=no" />
-  <title>{title}</title>
-  <meta name="description" content={description} />
-  <meta name="robots" content="index,follow" />
-  <link rel="canonical" href={siteUrl} />
-  <meta property="og:title" content={title} />
-  <meta property="og:description" content={description} />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content={siteUrl} />
-  <meta property="og:site_name" content="Clever Toys" />
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content={title} />
-  <meta name="twitter:description" content={description} />
+  <title>{title}</title><meta name="description" content={description} /><meta name="robots" content="index,follow" />
+  <link rel="canonical" href={siteUrl} /><meta property="og:title" content={title} /><meta property="og:description" content={description} /><meta property="og:type" content="website" /><meta property="og:url" content={siteUrl} /><meta property="og:site_name" content="Clever Toys" />
+  <meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content={title} /><meta name="twitter:description" content={description} />
   <script type="application/ld+json" set:html={JSON.stringify(webSiteSchema)} />
 </head>
 <header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav" aria-label="Main navigation"><a href="/" aria-current="page">Home</a><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart" class="cart-link" aria-label="Shopping cart"></a></nav></div></header>
 <main>
   <section class="hero home-hero"><div class="container hero-content"><p class="home-eyebrow">Clever Toys • Lebanon</p><h1>Play. Learn. Discover.</h1><p>Fun, educational and exciting toys carefully selected for every stage of childhood.</p><div class="hero-actions"><a href="/products" class="button">Shop Toys</a><a href="/categories" class="button secondary-button">Browse Categories</a></div><div class="hero-points"><span>✓ Quality toys</span><span>✓ Cash on delivery</span><span>✓ Fast local delivery</span></div></div></section>
   <section class="section"><div class="container"><div class="section-header"><h2>Shop by Category</h2><p>Find something fun for every child.</p></div>{categoriesError ? <div class="empty-state"><h2>Categories are temporarily unavailable</h2><p>Please try again shortly.</p></div> : categories?.length ? <div class="category-grid">{categories.map(category => <a href={`/category/${category.slug}`} class="category-card"><strong>{category.name}</strong>{category.description && <p>{category.description}</p>}<span class="category-arrow">View toys →</span></a>)}</div> : <div class="empty-state"><h2>No categories yet</h2><p>New collections are coming soon.</p></div>}</div></section>
-  <section class="section home-featured"><div class="container"><div class="section-header section-header-row"><div><h2>Featured Toys</h2><p>Popular picks from Clever Toys.</p></div><a href="/products" class="text-link">View all toys →</a></div>{productsError ? <div class="empty-state"><h2>We couldn't load featured toys</h2><p>Please refresh the page in a moment.</p></div> : featuredProducts?.length ? <div class="product-grid">{featuredProducts.map(product => { const price = Number(product.sale_price ?? product.price); const original = product.sale_price != null ? Number(product.price) : null; const inStock = Number(product.stock_quantity ?? 0) > 0; return <article class="product-card home-product-card" data-product-name={product.name} data-product-description={product.short_description || ''} data-product-price={`$${price.toFixed(2)}`} data-product-original={original != null ? `$${original.toFixed(2)}` : ''} data-product-stock={inStock ? 'In stock' : 'Out of stock'} data-product-link={`/product/${product.slug}`}><a href={`/product/${product.slug}`} class="home-product-link" data-home-quick-view="true">{product.primary_image_url ? <img class="product-image" src={product.primary_image_url} alt={product.name} loading="lazy" decoding="async" /> : <div class="product-placeholder"><span>No image yet</span></div>}<button type="button" class="quick-view-trigger" aria-label={`Quick view ${product.name}`}>Quick view</button></a><div class="product-info"><h3><a href={`/product/${product.slug}`}>{product.name}</a></h3>{product.short_description && <p>{product.short_description}</p>}<div class="home-price"><span class="price">${price.toFixed(2)}</span>{original != null && <span class="shop-original-price">${original.toFixed(2)}</span>}</div><a href={`/product/${product.slug}`} class="view-product">View product →</a></div></article>; })}</div> : <div class="empty-state"><h2>No featured toys yet</h2><p>Browse our full collection to find your next favorite toy.</p><a href="/products" class="button">Shop all toys</a></div>}</div></section>
+  <section class="section home-featured"><div class="container"><div class="section-header section-header-row"><div><h2>Featured Toys</h2><p>Popular picks from Clever Toys.</p></div><a href="/products" class="text-link">View all toys →</a></div>{productsError ? <div class="empty-state"><h2>We couldn't load featured toys</h2><p>Please refresh the page in a moment.</p></div> : featuredProducts?.length ? <div class="product-grid">{featuredProducts.map(product => { const price = Number(product.sale_price ?? product.price); const original = product.sale_price != null ? Number(product.price) : null; const inStock = Number(product.stock_quantity ?? 0) > 0; return <article class="product-card home-product-card" data-product-name={product.name} data-product-description={product.short_description || ''} data-product-price={`$${price.toFixed(2)}`} data-product-original={original != null ? `$${original.toFixed(2)}` : ''} data-product-stock={inStock ? 'In stock' : 'Out of stock'} data-product-link={`/product/${product.slug}`}><a href={`/product/${product.slug}`} class="home-product-link">{product.primary_image_url ? <img class="product-image" src={product.primary_image_url} alt={product.name} loading="lazy" decoding="async" /> : <div class="product-placeholder"><span>No image yet</span></div>}<button type="button" class="quick-view-trigger" aria-label={`Quick view ${product.name}`}>Quick view</button></a><div class="product-info"><h3><a href={`/product/${product.slug}`}>{product.name}</a></h3>{product.short_description && <p>{product.short_description}</p>}<div class="home-price">{original != null ? <><span class="price">${price.toFixed(2)}</span><span class="shop-original-price">${original.toFixed(2)}</span></> : <span class="price">${price.toFixed(2)}</span>}</div><a href={`/product/${product.slug}`} class="view-product">View product →</a></div></article>; })}</div> : <div class="empty-state"><h2>No featured toys yet</h2><p>Browse our full collection to find your next favorite toy.</p><a href="/products" class="button">Shop all toys</a></div>}</div></section>
   <section class="section home-benefits"><div class="container benefit-grid"><div><strong>Easy ordering</strong><p>Simple checkout with cash on delivery.</p></div><div><strong>Made for families</strong><p>Fun picks for babies, kids and growing learners.</p></div><div><strong>Local support</strong><p>Need help? Message us directly on WhatsApp.</p></div></div></section>
 </main>
-
-<div class="quick-view-modal" id="home-quick-view-modal" aria-hidden="true" inert>
-  <div class="quick-view-backdrop" data-home-quick-view-close></div>
-  <section class="quick-view-dialog" role="dialog" aria-modal="true" aria-labelledby="home-quick-view-title">
-    <button class="quick-view-close" type="button" aria-label="Close quick view" data-home-quick-view-close>×</button>
-    <div class="quick-view-media"><img id="home-quick-view-image" src="" alt="" /></div>
-    <div class="quick-view-content">
-      <p class="quick-view-kicker">Quick view</p>
-      <h2 id="home-quick-view-title"></h2>
-      <p id="home-quick-view-description" class="quick-view-description"></p>
-      <div class="quick-view-price"><strong id="home-quick-view-price"></strong><span id="home-quick-view-original"></span></div>
-      <p id="home-quick-view-stock" class="quick-view-stock"></p>
-      <a id="home-quick-view-link" class="button" href="#">View product</a>
-    </div>
-  </section>
-</div>
-
+<div class="quick-view-modal" id="home-quick-view-modal" aria-hidden="true" inert><div class="quick-view-backdrop" data-home-quick-view-close></div><section class="quick-view-dialog" role="dialog" aria-modal="true" aria-labelledby="home-quick-view-title"><button class="quick-view-close" type="button" aria-label="Close quick view" data-home-quick-view-close>×</button><div class="quick-view-media"><img id="home-quick-view-image" src="" alt="" /></div><div class="quick-view-content"><p class="quick-view-kicker">Quick view</p><h2 id="home-quick-view-title"></h2><p id="home-quick-view-description" class="quick-view-description"></p><div class="quick-view-price"><strong id="home-quick-view-price"></strong><span id="home-quick-view-original"></span></div><p id="home-quick-view-stock" class="quick-view-stock"></p><a id="home-quick-view-link" class="button" href="#">View product</a></div></section></div>
 <footer class="site-footer"><div class="container footer-inner"><div><strong>Clever Toys</strong><p>Fun toys for curious minds.</p></div><div class="footer-links"><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/about">About</a><a href="/contact">Contact</a><a href="/privacy">Privacy</a></div></div><div class="container"><p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p></div></footer>
 <style>
-.home-hero{padding:88px 0 76px;background:linear-gradient(135deg,var(--brand-soft),#fff)}.home-eyebrow{margin:0 0 14px;color:#64748b;font-size:.82rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.hero-actions{display:flex;gap:10px;flex-wrap:wrap}.hero-points{display:flex;gap:18px;flex-wrap:wrap;margin-top:24px;color:#475569;font-size:.9rem;font-weight:650}.category-card{position:relative}.category-arrow{margin-top:14px;color:#64748b;font-size:.82rem;font-weight:800}.section-header-row{display:flex;justify-content:space-between;align-items:end;gap:20px}.text-link{font-weight:800}.home-product-link{position:relative;display:block;cursor:pointer}.quick-view-trigger{position:absolute;left:50%;bottom:14px;z-index:4;transform:translate(-50%,8px);padding:9px 14px;border:0;border-radius:999px;background:rgba(17,24,39,.9);color:#fff;font:inherit;font-size:.76rem;font-weight:800;opacity:0;pointer-events:auto;transition:opacity .18s,transform .18s;white-space:nowrap;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.18)}.home-product-link:hover .quick-view-trigger,.home-product-link:focus-within .quick-view-trigger{opacity:1;transform:translate(-50%,0)}.home-price{display:flex;align-items:baseline;gap:8px;margin-top:8px}.view-product{display:inline-block;margin-top:12px;font-size:.88rem;font-weight:800}.home-benefits{padding-top:20px}.benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.benefit-grid>div{padding:22px;border:1px solid #e5e7eb;border-radius:16px;background:#fff}.benefit-grid strong{font-size:1rem}.benefit-grid p{margin:7px 0 0;color:#64748b;line-height:1.55}.footer-inner{display:flex;justify-content:space-between;gap:30px;align-items:flex-start;margin-bottom:22px}.footer-inner p{margin:6px 0 0}.footer-links{display:flex;gap:16px;flex-wrap:wrap;font-weight:650;font-size:.9rem}.footer-links a:hover{text-decoration:underline}.quick-view-modal{position:fixed;inset:0;z-index:18000;display:none;align-items:center;justify-content:center;padding:20px}.quick-view-modal.is-open{display:flex}.quick-view-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.62);backdrop-filter:blur(5px)}.quick-view-dialog{position:relative;z-index:1;width:min(920px,100%);display:grid;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr);gap:0;overflow:hidden;border-radius:22px;background:#fff;box-shadow:0 28px 80px rgba(15,23,42,.28)}.quick-view-media{min-height:420px;background:#f8fafc;display:flex;align-items:center;justify-content:center;padding:24px}.quick-view-media img{width:100%;height:100%;max-height:600px;object-fit:contain;border-radius:14px}.quick-view-content{padding:34px;display:flex;flex-direction:column;justify-content:center}.quick-view-kicker{margin:0 0 8px;color:#64748b;font-size:.76rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase}.quick-view-content h2{margin:0 0 12px;font-size:clamp(1.6rem,3vw,2.35rem);line-height:1.08;letter-spacing:-.04em}.quick-view-description{margin:0;color:#64748b;line-height:1.6}.quick-view-price{display:flex;align-items:baseline;gap:9px;margin:20px 0 8px}.quick-view-price strong{font-size:1.5rem}.quick-view-price span{text-decoration:line-through;color:#94a3b8}.quick-view-stock{margin:0 0 22px;font-size:.9rem;font-weight:700}.quick-view-close{position:absolute;top:12px;right:12px;z-index:2;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.94);box-shadow:0 4px 15px rgba(15,23,42,.12);font-size:24px;line-height:1;cursor:pointer}@media(max-width:900px){.home-hero{padding:68px 0 58px}.benefit-grid{grid-template-columns:1fr}.footer-inner{flex-direction:column}.quick-view-dialog{grid-template-columns:1fr}.quick-view-media{min-height:320px;max-height:52vh}.quick-view-content{padding:26px}.quick-view-description{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}}@media(max-width:640px){.home-hero{padding:52px 0 46px}.hero-actions .button{width:100%}.hero-points{gap:10px 14px;font-size:.82rem}.section-header-row{align-items:flex-start;flex-direction:column}.footer-links{gap:12px}.footer-inner{margin-bottom:18px}.quick-view-modal{padding:12px}.quick-view-dialog{max-height:calc(100vh - 24px);overflow:auto;border-radius:18px}.quick-view-media{min-height:280px;padding:16px}.quick-view-content{padding:22px}.quick-view-content h2{font-size:1.55rem}.quick-view-close{top:8px;right:8px}.quick-view-trigger{opacity:1;transform:translate(-50%,0);bottom:10px;font-size:.7rem;padding:7px 11px}}
+.home-hero{padding:88px 0 76px;background:linear-gradient(135deg,var(--brand-soft),#fff)}.home-eyebrow{margin:0 0 14px;color:#64748b;font-size:.82rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.hero-actions{display:flex;gap:10px;flex-wrap:wrap}.hero-points{display:flex;gap:18px;flex-wrap:wrap;margin-top:24px;color:#475569;font-size:.9rem;font-weight:650}.category-card{position:relative}.category-arrow{margin-top:14px;color:#64748b;font-size:.82rem;font-weight:800}.section-header-row{display:flex;justify-content:space-between;align-items:end;gap:20px}.text-link{font-weight:800}.home-product-link{position:relative;display:block;cursor:pointer}.quick-view-trigger{position:absolute;left:50%;bottom:14px;z-index:4;transform:translate(-50%,8px);padding:9px 14px;border:0;border-radius:999px;background:rgba(17,24,39,.9);color:#fff;font:inherit;font-size:.76rem;font-weight:800;opacity:0;pointer-events:auto;transition:opacity .18s,transform .18s;white-space:nowrap;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.18)}.home-product-link:hover .quick-view-trigger,.home-product-link:focus-within .quick-view-trigger{opacity:1;transform:translate(-50%,0)}.home-price{display:flex;align-items:baseline;gap:8px;margin-top:8px}.shop-original-price{text-decoration:line-through;color:#94a3b8}.view-product{display:inline-block;margin-top:12px;font-size:.88rem;font-weight:800}.home-benefits{padding-top:20px}.benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.benefit-grid>div{padding:22px;border:1px solid #e5e7eb;border-radius:16px;background:#fff}.benefit-grid strong{font-size:1rem}.benefit-grid p{margin:7px 0 0;color:#64748b;line-height:1.55}.footer-inner{display:flex;justify-content:space-between;gap:30px;align-items:flex-start;margin-bottom:22px}.footer-inner p{margin:6px 0 0}.footer-links{display:flex;gap:16px;flex-wrap:wrap;font-weight:650;font-size:.9rem}.footer-links a:hover{text-decoration:underline}.quick-view-modal{position:fixed;inset:0;z-index:18000;display:none;align-items:center;justify-content:center;padding:20px}.quick-view-modal.is-open{display:flex}.quick-view-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.62);backdrop-filter:blur(5px)}.quick-view-dialog{position:relative;z-index:1;width:min(920px,100%);display:grid;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr);gap:0;overflow:hidden;border-radius:22px;background:#fff;box-shadow:0 28px 80px rgba(15,23,42,.28)}.quick-view-media{min-height:420px;background:#f8fafc;display:flex;align-items:center;justify-content:center;padding:24px}.quick-view-media img{width:100%;height:100%;max-height:600px;object-fit:contain;border-radius:14px}.quick-view-content{padding:34px;display:flex;flex-direction:column;justify-content:center}.quick-view-kicker{margin:0 0 8px;color:#64748b;font-size:.76rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase}.quick-view-content h2{margin:0 0 12px;font-size:clamp(1.6rem,3vw,2.35rem);line-height:1.08;letter-spacing:-.04em}.quick-view-description{margin:0;color:#64748b;line-height:1.6}.quick-view-price{display:flex;align-items:baseline;gap:9px;margin:20px 0 8px}.quick-view-price strong{font-size:1.5rem}.quick-view-price span{text-decoration:line-through;color:#94a3b8}.quick-view-stock{margin:0 0 22px;font-size:.9rem;font-weight:700}.quick-view-close{position:absolute;top:12px;right:12px;z-index:2;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.94);box-shadow:0 4px 15px rgba(15,23,42,.12);font-size:24px;line-height:1;cursor:pointer}@media(max-width:900px){.home-hero{padding:68px 0 58px}.benefit-grid{grid-template-columns:1fr}.footer-inner{flex-direction:column}.quick-view-dialog{grid-template-columns:1fr}.quick-view-media{min-height:320px;max-height:52vh}.quick-view-content{padding:26px}.quick-view-description{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}}@media(max-width:640px){.home-hero{padding:52px 0 46px}.hero-actions .button{width:100%}.hero-points{gap:10px 14px;font-size:.82rem}.section-header-row{align-items:flex-start;flex-direction:column}.footer-links{gap:12px}.footer-inner{margin-bottom:18px}.quick-view-modal{padding:12px}.quick-view-dialog{max-height:calc(100vh - 24px);overflow:auto;border-radius:18px}.quick-view-media{min-height:280px;padding:16px}.quick-view-content{padding:22px}.quick-view-content h2{font-size:1.55rem}.quick-view-close{top:8px;right:8px}.quick-view-trigger{opacity:1;transform:translate(-50%,0);bottom:10px;font-size:.7rem;padding:7px 11px}}
 </style>
 <script>
-  const modal = document.getElementById('home-quick-view-modal');
-  const image = document.getElementById('home-quick-view-image');
-  const title = document.getElementById('home-quick-view-title');
-  const description = document.getElementById('home-quick-view-description');
-  const price = document.getElementById('home-quick-view-price');
-  const original = document.getElementById('home-quick-view-original');
-  const stock = document.getElementById('home-quick-view-stock');
-  const link = document.getElementById('home-quick-view-link');
-  let opener = null;
-
-  const closeHomeQuickView = () => {
-    if (!modal) return;
-    const restore = opener;
-    opener = null;
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
-    modal.setAttribute('inert', '');
-    document.body.style.overflow = '';
-    if (restore && document.contains(restore)) requestAnimationFrame(() => restore.focus({ preventScroll: true }));
-  };
-
-  const openHomeQuickView = (card, trigger) => {
-    if (!modal || !card) return;
-    const imageEl = card.querySelector('.product-image');
-    opener = trigger instanceof HTMLElement ? trigger : document.activeElement;
-    if (imageEl) {
-      image.src = imageEl.currentSrc || imageEl.src;
-      image.alt = imageEl.alt || '';
-    }
-    title.textContent = card.dataset.productName || 'Product';
-    description.textContent = card.dataset.productDescription || '';
-    description.hidden = !description.textContent;
-    price.textContent = card.dataset.productPrice || '';
-    original.textContent = card.dataset.productOriginal || '';
-    original.hidden = !original.textContent;
-    stock.textContent = card.dataset.productStock || 'In stock';
-    stock.style.color = stock.textContent === 'Out of stock' ? '#b91c1c' : '#15803d';
-    link.href = card.dataset.productLink || '#';
-    modal.removeAttribute('inert');
-    modal.setAttribute('aria-hidden', 'false');
-    modal.classList.add('is-open');
-    document.body.style.overflow = 'hidden';
-    requestAnimationFrame(() => modal.querySelector('.quick-view-close')?.focus({ preventScroll: true }));
-  };
-
-  document.addEventListener('click', event => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest('.quick-view-trigger')) return;
-    const imageEl = target?.closest('.home-product-link img');
-    if (!imageEl) return;
-    const anchor = imageEl.closest('.home-product-link');
-    if (!(anchor instanceof HTMLAnchorElement)) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    location.href = anchor.href;
-  }, true);
-
-  document.querySelectorAll('[data-home-quick-view="true"]').forEach(trigger => {
-    trigger.addEventListener('click', event => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      openHomeQuickView(trigger.closest('.home-product-card'), trigger);
-    });
-  });
-
-  document.querySelectorAll('[data-home-quick-view-close]').forEach(el => el.addEventListener('click', closeHomeQuickView));
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && modal?.classList.contains('is-open')) closeHomeQuickView();
-  });
+const modal = document.getElementById('home-quick-view-modal');
+const image = document.getElementById('home-quick-view-image');
+const title = document.getElementById('home-quick-view-title');
+const description = document.getElementById('home-quick-view-description');
+const price = document.getElementById('home-quick-view-price');
+const original = document.getElementById('home-quick-view-original');
+const stock = document.getElementById('home-quick-view-stock');
+const link = document.getElementById('home-quick-view-link');
+let opener = null;
+const closeHomeQuickView = () => { if (!modal) return; const restore=opener; opener=null; modal.classList.remove('is-open'); modal.setAttribute('aria-hidden','true'); modal.setAttribute('inert',''); document.body.style.overflow=''; if(restore&&document.contains(restore)) requestAnimationFrame(()=>restore.focus({preventScroll:true})); };
+const openHomeQuickView = (card, trigger) => { if(!modal||!card)return; const imageEl=card.querySelector('.product-image'); opener=trigger instanceof HTMLElement?trigger:document.activeElement; if(imageEl){image.src=imageEl.currentSrc||imageEl.src; image.alt=imageEl.alt||'';} title.textContent=card.dataset.productName||'Product'; description.textContent=card.dataset.productDescription||''; description.hidden=!description.textContent; price.textContent=card.dataset.productPrice||''; original.textContent=card.dataset.productOriginal||''; original.hidden=!original.textContent; stock.textContent=card.dataset.productStock||'In stock'; stock.style.color=stock.textContent==='Out of stock'?'#b91c1c':'#15803d'; link.href=card.dataset.productLink||'#'; modal.removeAttribute('inert'); modal.setAttribute('aria-hidden','false'); modal.classList.add('is-open'); document.body.style.overflow='hidden'; requestAnimationFrame(()=>modal.querySelector('.quick-view-close')?.focus({preventScroll:true})); };
+document.addEventListener('click', event => { const target=event.target instanceof Element?event.target:null; const trigger=target?.closest('.home-product-link .quick-view-trigger'); if(trigger){event.preventDefault();event.stopImmediatePropagation();openHomeQuickView(trigger.closest('.home-product-card'),trigger);return;} if(target?.closest('[data-home-quick-view-close]')){event.preventDefault();closeHomeQuickView();return;} const imageEl=target?.closest('.home-product-link img'); if(imageEl){const anchor=imageEl.closest('.home-product-link'); if(!(anchor instanceof HTMLAnchorElement))return; event.preventDefault();event.stopImmediatePropagation();location.href=anchor.href;} }, true);
+document.addEventListener('keydown', event => { if(event.key==='Escape'&&modal?.classList.contains('is-open')) closeHomeQuickView(); });
 </script>
