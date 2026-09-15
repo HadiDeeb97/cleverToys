@@ -85,6 +85,9 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
 ---
 
 <head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <meta name="format-detection" content="telephone=no" />
   <title>{title}</title>
   <meta name="description" content={description} />
   <link rel="canonical" href={canonicalUrl} />
@@ -270,9 +273,9 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
     location.href = anchor.href;
   }, true);
 
-  document.querySelectorAll('[data-quick-view="true"]').forEach(trigger => trigger.addEventListener('click', event => {
+  document.querySelectorAll('.quick-view-trigger').forEach(trigger => trigger.addEventListener('click', event => {
     event.preventDefault();
-    event.stopPropagation();
+    event.stopImmediatePropagation();
     openQuickView(trigger.closest('.product-card'), trigger);
   }));
 
