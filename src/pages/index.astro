@@ -1,5 +1,6 @@
 ---
 import { supabase } from '../lib/supabase';
+import '../styles/global.css';
 
 const [{ data: categories, error: categoriesError }, { data: featuredProducts, error: productsError }] = await Promise.all([
   supabase.from('categories').select('id,name,slug,description').eq('is_active', true).order('sort_order', { ascending: true }),
