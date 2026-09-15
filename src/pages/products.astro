@@ -1,6 +1,5 @@
 ---
 import { supabase } from '../lib/supabase';
-import '../styles/global.css';
 
 const pageSize = 24;
 const requestedPage = Math.max(1, Number(Astro.url.searchParams.get('page') || '1'));
@@ -114,174 +113,52 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
         <button class="button search-button" type="submit">Search</button>
       </form>
       <div class="toolbar-actions">
-        <button class="button filter-button" type="button" id="filter-toggle" aria-expanded="false" aria-controls="filter-panel" aria-label="Open filters">
-          <span class="filter-icon" aria-hidden="true">☰</span>
-          <span>Filter{hasFilters ? ` (${selectedCategorySlugs.length + selectedVariantFilters.length + (ageMinParam ? 1 : 0) + (ageMaxParam ? 1 : 0)})` : ''}</span>
-        </button>
+        <button class="button filter-button" type="button" id="filter-toggle" aria-expanded="false" aria-controls="filter-panel" aria-label="Open filters"><span class="filter-icon" aria-hidden="true">☰</span><span>Filter{hasFilters ? ` (${selectedCategorySlugs.length + selectedVariantFilters.length + (ageMinParam ? 1 : 0) + (ageMaxParam ? 1 : 0)})` : ''}</span></button>
         <form method="get" action="/products" class="sort-form">
           {search && <input type="hidden" name="q" value={search} />}
           {selectedCategorySlugs.map(slug => <input type="hidden" name="category" value={slug} />)}
           {selectedVariantFilters.map(variant => <input type="hidden" name="variant" value={variant} />)}
           {ageMinParam && <input type="hidden" name="age_min" value={ageMinParam} />}
           {ageMaxParam && <input type="hidden" name="age_max" value={ageMaxParam} />}
-          <label for="sort">Sort</label>
-          <select id="sort" name="sort" onchange="this.form.submit()">
-            <option value="newest" selected={sort === 'newest'}>Newest</option>
-            <option value="price-asc" selected={sort === 'price-asc'}>Price: Low to High</option>
-            <option value="price-desc" selected={sort === 'price-desc'}>Price: High to Low</option>
-            <option value="name" selected={sort === 'name'}>Name: A–Z</option>
-          </select>
+          <label for="sort">Sort</label><select id="sort" name="sort" onchange="this.form.submit()"><option value="newest" selected={sort === 'newest'}>Newest</option><option value="price-asc" selected={sort === 'price-asc'}>Price: Low to High</option><option value="price-desc" selected={sort === 'price-desc'}>Price: High to Low</option><option value="name" selected={sort === 'name'}>Name: A–Z</option></select>
         </form>
       </div>
     </div>
 
-    <div class="category-pills" aria-label="Shop categories">
-      <a class:list={{ active: !selectedCategorySlugs.length }} href="/products">All Toys</a>
-      {categories?.map((item) => <a class:list={{ active: selectedCategorySlugs.includes(item.slug) }} href={`/products?category=${encodeURIComponent(item.slug)}`}>{item.name}</a>)}
-    </div>
+    <div class="category-pills" aria-label="Shop categories"><a class:list={{ active: !selectedCategorySlugs.length }} href="/products">All Toys</a>{categories?.map(item => <a class:list={{ active: selectedCategorySlugs.includes(item.slug) }} href={`/products?category=${encodeURIComponent(item.slug)}`}>{item.name}</a>)}</div>
 
     <form class="filter-panel" id="filter-panel" hidden method="get" action="/products">
       {search && <input type="hidden" name="q" value={search} />}
       {sort !== 'newest' && <input type="hidden" name="sort" value={sort} />}
-      <div class="filter-panel-head">
-        <div><strong>Filter toys</strong><span class="filter-panel-subtitle">Select as many options as you need.</span></div>
-        <button type="button" class="filter-close" id="filter-close" aria-label="Close filters">×</button>
-      </div>
+      <div class="filter-panel-head"><div><strong>Filter toys</strong><span class="filter-panel-subtitle">Select as many options as you need.</span></div><button type="button" class="filter-close" id="filter-close" aria-label="Close filters">×</button></div>
       <div class="filter-groups">
-        <fieldset class="filter-group"><legend>Categories</legend><div class="filter-check-grid">
-          {categories.map(item => <label class="filter-check"><input type="checkbox" name="category" value={item.slug} checked={selectedCategorySlugs.includes(item.slug)} /><span>{item.name}</span></label>)}
-        </div></fieldset>
-
-        {variantOptions.length > 0 && <fieldset class="filter-group"><legend>Variants / options</legend><div class="filter-check-grid">
-          {variantOptions.map(item => <label class="filter-check"><input type="checkbox" name="variant" value={item} checked={selectedVariantFilters.includes(item)} /><span>{item}</span></label>)}
-        </div></fieldset>}
-
-        <fieldset class="filter-group"><legend>Age range</legend><div class="age-grid">
-          <label>From age<input name="age_min" type="number" min="0" step="1" value={ageMinParam} placeholder="Any" /></label>
-          <label>To age<input name="age_max" type="number" min="0" step="1" value={ageMaxParam} placeholder="Any" /></label>
-        </div></fieldset>
+        <fieldset class="filter-group"><legend>Categories</legend><div class="filter-check-grid">{categories.map(item => <label class="filter-check"><input type="checkbox" name="category" value={item.slug} checked={selectedCategorySlugs.includes(item.slug)} /><span>{item.name}</span></label>)}</div></fieldset>
+        {variantOptions.length > 0 && <fieldset class="filter-group"><legend>Variants / options</legend><div class="filter-check-grid">{variantOptions.map(item => <label class="filter-check"><input type="checkbox" name="variant" value={item} checked={selectedVariantFilters.includes(item)} /><span>{item}</span></label>)}</div></fieldset>}
+        <fieldset class="filter-group age-filter-group"><legend>Age range</legend><div class="age-grid"><label>From age<input name="age_min" type="number" min="0" step="1" value={ageMinParam} placeholder="Any" /></label><label>To age<input name="age_max" type="number" min="0" step="1" value={ageMaxParam} placeholder="Any" /></label></div></fieldset>
       </div>
       <div class="filter-actions"><a class="button secondary-button" href="/products">Clear all</a><button class="button" type="submit">Apply filters</button></div>
     </form>
 
     <div class="shop-result-row"><p>{categoryFilterError || variantFilterError ? 'Some filters could not be loaded.' : totalProducts === 0 ? 'No toys found.' : `Showing ${from + 1}–${Math.min(from + (products?.length ?? 0), totalProducts)} of ${totalProducts} toys`}</p>{hasFilters && <a href="/products">Clear filters</a>}</div>
-    {error ? <div class="empty-state"><h2>We couldn't load the toys</h2><p>Please try again in a moment.</p></div> : products?.length ? <div class="product-grid shop-grid">{products.map((product) => {const displayPrice=Number(product.sale_price??product.price);const originalPrice=product.sale_price!=null?Number(product.price):null;const inStock=product.stock_quantity>0;return <article class="product-card shop-card"><a href={`/product/${product.slug}`} class="product-image-link"><div class="quick-view-label" aria-hidden="true">Quick view</div>{product.primary_image_url?<img class="product-image" src={product.primary_image_url} alt={product.name} loading="lazy"/>:<div class="product-placeholder"><span>No image yet</span></div>}{product.sale_price!=null&&<span class="sale-badge">Sale</span>}{!inStock&&<span class="stock-badge">Out of stock</span>}<button type="button" class="quick-view-trigger" aria-label={`Quick view ${product.name}`}>Quick view</button></a><div class="product-info"><h2><a href={`/product/${product.slug}`}>{product.name}</a></h2>{product.short_description&&<p>{product.short_description}</p>}<div class="shop-price"><span class="price">${displayPrice.toFixed(2)}</span>{originalPrice!=null&&<span class="shop-original-price">${originalPrice.toFixed(2)}</span>}</div><a class="view-product" href={`/product/${product.slug}`}>{inStock?'View product':'View details'}</a></div></article>;})}</div> : <div class="empty-state"><h2>No toys found</h2><p>Try another search or browse all of our toys.</p><a class="button" href="/products">View all toys</a></div>}
+    {error ? <div class="empty-state"><h2>We couldn't load the toys</h2><p>Please try again in a moment.</p></div> : products?.length ? <div class="product-grid shop-grid">{products.map(product => {const displayPrice=Number(product.sale_price??product.price);const originalPrice=product.sale_price!=null?Number(product.price):null;const inStock=product.stock_quantity>0;return <article class="product-card shop-card"><a href={`/product/${product.slug}`} class="product-image-link"><div class="quick-view-label" aria-hidden="true">Quick view</div>{product.primary_image_url?<img class="product-image" src={product.primary_image_url} alt={product.name} loading="lazy"/>:<div class="product-placeholder"><span>No image yet</span></div>}{product.sale_price!=null&&<span class="sale-badge">Sale</span>}{!inStock&&<span class="stock-badge">Out of stock</span>}<button type="button" class="quick-view-trigger" aria-label={`Quick view ${product.name}`}>Quick view</button></a><div class="product-info"><h2><a href={`/product/${product.slug}`}>{product.name}</a></h2>{product.short_description&&<p>{product.short_description}</p>}<div class="shop-price"><span class="price">${displayPrice.toFixed(2)}</span>{originalPrice!=null&&<span class="shop-original-price">${originalPrice.toFixed(2)}</span>}</div><a class="view-product" href={`/product/${product.slug}`}>{inStock?'View product':'View details'}</a></div></article>;})}</div> : <div class="empty-state"><h2>No toys found</h2><p>Try another search or browse all of our toys.</p><a class="button" href="/products">View all toys</a></div>}
     {totalPages > 1 && <nav class="pagination" aria-label="Product pagination">{currentPage > 1 && <a href={pageUrl(currentPage - 1)}>← Previous</a>}<span>Page {currentPage} of {totalPages}</span>{currentPage < totalPages && <a href={pageUrl(currentPage + 1)}>Next →</a>}</nav>}
   </div></section>
 </main>
 
-<div class="quick-view-modal" id="quick-view-modal" aria-hidden="true" inert>
-  <div class="quick-view-backdrop" data-quick-view-close></div>
-  <section class="quick-view-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-view-title">
-    <button class="quick-view-close" type="button" aria-label="Close quick view" data-quick-view-close>×</button>
-    <div class="quick-view-media"><img id="quick-view-image" src="" alt="" /></div>
-    <div class="quick-view-content">
-      <p class="quick-view-kicker">Quick view</p>
-      <h2 id="quick-view-title"></h2>
-      <p id="quick-view-description" class="quick-view-description"></p>
-      <div class="quick-view-price"><strong id="quick-view-price"></strong><span id="quick-view-original"></span></div>
-      <p id="quick-view-stock" class="quick-view-stock"></p>
-      <a id="quick-view-link" class="button" href="#">View product</a>
-    </div>
-  </section>
-</div>
-
+<div class="quick-view-modal" id="quick-view-modal" aria-hidden="true" inert><div class="quick-view-backdrop" data-quick-view-close></div><section class="quick-view-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-view-title"><button class="quick-view-close" type="button" aria-label="Close quick view" data-quick-view-close>×</button><div class="quick-view-media"><img id="quick-view-image" src="" alt="" /></div><div class="quick-view-content"><p class="quick-view-kicker">Quick view</p><h2 id="quick-view-title"></h2><p id="quick-view-description" class="quick-view-description"></p><div class="quick-view-price"><strong id="quick-view-price"></strong><span id="quick-view-original"></span></div><p id="quick-view-stock" class="quick-view-stock"></p><a id="quick-view-link" class="button" href="#">View product</a></div></section></div>
 <footer class="site-footer"><div class="container"><p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p></div></footer>
 
 <style>
-.shop-hero{padding:58px 0 48px;background:#f8fafc;border-bottom:1px solid #e5e7eb}.shop-eyebrow{margin:0 0 10px;color:#64748b;font-size:.8rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.shop-hero h1{margin:0 0 12px;font-size:clamp(2.3rem,6vw,4rem);letter-spacing:-.06em}.shop-hero p:last-child{margin:0;color:#64748b;font-size:1.05rem}.shop-section{padding-top:36px}.shop-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:stretch;margin-bottom:20px}.search-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;min-width:0}.search-form input,.sort-form select,.filter-group input[type=number]{min-height:48px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;padding:0 14px;font:inherit}.search-form input{min-width:0;width:100%}.search-button{min-height:48px;border:0;cursor:pointer;font:inherit;white-space:nowrap;min-width:96px}.toolbar-actions{display:grid;grid-template-columns:auto auto;gap:10px;align-items:center}.filter-button{min-height:48px;border:0;cursor:pointer;font:inherit;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:8px}.filter-icon{font-size:.95em}.sort-form{display:flex;align-items:center;gap:8px;white-space:nowrap}.sort-form label{font-size:.9rem;font-weight:700}.sort-form select{min-width:170px}.category-pills{display:none;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:20px;scrollbar-width:thin}.category-pills a{flex:0 0 auto;padding:9px 14px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;font-size:.88rem;font-weight:700}.category-pills a:hover,.category-pills a.active{background:#111827;color:#fff;border-color:#111827}
-.filter-panel{margin:0 0 20px;padding:20px;border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}.filter-panel[hidden]{display:none}.filter-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}.filter-panel-head strong{display:block;font-size:1.1rem}.filter-panel-subtitle{display:block;margin-top:4px;color:#64748b;font-size:.86rem}.filter-close{width:38px;height:38px;border:1px solid #e2e8f0;border-radius:50%;background:#fff;font-size:22px;line-height:1;cursor:pointer}.filter-groups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.filter-group{min-width:0;margin:0;padding:16px;border:1px solid #e5e7eb;border-radius:14px}.filter-group legend{padding:0 6px;font-weight:800}.filter-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:8px;max-height:240px;overflow:auto;padding-right:2px}.filter-check{display:flex;align-items:center;gap:9px;min-width:0;padding:9px 10px;border-radius:10px;background:#f8fafc;font-size:.9rem;cursor:pointer}.filter-check:hover{background:#f1f5f9}.filter-check input{width:17px;height:17px;flex:0 0 auto;accent-color:#111827}.filter-check span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.age-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}.age-grid label{display:grid;gap:7px;font-size:.84rem;font-weight:700;color:#475569}.filter-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.filter-actions .button{min-height:46px}.shop-result-row{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px;color:#64748b;font-size:.9rem}.shop-result-row p{margin:0}.shop-result-row a{font-weight:700;color:#111827}.shop-grid{margin-top:0}.shop-card{position:relative}.product-image-link{position:relative;display:block;cursor:pointer}.quick-view-label{display:none}.quick-view-trigger{position:absolute;left:50%;bottom:14px;z-index:4;transform:translate(-50%,8px);padding:9px 14px;border:0;border-radius:999px;background:rgba(17,24,39,.9);color:#fff;font:inherit;font-size:.76rem;font-weight:800;opacity:0;pointer-events:auto;transition:opacity .18s,transform .18s;white-space:nowrap;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.18)}.product-image-link:hover .quick-view-trigger,.product-image-link:focus-within .quick-view-trigger{opacity:1;transform:translate(-50%,0)}.sale-badge,.stock-badge{position:absolute;top:12px;padding:6px 9px;border-radius:999px;font-size:.72rem;font-weight:800;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.1)}.sale-badge{left:12px}.stock-badge{right:12px}.shop-card .product-info h2{margin:0 0 8px;font-size:1rem}.shop-price{display:flex;align-items:baseline;gap:8px;margin-top:10px}.shop-original-price{color:#94a3b8;font-size:.9rem;text-decoration:line-through}.view-product{display:inline-block;margin-top:14px;font-size:.88rem;font-weight:800}.empty-state{padding:64px 20px;border:1px dashed #cbd5e1;border-radius:18px;text-align:center}.empty-state h2{margin:0 0 8px}.empty-state p{margin:0 0 20px;color:#64748b}.pagination{display:flex;justify-content:center;align-items:center;gap:18px;margin-top:40px;font-size:.92rem}.pagination a{padding:10px 14px;border:1px solid #e2e8f0;border-radius:10px;font-weight:700}.pagination span{color:#64748b}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.quick-view-modal{position:fixed;inset:0;z-index:18000;display:none;align-items:center;justify-content:center;padding:20px}.quick-view-modal.is-open{display:flex}.quick-view-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.62);backdrop-filter:blur(5px)}.quick-view-dialog{position:relative;z-index:1;width:min(920px,100%);display:grid;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr);gap:0;overflow:hidden;border-radius:22px;background:#fff;box-shadow:0 28px 80px rgba(15,23,42,.28)}.quick-view-media{min-height:420px;background:#f8fafc;display:flex;align-items:center;justify-content:center;padding:24px}.quick-view-media img{width:100%;height:100%;max-height:600px;object-fit:contain;border-radius:14px}.quick-view-content{padding:34px;display:flex;flex-direction:column;justify-content:center}.quick-view-kicker{margin:0 0 8px;color:#64748b;font-size:.76rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase}.quick-view-content h2{margin:0 0 12px;font-size:clamp(1.6rem,3vw,2.35rem);line-height:1.08;letter-spacing:-.04em}.quick-view-description{margin:0;color:#64748b;line-height:1.6}.quick-view-price{display:flex;align-items:baseline;gap:9px;margin:20px 0 8px}.quick-view-price strong{font-size:1.5rem}.quick-view-price span{text-decoration:line-through;color:#94a3b8}.quick-view-stock{margin:0 0 22px;font-size:.9rem;font-weight:700}.quick-view-close{position:absolute;top:12px;right:12px;z-index:2;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.94);box-shadow:0 4px 15px rgba(15,23,42,.12);font-size:24px;line-height:1;cursor:pointer}
-@media(max-width:900px){.shop-toolbar{grid-template-columns:1fr}.toolbar-actions{grid-template-columns:auto minmax(0,1fr);width:100%}.sort-form{min-width:0}.sort-form select{min-width:0;flex:1}.filter-groups{grid-template-columns:1fr}.filter-check-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.quick-view-dialog{grid-template-columns:1fr}.quick-view-media{min-height:320px;max-height:52vh}.quick-view-content{padding:26px}.quick-view-description{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}}
-@media(max-width:767px){.shop-toolbar{gap:12px}.search-form{grid-template-columns:minmax(0,1fr) auto;gap:8px;width:100%}.search-form input{min-width:0}.search-button{min-width:96px;padding:0 15px}.toolbar-actions{grid-template-columns:1fr minmax(0,1fr);gap:8px}.filter-button,.sort-form,.sort-form select{min-height:50px}.filter-button{width:100%;font-size:1rem}.sort-form{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;width:100%}.sort-form label{font-size:.95rem;align-self:center}.sort-form select{width:100%;font-size:.98rem;padding-inline:12px}.filter-panel{margin-bottom:18px;padding:16px;border-radius:16px}.filter-check-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.filter-check{padding:10px 9px}.age-grid{grid-template-columns:1fr 1fr}.shop-result-row{align-items:flex-start}.category-pills{display:none}.quick-view-modal{padding:12px}.quick-view-dialog{max-height:calc(100vh - 24px);overflow:auto;border-radius:18px}.quick-view-media{min-height:280px;padding:16px}.quick-view-content{padding:22px}.quick-view-content h2{font-size:1.55rem}.quick-view-close{top:8px;right:8px}.quick-view-trigger{opacity:1;transform:translate(-50%,0);bottom:10px;font-size:.7rem;padding:7px 11px}}
-@media(max-width:430px){.search-form{grid-template-columns:minmax(0,1fr) auto;gap:8px}.search-button{min-width:92px;padding:0 12px}.toolbar-actions{grid-template-columns:minmax(0,.9fr) minmax(0,1fr)}.filter-button,.sort-form,.sort-form select{min-height:50px}.sort-form{grid-template-columns:1fr;gap:0}.sort-form label{display:none}.filter-check-grid{grid-template-columns:1fr 1fr}.shop-result-row{flex-direction:column;align-items:flex-start}.shop-hero{padding:40px 0 34px}.shop-section{padding-top:26px}.quick-view-media{min-height:230px}.quick-view-content{padding:18px}.quick-view-content .button{width:100%}}
+.shop-hero{padding:58px 0 48px;background:#f8fafc;border-bottom:1px solid #e5e7eb}.shop-eyebrow{margin:0 0 10px;color:#64748b;font-size:.8rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}.shop-hero h1{margin:0 0 12px;font-size:clamp(2.3rem,6vw,4rem);letter-spacing:-.06em}.shop-hero p:last-child{margin:0;color:#64748b;font-size:1.05rem}.shop-section{padding-top:36px}.shop-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:stretch;margin-bottom:20px}.search-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;min-width:0}.search-form input,.sort-form select,.filter-group input[type=number]{min-height:48px;border:1px solid #cbd5e1;border-radius:12px;background:#fff;padding:0 14px;font:inherit}.search-form input{min-width:0;width:100%}.search-button{min-height:48px;border:0;cursor:pointer;font:inherit;white-space:nowrap;min-width:96px}.toolbar-actions{display:grid;grid-template-columns:auto auto;gap:10px;align-items:center}.filter-button{min-height:48px;border:0;cursor:pointer;font:inherit;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:8px}.filter-icon{font-size:.95em}.sort-form{display:flex;align-items:center;gap:8px;white-space:nowrap}.sort-form label{font-size:.9rem;font-weight:700}.sort-form select{min-width:170px}.category-pills{display:none;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:20px;scrollbar-width:thin}.category-pills a{flex:0 0 auto;padding:9px 14px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;font-size:.88rem;font-weight:700}.category-pills a:hover,.category-pills a.active{background:#111827;color:#fff;border-color:#111827}.filter-panel{margin:0 0 20px;padding:20px;border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}.filter-panel[hidden]{display:none}.filter-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}.filter-panel-head strong{display:block;font-size:1.1rem}.filter-panel-subtitle{display:block;margin-top:4px;color:#64748b;font-size:.86rem}.filter-close{width:38px;height:38px;border:1px solid #e2e8f0;border-radius:50%;background:#fff;font-size:22px;line-height:1;cursor:pointer}.filter-groups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}.filter-group{min-width:0;margin:0;padding:16px;border:1px solid #e5e7eb;border-radius:14px}.filter-group legend{padding:0 6px;font-weight:800}.filter-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:8px;max-height:240px;overflow:auto;padding-right:2px}.filter-check{display:flex;align-items:center;gap:9px;min-width:0;padding:9px 10px;border-radius:10px;background:#f8fafc;font-size:.9rem;cursor:pointer}.filter-check:hover{background:#f1f5f9}.filter-check input{width:17px;height:17px;flex:0 0 auto;accent-color:#111827}.filter-check span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.age-filter-group{min-width:0}.age-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:8px;min-width:0}.age-grid label{display:grid;gap:7px;min-width:0;font-size:.84rem;font-weight:700;color:#475569}.age-grid input{width:100%;min-width:0;max-width:100%;padding-inline:10px}.filter-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.filter-actions .button{min-height:46px}.shop-result-row{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px;color:#64748b;font-size:.9rem}.shop-result-row p{margin:0}.shop-result-row a{font-weight:700;color:#111827}.shop-grid{margin-top:0}.shop-card{position:relative}.product-image-link{position:relative;display:block;cursor:pointer}.quick-view-label{display:none}.quick-view-trigger{position:absolute;left:50%;bottom:14px;z-index:4;transform:translate(-50%,8px);padding:9px 14px;border:0;border-radius:999px;background:rgba(17,24,39,.9);color:#fff;font:inherit;font-size:.76rem;font-weight:800;opacity:0;pointer-events:auto;transition:opacity .18s,transform .18s;white-space:nowrap;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.18)}.product-image-link:hover .quick-view-trigger,.product-image-link:focus-within .quick-view-trigger{opacity:1;transform:translate(-50%,0)}.sale-badge,.stock-badge{position:absolute;top:12px;padding:6px 9px;border-radius:999px;font-size:.72rem;font-weight:800;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.1)}.sale-badge{left:12px}.stock-badge{right:12px}.shop-card .product-info h2{margin:0 0 8px;font-size:1rem}.shop-price{display:flex;align-items:baseline;gap:8px;margin-top:10px}.shop-original-price{color:#94a3b8;font-size:.9rem;text-decoration:line-through}.view-product{display:inline-block;margin-top:14px;font-size:.88rem;font-weight:800}.empty-state{padding:64px 20px;border:1px dashed #cbd5e1;border-radius:18px;text-align:center}.empty-state h2{margin:0 0 8px}.empty-state p{margin:0 0 20px;color:#64748b}.pagination{display:flex;justify-content:center;align-items:center;gap:18px;margin-top:40px;font-size:.92rem}.pagination a{padding:10px 14px;border:1px solid #e2e8f0;border-radius:10px;font-weight:700}.pagination span{color:#64748b}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}.quick-view-modal{position:fixed;inset:0;z-index:18000;display:none;align-items:center;justify-content:center;padding:20px}.quick-view-modal.is-open{display:flex}.quick-view-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.62);backdrop-filter:blur(5px)}.quick-view-dialog{position:relative;z-index:1;width:min(920px,100%);display:grid;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr);gap:0;overflow:hidden;border-radius:22px;background:#fff;box-shadow:0 28px 80px rgba(15,23,42,.28)}.quick-view-media{min-height:420px;background:#f8fafc;display:flex;align-items:center;justify-content:center;padding:24px}.quick-view-media img{width:100%;height:100%;max-height:600px;object-fit:contain;border-radius:14px}.quick-view-content{padding:34px;display:flex;flex-direction:column;justify-content:center}.quick-view-kicker{margin:0 0 8px;color:#64748b;font-size:.76rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase}.quick-view-content h2{margin:0 0 12px;font-size:clamp(1.6rem,3vw,2.35rem);line-height:1.08;letter-spacing:-.04em}.quick-view-description{margin:0;color:#64748b;line-height:1.6}.quick-view-price{display:flex;align-items:baseline;gap:9px;margin:20px 0 8px}.quick-view-price strong{font-size:1.5rem}.quick-view-price span{text-decoration:line-through;color:#94a3b8}.quick-view-stock{margin:0 0 22px;font-size:.9rem;font-weight:700}.quick-view-close{position:absolute;top:12px;right:12px;z-index:2;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.94);box-shadow:0 4px 15px rgba(15,23,42,.12);font-size:24px;line-height:1;cursor:pointer}@media(max-width:900px){.shop-toolbar{grid-template-columns:1fr}.toolbar-actions{grid-template-columns:auto minmax(0,1fr);width:100%}.sort-form{min-width:0}.sort-form select{min-width:0;flex:1}.filter-groups{grid-template-columns:1fr}.filter-check-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.quick-view-dialog{grid-template-columns:1fr}.quick-view-media{min-height:320px;max-height:52vh}.quick-view-content{padding:26px}.quick-view-description{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}}@media(max-width:767px){.shop-toolbar{gap:12px}.search-form{grid-template-columns:minmax(0,1fr) auto;gap:8px;width:100%}.search-form input{min-width:0}.search-button{min-width:96px;padding:0 15px}.toolbar-actions{grid-template-columns:1fr minmax(0,1fr);gap:8px}.filter-button,.sort-form,.sort-form select{min-height:50px}.filter-button{width:100%;font-size:1rem}.sort-form{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;width:100%}.sort-form label{font-size:.95rem;align-self:center}.sort-form select{width:100%;font-size:.98rem;padding-inline:12px}.filter-panel{margin-bottom:18px;padding:16px;border-radius:16px}.filter-check-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.filter-check{padding:10px 9px}.age-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.age-grid input{font-size:.95rem;padding-inline:10px}.shop-result-row{align-items:flex-start}.category-pills{display:none}.quick-view-modal{padding:12px}.quick-view-dialog{max-height:calc(100vh - 24px);overflow:auto;border-radius:18px}.quick-view-media{min-height:280px;padding:16px}.quick-view-content{padding:22px}.quick-view-content h2{font-size:1.55rem}.quick-view-close{top:8px;right:8px}.quick-view-trigger{opacity:1;transform:translate(-50%,0);bottom:10px;font-size:.7rem;padding:7px 11px}}@media(max-width:430px){.search-form{grid-template-columns:minmax(0,1fr) auto;gap:8px}.search-button{min-width:92px;padding:0 12px}.toolbar-actions{grid-template-columns:minmax(0,.9fr) minmax(0,1fr)}.filter-button,.sort-form,.sort-form select{min-height:50px}.sort-form{grid-template-columns:1fr;gap:0}.sort-form label{display:none}.filter-check-grid{grid-template-columns:1fr 1fr}.age-grid{gap:8px}.age-grid input{font-size:.92rem;padding-inline:9px}.shop-result-row{flex-direction:column;align-items:flex-start}.shop-hero{padding:40px 0 34px}.shop-section{padding-top:26px}.quick-view-media{min-height:230px}.quick-view-content{padding:18px}.quick-view-content .button{width:100%}}
 </style>
 
 <script>
-  const modal = document.getElementById('quick-view-modal');
-  const image = document.getElementById('quick-view-image');
-  const title = document.getElementById('quick-view-title');
-  const description = document.getElementById('quick-view-description');
-  const price = document.getElementById('quick-view-price');
-  const original = document.getElementById('quick-view-original');
-  const stock = document.getElementById('quick-view-stock');
-  const link = document.getElementById('quick-view-link');
-  const filterToggle = document.getElementById('filter-toggle');
-  const filterPanel = document.getElementById('filter-panel');
-  const filterClose = document.getElementById('filter-close');
-  let quickViewOpener = null;
-
-  const setFilterOpen = open => {
-    if (!filterPanel || !filterToggle) return;
-    filterPanel.hidden = !open;
-    filterToggle.setAttribute('aria-expanded', String(open));
-    filterToggle.setAttribute('aria-pressed', String(open));
-    filterToggle.setAttribute('aria-label', open ? 'Close filters' : 'Open filters');
-    if (open && window.matchMedia('(max-width: 900px)').matches) filterPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  };
-
-  filterToggle?.addEventListener('click', () => setFilterOpen(filterPanel?.hidden));
-  filterClose?.addEventListener('click', () => setFilterOpen(false));
-
-  const closeQuickView = () => {
-    if (!modal) return;
-    const returnFocus = quickViewOpener;
-    quickViewOpener = null;
-    modal.classList.remove('is-open');
-    modal.setAttribute('aria-hidden', 'true');
-    modal.setAttribute('inert', '');
-    document.body.style.overflow = '';
-    if (returnFocus && document.contains(returnFocus)) requestAnimationFrame(() => returnFocus.focus({ preventScroll: true }));
-  };
-
-  const openQuickView = (card, opener) => {
-    if (!modal || !card) return;
-    const imageEl = card.querySelector('.product-image');
-    const titleEl = card.querySelector('.product-info h2');
-    const descriptionEl = card.querySelector('.product-info p');
-    const priceEl = card.querySelector('.shop-price .price');
-    const originalEl = card.querySelector('.shop-original-price');
-    const productLink = card.querySelector('.view-product');
-    const unavailable = Boolean(card.querySelector('.stock-badge'));
-    quickViewOpener = opener instanceof HTMLElement ? opener : document.activeElement;
-    if (imageEl) { image.src = imageEl.currentSrc || imageEl.src; image.alt = imageEl.alt || ''; }
-    title.textContent = titleEl?.textContent?.trim() || 'Product';
-    description.textContent = descriptionEl?.textContent?.trim() || '';
-    description.hidden = !description.textContent;
-    price.textContent = priceEl?.textContent?.trim() || '';
-    original.textContent = originalEl?.textContent?.trim() || '';
-    original.hidden = !original.textContent;
-    stock.textContent = unavailable ? 'Out of stock' : 'In stock';
-    stock.style.color = unavailable ? '#b91c1c' : '#15803d';
-    link.href = productLink?.getAttribute('href') || '#';
-    modal.removeAttribute('inert');
-    modal.setAttribute('aria-hidden', 'false');
-    modal.classList.add('is-open');
-    document.body.style.overflow = 'hidden';
-    requestAnimationFrame(() => modal.querySelector('.quick-view-close')?.focus({ preventScroll: true }));
-  };
-
-  document.addEventListener('click', event => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest('.quick-view-trigger')) return;
-    const imageEl = target?.closest('.product-image-link img');
-    if (!imageEl) return;
-    const anchor = imageEl.closest('.product-image-link');
-    if (!(anchor instanceof HTMLAnchorElement)) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    location.href = anchor.href;
-  }, true);
-
-  document.querySelectorAll('.quick-view-trigger').forEach(trigger => trigger.addEventListener('click', event => {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    openQuickView(trigger.closest('.product-card'), trigger);
-  }));
-
-  document.querySelectorAll('[data-quick-view-close]').forEach(el => el.addEventListener('click', closeQuickView));
-  document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && modal?.classList.contains('is-open')) closeQuickView();
-    if (event.key === 'Escape' && filterPanel && !filterPanel.hidden) setFilterOpen(false);
-  });
+  const modal=document.getElementById('quick-view-modal'); const image=document.getElementById('quick-view-image'); const titleEl=document.getElementById('quick-view-title'); const descriptionEl=document.getElementById('quick-view-description'); const priceEl=document.getElementById('quick-view-price'); const originalEl=document.getElementById('quick-view-original'); const stockEl=document.getElementById('quick-view-stock'); const linkEl=document.getElementById('quick-view-link'); const filterToggle=document.getElementById('filter-toggle'); const filterPanel=document.getElementById('filter-panel'); const filterClose=document.getElementById('filter-close'); let quickViewOpener=null;
+  const setFilterOpen=open=>{if(!filterPanel||!filterToggle)return;filterPanel.hidden=!open;filterToggle.setAttribute('aria-expanded',String(open));filterToggle.setAttribute('aria-pressed',String(open));filterToggle.setAttribute('aria-label',open?'Close filters':'Open filters');if(open&&window.matchMedia('(max-width: 900px)').matches)filterPanel.scrollIntoView({behavior:'smooth',block:'nearest'});};
+  filterToggle?.addEventListener('click',()=>setFilterOpen(filterPanel?.hidden)); filterClose?.addEventListener('click',()=>setFilterOpen(false));
+  const closeQuickView=()=>{if(!modal)return;const restore=quickViewOpener;quickViewOpener=null;modal.classList.remove('is-open');modal.setAttribute('aria-hidden','true');modal.setAttribute('inert','');document.body.style.overflow='';if(restore&&document.contains(restore))requestAnimationFrame(()=>restore.focus({preventScroll:true}));};
+  const openQuickView=(card,opener)=>{if(!modal||!card)return;const imageEl=card.querySelector('.product-image');const titleNode=card.querySelector('.product-info h2');const descriptionNode=card.querySelector('.product-info p');const priceNode=card.querySelector('.shop-price .price');const originalNode=card.querySelector('.shop-original-price');const productLink=card.querySelector('.view-product');const unavailable=Boolean(card.querySelector('.stock-badge'));quickViewOpener=opener instanceof HTMLElement?opener:document.activeElement;if(imageEl){image.src=imageEl.currentSrc||imageEl.src;image.alt=imageEl.alt||'';}titleEl.textContent=titleNode?.textContent?.trim()||'Product';descriptionEl.textContent=descriptionNode?.textContent?.trim()||'';descriptionEl.hidden=!descriptionEl.textContent;priceEl.textContent=priceNode?.textContent?.trim()||'';originalEl.textContent=originalNode?.textContent?.trim()||'';originalEl.hidden=!originalEl.textContent;stockEl.textContent=unavailable?'Out of stock':'In stock';stockEl.style.color=unavailable?'#b91c1c':'#15803d';linkEl.href=productLink?.getAttribute('href')||'#';modal.removeAttribute('inert');modal.setAttribute('aria-hidden','false');modal.classList.add('is-open');document.body.style.overflow='hidden';requestAnimationFrame(()=>modal.querySelector('.quick-view-close')?.focus({preventScroll:true}));};
+  document.addEventListener('click',event=>{const target=event.target instanceof Element?event.target:null;if(target?.closest('.quick-view-trigger'))return;const imageEl=target?.closest('.product-image-link img');if(!imageEl)return;const anchor=imageEl.closest('.product-image-link');if(!(anchor instanceof HTMLAnchorElement))return;event.preventDefault();event.stopImmediatePropagation();location.href=anchor.href;},true);
+  document.querySelectorAll('.quick-view-trigger').forEach(trigger=>trigger.addEventListener('click',event=>{event.preventDefault();event.stopImmediatePropagation();openQuickView(trigger.closest('.product-card'),trigger);}));
+  document.querySelectorAll('[data-quick-view-close]').forEach(el=>el.addEventListener('click',closeQuickView)); document.addEventListener('keydown',event=>{if(event.key==='Escape'&&modal?.classList.contains('is-open'))closeQuickView();if(event.key==='Escape'&&filterPanel&&!filterPanel.hidden)setFilterOpen(false);});
 </script>
