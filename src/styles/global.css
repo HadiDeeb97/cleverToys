@@ -64,3 +64,101 @@
   .clever-floating-cart .floating-cart-icon{font-size:29px}
   .clever-floating-whatsapp svg{width:34px;height:34px}
 }
+
+/* Standard e-commerce mobile typography: compact, readable, and designed for two-column product grids. */
+@media (max-width: 900px){
+  html{font-size:16px}
+  body{font-size:15px;line-height:1.5}
+  .site-header .header-inner,.header-inner{min-height:64px}
+  .site-header .logo,.logo{font-size:1.08rem;letter-spacing:-.025em}
+  .site-logo-image{max-height:34px;max-width:110px}
+  .main-nav{font-size:.78rem;gap:5px}
+  .main-nav a{padding:7px 4px}
+  .cart-link{min-height:44px;padding:6px}
+  .cart-icon{font-size:1.25rem}
+  .cart-count-badge{min-width:20px;height:20px;font-size:.7rem}
+  .hero{padding:42px 0 38px}
+  .hero h1,.shop-hero h1{font-size:clamp(2rem,8.5vw,3rem);line-height:1.02}
+  .hero p,.shop-hero p:last-child{font-size:.98rem;line-height:1.5}
+  .section{padding:38px 0}
+  .section-header{margin-bottom:20px}
+  .section-header h1{font-size:1.85rem}
+  .section-header h2{font-size:1.65rem}
+  .section-header p{font-size:.9rem}
+  .category-grid,.product-grid,.shop-grid{gap:10px!important}
+  .category-card{min-height:112px;padding:13px;border-radius:14px}
+  .category-card strong{font-size:1rem}
+  .category-card p{font-size:.86rem;line-height:1.35}
+  .category-arrow{font-size:.76rem;margin-top:9px}
+  .product-card,.shop-card{border-radius:14px}
+  .product-info{padding:11px}
+  .product-info h3,.shop-card .product-info h2{font-size:.9rem;line-height:1.3;margin-bottom:6px}
+  .product-info p{font-size:.78rem;line-height:1.4;margin-bottom:8px}
+  .price,.shop-price .price{font-size:1.02rem}
+  .shop-original-price{font-size:.78rem}
+  .view-product{font-size:.78rem;margin-top:9px;min-height:44px}
+  .sale-badge,.stock-badge{font-size:.66rem;padding:5px 7px;top:8px}
+  .button,.small-button,.search-button,.filter-button{min-height:46px;font-size:.92rem;border-radius:10px}
+  .button{padding-inline:16px}
+  .form-card{padding:18px;border-radius:15px;gap:13px}
+  .form-card label{font-size:.9rem}
+  .form-card input,.form-card textarea,.form-card select,#product-search{min-height:46px;padding:11px 12px;font-size:.95rem;border-radius:10px}
+  .cart-item{grid-template-columns:76px minmax(0,1fr);gap:10px;padding:12px}
+  .cart-item img,.cart-placeholder{width:76px;height:76px}
+  .cart-item h2{font-size:.98rem}
+  .cart-item-info p,.line-total{font-size:.9rem}
+  .quantity-control button{min-width:42px;height:42px;font-size:1rem}
+  .quantity-control .remove-link{min-height:42px;font-size:.88rem}
+  .cart-summary,.checkout-summary{padding:17px;border-radius:15px}
+  .summary-line,.cart-summary>div{font-size:.92rem}
+  .shop-toolbar{gap:10px}
+  .search-form{gap:7px}
+  .search-button{min-width:88px;padding-inline:12px}
+  .filter-button,.sort-form,.sort-form select{min-height:46px}
+  .filter-button{font-size:.9rem}
+  .sort-form,.sort-form select{font-size:.9rem}
+  .filter-panel{padding:14px;border-radius:14px}
+  .filter-panel-head strong{font-size:.98rem}
+  .filter-panel-subtitle{font-size:.78rem}
+  .filter-close{width:34px;height:34px;font-size:20px}
+  .filter-group{padding:12px;border-radius:12px}
+  .filter-group legend{font-size:.9rem}
+  .filter-check{padding:8px;font-size:.82rem}
+  .filter-check input{width:15px;height:15px}
+  .age-grid{gap:8px}
+  .age-grid label{font-size:.76rem}
+  .filter-group input[type=number]{min-height:44px;padding:0 10px;font-size:.9rem}
+  .filter-actions{gap:8px;margin-top:14px}
+  .filter-actions .button{min-height:44px}
+  .shop-result-row{font-size:.8rem;margin-bottom:14px}
+  .pagination{font-size:.82rem;gap:10px;margin-top:28px}
+  .pagination a{min-height:44px;padding:0 12px;font-size:.82rem}
+  .quick-view-content h2{font-size:1.35rem}
+  .quick-view-description{font-size:.9rem}
+  .quick-view-price strong{font-size:1.2rem}
+  .quick-view-stock{font-size:.82rem}
+  .quick-view-close{width:36px;height:36px;font-size:22px}
+  .quick-view-trigger{font-size:.66rem;padding:6px 9px}
+  .clever-floating-cart,.clever-floating-whatsapp{width:54px;height:54px}
+  .clever-floating-cart .floating-cart-icon{font-size:24px}
+  .clever-floating-whatsapp svg{width:28px;height:28px}
+}
+@media (max-width:430px){
+  .container{width:calc(100% - 16px)}
+  .site-header .logo,.logo{font-size:1rem}
+  .site-logo-image{max-width:100px}
+  .main-nav{font-size:.72rem;gap:3px}
+  .main-nav a{padding:6px 3px}
+  .hero h1,.shop-hero h1{font-size:clamp(1.85rem,8vw,2.55rem)}
+  .section-header h2{font-size:1.5rem}
+  .product-grid,.shop-grid{gap:8px!important}
+  .product-info{padding:10px}
+  .product-info h3,.shop-card .product-info h2{font-size:.84rem}
+  .product-info p{font-size:.74rem}
+  .price,.shop-price .price{font-size:.98rem}
+  .view-product{font-size:.74rem;min-height:42px}
+  .shop-hero{padding:34px 0 28px}
+  .shop-section{padding-top:24px}
+  .filter-check{font-size:.78rem}
+  .filter-group input[type=number]{font-size:.84rem}
+}
