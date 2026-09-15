@@ -7,6 +7,7 @@ const safeHex = (value: unknown) => {
 };
 
 const escapeAttr = (value: string) => value.replace(/&/g, '&amp;').replace(/\"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');
 
 export const onRequest: MiddlewareHandler = async (context, next) => {
   const response = await next();
@@ -16,15 +17,13 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const html = await response.text();
   const path = context.url.pathname;
   const base = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
+  const publishableKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
   const logoUrl = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/logo.webp` : '';
   const themeUrl = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/theme.json` : '';
   let published = { mode: 'logo', theme: null as null | { primary: string; soft: string; accent: string; id?: string; name?: string } };
 
   if (themeUrl) {
     try {
-      // The config object is stored in Supabase Storage with an image MIME type because
-      // the existing bucket only permits image uploads. Read the body as text instead
-      // of relying on the response Content-Type being application/json.
       const cacheBust = `?theme=${Date.now()}`;
       const r = await fetch(`${themeUrl}${cacheBust}`, { cf: { cacheTtl: 0, cacheEverything: false } });
       if (r.ok) {
@@ -62,7 +61,55 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const requiredFieldStyle = `<style id="clever-required-fields">.form-card label:has(input:required),.form-card label:has(textarea:required),.form-card label:has(select:required){position:relative;padding-left:13px!important}.form-card label:has(input:required)::after,.form-card label:has(textarea:required)::after,.form-card label:has(select:required)::after{content:'*';position:absolute;left:0;top:0;margin:0;color:#e11d48;font-weight:900;font-size:1em;line-height:1.25;pointer-events:none}.form-card label:has(input:required) input,.form-card label:has(textarea:required) textarea,.form-card label:has(select:required) select{margin-top:0}@media(max-width:640px){.form-card label:has(input:required),.form-card label:has(textarea:required),.form-card label:has(select:required){padding-left:12px!important}}</style>`;
   const storeScript = '<script src="/store-ui.js?v=20260915-globaltheme4" defer></script>';
   const adminBrandingLink = path.startsWith('/admin') && !path.startsWith('/admin/branding') ? '<a href="/admin/branding">Branding</a>' : '';
+  const adminSeoLink = path.startsWith('/admin') && !path.startsWith('/admin/seo') ? '<a href="/admin/seo">SEO</a>' : '';
   let output = html;
+
+  // Apply editable SEO settings server-side so crawlers and social previews receive
+  // the values without depending on client-side JavaScript.
+  if (!path.startsWith('/admin') && !path.startsWith('/api') && base && publishableKey) {
+    try {
+      const encodedPath = encodeURIComponent(path);
+      const encodedProduct = encodeURIComponent('/product/*');
+      const encodedCategory = encodeURIComponent('/category/*');
+      const query = `select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedPath}&limit=1`;
+      const exactResponse = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?${query}`, {
+        headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
+        cf: { cacheTtl: 0, cacheEverything: false }
+      });
+      let seo: any = (await exactResponse.json())?.[0] || null;
+      if (!seo && path.startsWith('/product/')) {
+        const r = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedProduct}&limit=1`, {
+          headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
+          cf: { cacheTtl: 0, cacheEverything: false }
+        });
+        seo = (await r.json())?.[0] || null;
+      }
+      if (!seo && path.startsWith('/category/')) {
+        const r = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedCategory}&limit=1`, {
+          headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
+          cf: { cacheTtl: 0, cacheEverything: false }
+        });
+        seo = (await r.json())?.[0] || null;
+      }
+      if (seo) {
+        const title = String(seo.title || '').trim();
+        const description = String(seo.description || '').trim();
+        const keywords = String(seo.keywords || '').trim();
+        const cover = String(seo.cover_image_url || '').trim();
+        output = output.replace(/<title>[\s\S]*?<\/title>/i, '');
+        output = output.replace(/<meta\s+name=[\"']description[\"'][^>]*>\s*/gi, '');
+        output = output.replace(/<meta\s+name=[\"']keywords[\"'][^>]*>\s*/gi, '');
+        output = output.replace(/<meta\s+name=[\"']twitter:title[\"'][^>]*>\s*/gi, '');
+        output = output.replace(/<meta\s+name=[\"']twitter:description[\"'][^>]*>\s*/gi, '');
+        output = output.replace(/<meta\s+name=[\"']twitter:image[\"'][^>]*>\s*/gi, '');
+        output = output.replace(/<meta\s+property=[\"']og:title[\"'][^>]*>\s*/gi, '');
+        output = output.replace(/<meta\s+property=[\"']og:description[\"'][^>]*>\s*/gi, '');
+        output = output.replace(/<meta\s+property=[\"']og:image[\"'][^>]*>\s*/gi, '');
+        const seoTags = `${title ? `<title>${escapeHtml(title)}</title><meta name="title" content="${escapeAttr(title)}" />` : ''}${description ? `<meta name="description" content="${escapeAttr(description)}" />` : ''}${keywords ? `<meta name="keywords" content="${escapeAttr(keywords)}" />` : ''}${title ? `<meta property="og:title" content="${escapeAttr(title)}" /><meta name="twitter:title" content="${escapeAttr(title)}" />` : ''}${description ? `<meta property="og:description" content="${escapeAttr(description)}" /><meta name="twitter:description" content="${escapeAttr(description)}" />` : ''}${cover ? `<meta property="og:image" content="${escapeAttr(cover)}" /><meta name="twitter:image" content="${escapeAttr(cover)}" /><meta name="twitter:card" content="summary_large_image" />` : ''}`;
+        output = output.replace('</head>', `${seoTags}</head>`);
+      }
+    } catch {}
+  }
 
   if (logoUrl && !path.startsWith('/admin')) {
     const logoMarkup = `<img class="site-logo-image" src="${escapeAttr(logoUrl)}" alt="Clever Toys" decoding="async"><span class="logo-text">Clever Toys</span>`;
@@ -78,6 +125,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     if (!output.includes('clever-floating-controls')) output = output.replace('</body>', `${floatingStyles}${controls}</body>`);
   }
   if (adminBrandingLink && output.includes('</nav>') && !output.includes('/admin/branding')) output = output.replace('</nav>', `${adminBrandingLink}</nav>`);
+  if (adminSeoLink && output.includes('</nav>') && !output.includes('/admin/seo')) output = output.replace('</nav>', `${adminSeoLink}</nav>`);
 
   const headers = new Headers(response.headers);
   headers.set('content-type', 'text/html; charset=utf-8');
