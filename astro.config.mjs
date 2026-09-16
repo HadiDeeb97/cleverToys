@@ -9,13 +9,20 @@ const cleverToysScale = {
       injectScript('page', `(() => {
         const path = location.pathname.replace(/\\/+$/, '') || '/';
         const excluded = path === '/' || path === '/admin' || path.startsWith('/admin/') || path === '/products' || path.startsWith('/category');
-        if (excluded) return;
-        if (document.head.querySelector('link[data-clever-toys-scale]')) return;
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = '/site-scale.css?v=20260916-4';
-        link.dataset.cleverToysScale = 'true';
-        document.head.appendChild(link);
+        if (!excluded && !document.head.querySelector('link[data-clever-toys-scale]')) {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = '/site-scale.css?v=20260916-4';
+          link.dataset.cleverToysScale = 'true';
+          document.head.appendChild(link);
+        }
+        if (!document.head.querySelector('link[data-clever-floating-cart-fix]')) {
+          const link = document.createElement('link');
+          link.rel = 'stylesheet';
+          link.href = '/floating-cart-fix.css?v=20260916-1';
+          link.dataset.cleverFloatingCartFix = 'true';
+          document.head.appendChild(link);
+        }
       })();`);
     }
   }
