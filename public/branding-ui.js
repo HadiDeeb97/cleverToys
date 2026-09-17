@@ -7,6 +7,7 @@
   }[char]));
 
   const money = value => `$${Number(value || 0).toFixed(2)}`;
+  const isProductDetailPage = () => /^\/product\/[^/]+\/?$/.test(location.pathname);
 
   const readStoredCustomer = () => {
     try {
@@ -55,7 +56,7 @@
 
     const links = [];
     if (branding.showWhatsapp && branding.whatsappUrl) {
-      links.push(`<a class="clever-header-social clever-header-whatsapp" href="${escapeHtml(branding.whatsappUrl)}" target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="Chat with Clever Toys on WhatsApp">💬</a>`);
+      links.push(`<a class="clever-header-social clever-header-whatsapp" href="${escapeHtml(branding.whatsappUrl)}" target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="Chat with Clever Toys on WhatsApp">🟢</a>`);
     }
     if (branding.showInstagram && branding.instagramUrl) {
       links.push(`<a class="clever-header-social clever-header-instagram" href="${escapeHtml(branding.instagramUrl)}" target="_blank" rel="noopener noreferrer" title="Instagram" aria-label="Clever Toys on Instagram">📸</a>`);
@@ -141,7 +142,12 @@
   };
 
   const addWhatsappProductButton = async () => {
+    if (!isProductDetailPage()) {
+      document.querySelectorAll('[data-buy-whatsapp]').forEach((element) => element.remove());
+      return;
+    }
     if (location.pathname.startsWith('/admin')) return;
+
     const addButton = document.querySelector('#add-to-cart');
     const quantity = document.querySelector('#quantity');
     const priceEl = document.querySelector('#detail-price');
@@ -166,19 +172,27 @@
     button.className = 'button whatsapp-buy-button';
     button.dataset.buyWhatsapp = 'true';
     button.textContent = '💬 Buy Now on WhatsApp';
-    button.disabled = addButton.disabled;
     purchaseBox.appendChild(button);
 
     const style = document.createElement('style');
     style.textContent = `.whatsapp-buy-button{width:100%;margin-top:10px;background:#25D366!important;color:#fff!important;border:0!important}.whatsapp-buy-button:hover{background:#1ebe5d!important}.whatsapp-buy-button:disabled{opacity:.5;cursor:not-allowed}`;
     document.head.appendChild(style);
 
-    const syncDisabled = () => { button.disabled = addButton.disabled; };
+    const syncDisabled = () => {
+      const hasOptions = variantSelect instanceof HTMLSelectElement && variantSelect.options.length > 1;
+      const optionChosen = !hasOptions || Boolean(variantSelect.value);
+      if (hasOptions && !optionChosen) addButton.disabled = true;
+      button.disabled = addButton.disabled;
+    };
+
     variantSelect?.addEventListener('change', syncDisabled);
     quantity.addEventListener('input', syncDisabled);
+    syncDisabled();
 
     button.addEventListener('click', () => {
       if (addButton.disabled) return;
+      const hasOptions = variantSelect instanceof HTMLSelectElement && variantSelect.options.length > 1;
+      if (hasOptions && !variantSelect.value) return;
       const qty = Math.max(1, Number(quantity.value || 1));
       const selected = variantSelect instanceof HTMLSelectElement && variantSelect.value
         ? variantSelect.options[variantSelect.selectedIndex]
