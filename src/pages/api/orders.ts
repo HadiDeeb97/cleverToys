@@ -28,6 +28,7 @@ const buildTelegramMessage = (body: any, orderNumber: string) => {
     ...itemLines,
     '',
     `💰 Subtotal: $${Number(body.subtotal || 0).toFixed(2)}`,
+    `🚚 COD delivery: $${Number(body.delivery_fee || 0).toFixed(2)}`,
     `💵 TOTAL: $${Number(body.total || 0).toFixed(2)}`,
     '💳 Payment: Cash on delivery',
     '',
@@ -103,7 +104,13 @@ export const POST: APIRoute = async ({ request }) => {
 
     const result = Array.isArray(data) ? data[0] : data;
     const orderNumber = result?.order_number || result?.orderNumber || 'New Order';
-    const telegramNotificationSent = await sendTelegramOrderNotification(body, orderNumber);
+    const notificationBody = {
+      ...body,
+      subtotal: result?.subtotal ?? body.subtotal,
+      delivery_fee: result?.delivery_fee ?? body.delivery_fee,
+      total: result?.total ?? body.total
+    };
+    const telegramNotificationSent = await sendTelegramOrderNotification(notificationBody, orderNumber);
 
     return new Response(JSON.stringify({
       ...(result && typeof result === 'object' ? result : { order_number: orderNumber }),
