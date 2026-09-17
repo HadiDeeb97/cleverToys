@@ -108,6 +108,7 @@
         return [];
       }
     })();
+    if (!cart.length) return;
     const subtotal = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
     const total = subtotal + fee;
 
