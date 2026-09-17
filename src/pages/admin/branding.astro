@@ -40,7 +40,7 @@ const logoUrl = supabaseUrl
         <div>
           <p class="eyebrow">Social media</p>
           <h2>Social links &amp; visibility</h2>
-          <p>These links power the slim top bar. WhatsApp uses the same URL as the floating WhatsApp button.</p>
+          <p>WhatsApp uses the same URL as the floating WhatsApp button.</p>
         </div>
         <span id="auth-status" class="status-text" role="status">Checking admin access…</span>
       </div>
@@ -49,15 +49,21 @@ const logoUrl = supabaseUrl
         <div class="setting-box">
           <div class="field-heading"><label for="whatsapp-url">WhatsApp link</label><span class="sync-pill">Synced</span></div>
           <input id="whatsapp-url" type="url" placeholder="https://wa.me/961..." autocomplete="url" />
-          <small>Paste a wa.me / WhatsApp URL, or a phone number with country code.</small>
-          <label class="switch-row compact"><span><strong>Show WhatsApp in top bar</strong><small>Floating WhatsApp stays available too.</small></span><input id="show-whatsapp" type="checkbox" role="switch" /></label>
+          <small>Paste a wa.me URL or a phone number with country code.</small>
+          <label class="switch-row compact">
+            <span><strong>Show WhatsApp in top bar</strong><small>The floating WhatsApp button remains linked too.</small></span>
+            <input id="show-whatsapp" type="checkbox" role="switch" />
+          </label>
         </div>
 
         <div class="setting-box">
           <div class="field-heading"><label for="instagram-url">Instagram link</label></div>
           <input id="instagram-url" type="url" placeholder="https://instagram.com/yourstore" autocomplete="url" />
           <small>Use your full Instagram profile URL.</small>
-          <label class="switch-row compact"><span><strong>Show Instagram in top bar</strong><small>Turn it off anytime without deleting the link.</small></span><input id="show-instagram" type="checkbox" role="switch" /></label>
+          <label class="switch-row compact">
+            <span><strong>Show Instagram in top bar</strong><small>Toggle it without removing the link.</small></span>
+            <input id="show-instagram" type="checkbox" role="switch" />
+          </label>
         </div>
       </div>
     </section>
@@ -67,12 +73,15 @@ const logoUrl = supabaseUrl
         <div>
           <p class="eyebrow">Promotion</p>
           <h2>Ribbon banner</h2>
-          <p>A slim announcement banner appears directly below the top bar on every public page.</p>
+          <p>The ribbon appears directly below the top bar on public pages.</p>
         </div>
       </div>
       <label for="ribbon-text">Ribbon content<textarea id="ribbon-text" rows="2" maxlength="180" placeholder="Free delivery on orders above $60"></textarea></label>
       <div class="preview-ribbon-wrap"><div id="ribbon-preview" class="ribbon-preview">Your ribbon preview will appear here.</div></div>
-      <label class="switch-row"><span><strong>Show ribbon on website</strong><small>Updates are applied on the next page load.</small></span><input id="show-ribbon" type="checkbox" role="switch" /></label>
+      <label class="switch-row">
+        <span><strong>Show ribbon on website</strong><small>Updates apply on the next public page load.</small></span>
+        <input id="show-ribbon" type="checkbox" role="switch" />
+      </label>
     </section>
 
     <section class="form-card branding-card">
@@ -80,7 +89,7 @@ const logoUrl = supabaseUrl
         <div>
           <p class="eyebrow">Delivery pricing</p>
           <h2>Cash on delivery</h2>
-          <p>Set the COD delivery fee once. Checkout orders and WhatsApp receipts use the same live value.</p>
+          <p>Checkout and WhatsApp receipts use this live delivery fee.</p>
         </div>
       </div>
       <div class="cod-field">
@@ -94,14 +103,14 @@ const logoUrl = supabaseUrl
         <div>
           <p class="eyebrow">WhatsApp ordering</p>
           <h2>Buy Now on WhatsApp</h2>
-          <p>Product cards include a quantity selector and a receipt-style WhatsApp message with customer details when they are already available on the device.</p>
+          <p>Product cards support quantity, customer details, delivery cost and receipt-style totals.</p>
         </div>
       </div>
       <div class="feature-list">
-        <div><span>✓</span><p>Product name, unit price and selected quantity</p></div>
-        <div><span>✓</span><p>Customer name, phone and address when saved</p></div>
-        <div><span>✓</span><p>Subtotal, COD delivery cost and total</p></div>
-        <div><span>✓</span><p>Your live WhatsApp number from this page</p></div>
+        <div><span>✓</span><p>Product name, price and quantity</p></div>
+        <div><span>✓</span><p>Customer details when already saved</p></div>
+        <div><span>✓</span><p>Subtotal, COD delivery and total</p></div>
+        <div><span>✓</span><p>Uses the WhatsApp number configured above</p></div>
       </div>
     </section>
 
@@ -109,22 +118,15 @@ const logoUrl = supabaseUrl
       <div class="section-heading">
         <div>
           <p class="eyebrow">Color source</p>
-          <h2>Choose your color source</h2>
-          <p>Use logo colors or one of the toy-store themes below.</p>
+          <h2>Theme controls</h2>
+          <p>Use logo colors or publish one of the toy-store themes.</p>
         </div>
         <span id="theme-status" class="status-text" role="status"></span>
       </div>
-      <label class="switch-row"><span><strong>Use logo colors</strong><small>ON = logo-based colors. OFF = selected theme.</small></span><input id="use-logo-colors" type="checkbox" role="switch" /></label>
-    </section>
-
-    <section class="form-card branding-card">
-      <div class="section-heading">
-        <div>
-          <p class="eyebrow">Store theme</p>
-          <h2>Pick a playful style</h2>
-          <p>Click a theme to publish it for all visitors.</p>
-        </div>
-      </div>
+      <label class="switch-row">
+        <span><strong>Use logo colors</strong><small>ON = logo-based colors. OFF = selected theme.</small></span>
+        <input id="use-logo-colors" type="checkbox" role="switch" />
+      </label>
       <div id="theme-grid" class="theme-grid" aria-label="Store theme choices"></div>
       <div id="theme-preview" class="theme-preview">
         <div class="preview-scene"><span>☁️</span><span>☀️</span><strong>⚽</strong><b>🧩</b></div>
@@ -161,7 +163,7 @@ import { createClient } from '@supabase/supabase-js';
 const cfg = document.querySelector('#cfg');
 const url = cfg?.dataset.url || '';
 const key = cfg?.dataset.key || '';
-const logoUrl = cfg?.dataset.logo || '';
+const logoUrlValue = cfg?.dataset.logo || '';
 const authStatus = document.querySelector('#auth-status');
 const settingsMessage = document.querySelector('#settings-message');
 const logoMessage = document.querySelector('#logo-message');
@@ -181,7 +183,6 @@ let supabase;
 let adminReady = false;
 
 const defaults = {
-  id: 'default',
   whatsapp_url: 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product',
   instagram_url: '',
   show_whatsapp: true,
@@ -192,185 +193,362 @@ const defaults = {
 };
 
 const themes = [
-  {id:'playroom',name:'Playroom',primary:'#7c3aed',soft:'#f3e8ff',accent:'#fbbf24',emoji:'🧸',desc:'Purple + sunny yellow'},
-  {id:'candy',name:'Candy Pop',primary:'#ec4899',soft:'#fce7f3',accent:'#06b6d4',emoji:'🍭',desc:'Pink + playful cyan'},
-  {id:'ocean',name:'Ocean Toys',primary:'#0284c7',soft:'#e0f2fe',accent:'#f59e0b',emoji:'🌊',desc:'Blue + warm orange'},
-  {id:'sunny',name:'Sunny Day',primary:'#ea580c',soft:'#ffedd5',accent:'#eab308',emoji:'☀️',desc:'Orange + sunshine'},
-  {id:'mint',name:'Minty Fun',primary:'#059669',soft:'#d1fae5',accent:'#f43f5e',emoji:'🪀',desc:'Mint + coral'},
-  {id:'berry',name:'Berry Box',primary:'#be123c',soft:'#ffe4e6',accent:'#7c3aed',emoji:'🎈',desc:'Berry + violet'}
+  { id: 'playroom', name: 'Playroom', primary: '#7c3aed', soft: '#f3e8ff', accent: '#fbbf24', emoji: '🧸', desc: 'Purple + sunny yellow' },
+  { id: 'candy', name: 'Candy Pop', primary: '#ec4899', soft: '#fce7f3', accent: '#06b6d4', emoji: '🍭', desc: 'Pink + playful cyan' },
+  { id: 'ocean', name: 'Ocean Toys', primary: '#0284c7', soft: '#e0f2fe', accent: '#f59e0b', emoji: '🌊', desc: 'Blue + warm orange' },
+  { id: 'sunny', name: 'Sunny Day', primary: '#ea580c', soft: '#ffedd5', accent: '#eab308', emoji: '☀️', desc: 'Orange + sunshine' },
+  { id: 'mint', name: 'Minty Fun', primary: '#059669', soft: '#d1fae5', accent: '#f43f5e', emoji: '🪀', desc: 'Mint + coral' },
+  { id: 'berry', name: 'Berry Box', primary: '#be123c', soft: '#ffe4e6', accent: '#7c3aed', emoji: '🎈', desc: 'Berry + violet' }
 ];
 
-function cookie(name){return document.cookie.match(new RegExp('(?:^|;\\s*)'+name.replace(/[.*+?^${}()|[\\]\\]/g,'\\$&')+'=([^;]+)'))?.[1]||'';}
-function setCookie(name,value){document.cookie=`${name}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/; SameSite=Lax`;}
-function deleteCookie(name){document.cookie=`${name}=; Max-Age=0; Path=/; SameSite=Lax`;}
-function money(value){return `$${Number(value||0).toFixed(2)}`;}
-function applyColors(primary,soft,accent,label){
-  document.documentElement.style.setProperty('--brand-primary',primary);
-  document.documentElement.style.setProperty('--brand-soft',soft);
-  document.documentElement.style.setProperty('--theme-accent',accent);
-  document.documentElement.style.setProperty('--brand-primary-hover',primary);
-  themePreview?.style.setProperty('--preview-primary',primary);
-  themePreview?.style.setProperty('--preview-soft',soft);
-  themePreview?.style.setProperty('--preview-accent',accent);
-  if(themeStatus) themeStatus.textContent=label;
-}
-function updateRibbonPreview(){
-  const text=String(ribbonText?.value||'').trim();
-  if(ribbonPreview){ribbonPreview.textContent=text||'Your ribbon preview will appear here.';ribbonPreview.classList.toggle('muted',!text);}
-}
-function updateCodPreview(){if(codPreview)codPreview.textContent=money(codInput?.value||0);}
-function normalizeWhatsapp(value){
-  const raw=String(value||'').trim();
-  if(!raw) return '';
-  if(/^https?:\\/\\//i.test(raw)) return raw;
-  const digits=raw.replace(/[^0-9]/g,'');
-  return digits?`https://wa.me/${digits}`:raw;
-}
-function normalizeInstagram(value){
-  const raw=String(value||'').trim();
-  if(!raw) return '';
-  if(/^https?:\\/\\//i.test(raw)) return raw;
-  return `https://instagram.com/${raw.replace(/^@/,'')}`;
+function readCookie(name) {
+  const parts = document.cookie.split(';');
+  for (const part of parts) {
+    const item = part.trim();
+    if (!item) continue;
+    const eq = item.indexOf('=');
+    if (eq < 0) continue;
+    if (item.slice(0, eq) === name) return decodeURIComponent(item.slice(eq + 1));
+  }
+  return '';
 }
 
-async function publishConfig(payload,successText,errorPrefix){
-  if(!supabase||!adminReady) return false;
-  publishStatus.textContent='Publishing store colors for all visitors…';
-  const blob=new Blob([JSON.stringify(payload)],{type:'image/webp'});
-  const r=await supabase.storage.from('product-images').upload('branding/theme.json',blob,{contentType:'image/webp',cacheControl:'0',upsert:true});
-  if(r.error){publishStatus.textContent=`${errorPrefix}: ${r.error.message}`;return false;}
-  publishStatus.textContent=successText;
+function writeCookie(name, value) {
+  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/; SameSite=Lax`;
+}
+
+function clearCookie(name) {
+  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax`;
+}
+
+function money(value) {
+  return `$${Number(value || 0).toFixed(2)}`;
+}
+
+function applyColors(primary, soft, accent, label) {
+  document.documentElement.style.setProperty('--brand-primary', primary);
+  document.documentElement.style.setProperty('--brand-primary-hover', primary);
+  document.documentElement.style.setProperty('--brand-soft', soft);
+  document.documentElement.style.setProperty('--theme-accent', accent);
+  if (themePreview) {
+    themePreview.style.setProperty('--preview-primary', primary);
+    themePreview.style.setProperty('--preview-soft', soft);
+    themePreview.style.setProperty('--preview-accent', accent);
+  }
+  if (themeStatus) themeStatus.textContent = label;
+}
+
+function updateRibbonPreview() {
+  const text = String(ribbonText?.value || '').trim();
+  if (!ribbonPreview) return;
+  ribbonPreview.textContent = text || 'Your ribbon preview will appear here.';
+  ribbonPreview.classList.toggle('muted', !text);
+}
+
+function updateCodPreview() {
+  if (codPreview) codPreview.textContent = money(codInput?.value || 0);
+}
+
+function normalizeWhatsapp(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('https://') || raw.startsWith('http://')) return raw;
+  const digits = raw.replace(/[^0-9]/g, '');
+  return digits ? `https://wa.me/${digits}` : raw;
+}
+
+function normalizeInstagram(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('https://') || raw.startsWith('http://')) return raw;
+  return `https://instagram.com/${raw.replace(/^@/, '')}`;
+}
+
+async function publishConfig(payload, successText, errorPrefix) {
+  if (!supabase || !adminReady) return false;
+  publishStatus.textContent = 'Publishing store colors for all visitors…';
+  const blob = new Blob([JSON.stringify(payload)], { type: 'image/webp' });
+  const result = await supabase.storage.from('product-images').upload('branding/theme.json', blob, {
+    contentType: 'image/webp',
+    cacheControl: '0',
+    upsert: true
+  });
+  if (result.error) {
+    publishStatus.textContent = `${errorPrefix}: ${result.error.message}`;
+    return false;
+  }
+  publishStatus.textContent = successText;
   return true;
 }
-async function publishTheme(theme){return publishConfig({mode:'theme',theme:{id:theme.id,name:theme.name,primary:theme.primary,soft:theme.soft,accent:theme.accent},updated_at:new Date().toISOString()},`${theme.name} is now live for all visitors.`,'Could not publish theme');}
-async function publishLogoMode(){return publishConfig({mode:'logo',theme:null,updated_at:new Date().toISOString()},'Logo colors are now live for all visitors.','Could not publish color mode');}
-function selectTheme(theme, publish=true){
-  logoToggle.checked=false;
-  setCookie('cleverThemeMode','theme');
-  setCookie('cleverTheme',theme.primary);
-  setCookie('cleverUseLogoColors','false');
-  applyColors(theme.primary,theme.soft,theme.accent,`${theme.name} active`);
-  grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.toggle('selected',el.dataset.id===theme.id));
-  if(publish && adminReady) publishTheme(theme);
+
+async function publishTheme(theme) {
+  return publishConfig(
+    {
+      mode: 'theme',
+      theme: { id: theme.id, name: theme.name, primary: theme.primary, soft: theme.soft, accent: theme.accent },
+      updated_at: new Date().toISOString()
+    },
+    `${theme.name} is now live for all visitors.`,
+    'Could not publish theme'
+  );
 }
-function renderThemes(){
-  grid.innerHTML=themes.map(t=>`<button type="button" class="theme-choice" data-id="${t.id}" aria-label="Use ${t.name} theme"><span class="theme-colors" style="background:${t.soft}"><i style="background:${t.primary}"></i><i style="background:${t.accent}"></i><b>${t.emoji}</b></span><strong>${t.name}</strong><small>${t.desc}</small></button>`).join('');
-  grid.querySelectorAll('.theme-choice').forEach(btn=>btn.addEventListener('click',()=>{const t=themes.find(x=>x.id===btn.dataset.id);if(t)selectTheme(t,true);}));
+
+async function publishLogoMode() {
+  return publishConfig(
+    { mode: 'logo', theme: null, updated_at: new Date().toISOString() },
+    'Logo colors are now live for all visitors.',
+    'Could not publish color mode'
+  );
 }
-async function setLogoMode(enabled,publish=true){
-  logoToggle.checked=enabled;
-  setCookie('cleverUseLogoColors',enabled?'true':'false');
-  if(enabled){
-    deleteCookie('cleverThemeMode');
-    grid.querySelectorAll('.theme-choice').forEach(el=>el.classList.remove('selected'));
-    applyColors('#111827','#f3f4f6','#fbbf24','Logo colors active');
-    if(publish && adminReady) await publishLogoMode();
-  }else{
-    const saved=decodeURIComponent(cookie('cleverTheme')||'').toLowerCase();
-    const t=themes.find(x=>x.primary.toLowerCase()===saved)||themes[0];
-    selectTheme(t,publish);
+
+function selectTheme(theme, publish) {
+  logoToggle.checked = false;
+  writeCookie('cleverThemeMode', 'theme');
+  writeCookie('cleverTheme', theme.primary);
+  writeCookie('cleverUseLogoColors', 'false');
+  applyColors(theme.primary, theme.soft, theme.accent, `${theme.name} active`);
+  grid?.querySelectorAll('.theme-choice').forEach((element) => {
+    element.classList.toggle('selected', element.dataset.id === theme.id);
+  });
+  if (publish && adminReady) publishTheme(theme);
+}
+
+function renderThemes() {
+  if (!grid) return;
+  grid.innerHTML = themes.map((theme) => `
+    <button type="button" class="theme-choice" data-id="${theme.id}" aria-label="Use ${theme.name} theme">
+      <span class="theme-colors" style="background:${theme.soft}"><i style="background:${theme.primary}"></i><i style="background:${theme.accent}"></i><b>${theme.emoji}</b></span>
+      <strong>${theme.name}</strong>
+      <small>${theme.desc}</small>
+    </button>
+  `).join('');
+  grid.querySelectorAll('.theme-choice').forEach((button) => {
+    button.addEventListener('click', () => {
+      const theme = themes.find((item) => item.id === button.dataset.id);
+      if (theme) selectTheme(theme, true);
+    });
+  });
+}
+
+async function setLogoMode(enabled, publish) {
+  logoToggle.checked = enabled;
+  writeCookie('cleverUseLogoColors', enabled ? 'true' : 'false');
+  if (enabled) {
+    clearCookie('cleverThemeMode');
+    grid?.querySelectorAll('.theme-choice').forEach((element) => element.classList.remove('selected'));
+    applyColors('#111827', '#f3f4f6', '#fbbf24', 'Logo colors active');
+    if (publish && adminReady) await publishLogoMode();
+    return;
   }
+  const saved = readCookie('cleverTheme').toLowerCase();
+  const theme = themes.find((item) => item.primary.toLowerCase() === saved) || themes[0];
+  selectTheme(theme, publish);
 }
-async function loadSettings(){
-  const result=await supabase.from('store_settings').select('*').eq('id','default').maybeSingle();
-  if(result.error) throw new Error(`Store settings table is not ready. Run supabase/branding_settings.sql first. ${result.error.message}`);
-  const s={...defaults,...(result.data||{})};
-  document.querySelector('#whatsapp-url').value=s.whatsapp_url||'';
-  document.querySelector('#instagram-url').value=s.instagram_url||'';
-  document.querySelector('#show-whatsapp').checked=Boolean(s.show_whatsapp);
-  document.querySelector('#show-instagram').checked=Boolean(s.show_instagram);
-  ribbonText.value=s.ribbon_text||'';
-  document.querySelector('#show-ribbon').checked=Boolean(s.show_ribbon);
-  codInput.value=Number(s.cod_delivery_price||0).toFixed(2);
+
+async function loadSettings() {
+  const result = await supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle();
+  if (result.error) throw new Error(`Store settings table is not ready. ${result.error.message}`);
+  const settings = { ...defaults, ...(result.data || {}) };
+
+  document.querySelector('#whatsapp-url').value = settings.whatsapp_url || '';
+  document.querySelector('#instagram-url').value = settings.instagram_url || '';
+  document.querySelector('#show-whatsapp').checked = Boolean(settings.show_whatsapp);
+  document.querySelector('#show-instagram').checked = Boolean(settings.show_instagram);
+  ribbonText.value = settings.ribbon_text || '';
+  document.querySelector('#show-ribbon').checked = Boolean(settings.show_ribbon);
+  codInput.value = Number(settings.cod_delivery_price || 0).toFixed(2);
   updateRibbonPreview();
   updateCodPreview();
 }
-async function saveSettings(){
-  const payload={
-    id:'default',
-    whatsapp_url:normalizeWhatsapp(document.querySelector('#whatsapp-url').value),
-    instagram_url:normalizeInstagram(document.querySelector('#instagram-url').value),
-    show_whatsapp:document.querySelector('#show-whatsapp').checked,
-    show_instagram:document.querySelector('#show-instagram').checked,
-    ribbon_text:String(ribbonText.value||'').trim(),
-    show_ribbon:document.querySelector('#show-ribbon').checked,
-    cod_delivery_price:Math.max(0,Number(codInput.value||0)),
-    updated_at:new Date().toISOString()
+
+async function saveSettings() {
+  const payload = {
+    id: 'default',
+    whatsapp_url: normalizeWhatsapp(document.querySelector('#whatsapp-url').value),
+    instagram_url: normalizeInstagram(document.querySelector('#instagram-url').value),
+    show_whatsapp: document.querySelector('#show-whatsapp').checked,
+    show_instagram: document.querySelector('#show-instagram').checked,
+    ribbon_text: String(ribbonText.value || '').trim(),
+    show_ribbon: document.querySelector('#show-ribbon').checked,
+    cod_delivery_price: Math.max(0, Number(codInput.value || 0)),
+    updated_at: new Date().toISOString()
   };
-  if(payload.show_whatsapp && !payload.whatsapp_url) throw new Error('Add a WhatsApp link or switch off WhatsApp top-bar visibility.');
-  if(payload.show_instagram && !payload.instagram_url) throw new Error('Add an Instagram link or switch off Instagram top-bar visibility.');
-  if(payload.show_ribbon && !payload.ribbon_text) throw new Error('Add ribbon text or switch off the ribbon.');
-  settingsMessage.textContent='Saving store settings…';
-  saveSettingsButton.disabled=true;
-  const result=await supabase.from('store_settings').upsert(payload,{onConflict:'id'}).select('*').single();
-  if(result.error) throw new Error(result.error.message);
-  document.querySelector('#whatsapp-url').value=result.data.whatsapp_url||'';
-  document.querySelector('#instagram-url').value=result.data.instagram_url||'';
-  settingsMessage.textContent='Store settings saved. New public page loads use the new values immediately.';
-  window.__CLEVER_BRANDING__={...(window.__CLEVER_BRANDING__||{}),whatsappUrl:result.data.whatsapp_url,instagramUrl:result.data.instagram_url,showWhatsapp:Boolean(result.data.show_whatsapp),showInstagram:Boolean(result.data.show_instagram),ribbonText:result.data.ribbon_text||'',showRibbon:Boolean(result.data.show_ribbon),codDeliveryPrice:Number(result.data.cod_delivery_price||0)};
+
+  if (payload.show_whatsapp && !payload.whatsapp_url) throw new Error('Add a WhatsApp link or switch off WhatsApp top-bar visibility.');
+  if (payload.show_instagram && !payload.instagram_url) throw new Error('Add an Instagram link or switch off Instagram top-bar visibility.');
+  if (payload.show_ribbon && !payload.ribbon_text) throw new Error('Add ribbon text or switch off the ribbon.');
+
+  settingsMessage.textContent = 'Saving store settings…';
+  saveSettingsButton.disabled = true;
+  const result = await supabase.from('store_settings').upsert(payload, { onConflict: 'id' }).select('*').single();
+  if (result.error) throw new Error(result.error.message);
+
+  document.querySelector('#whatsapp-url').value = result.data.whatsapp_url || '';
+  document.querySelector('#instagram-url').value = result.data.instagram_url || '';
+  settingsMessage.textContent = 'Store settings saved. New public page loads use the new values immediately.';
 }
 
-async function initAuth(){
-  try{
-    if(!url||!key) throw new Error('Supabase browser configuration is missing.');
-    supabase=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-    const sessionResult=await supabase.auth.getSession();
-    if(sessionResult.error) throw new Error(sessionResult.error.message);
-    if(!sessionResult.data.session?.user){authStatus.textContent='Please sign in to manage branding.';location.href='/login?next=%2Fadmin%2Fbranding';return;}
-    const adminResult=await supabase.rpc('is_admin');
-    if(adminResult.error) throw new Error(adminResult.error.message);
-    if(!adminResult.data){authStatus.textContent='Access denied.';return;}
-    adminReady=true;
-    authStatus.textContent='Admin access verified';
-    saveSettingsButton.disabled=false;
-    saveLogoButton.disabled=false;
+async function initAuth() {
+  try {
+    if (!url || !key) throw new Error('Supabase browser configuration is missing.');
+    supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    const sessionResult = await supabase.auth.getSession();
+    if (sessionResult.error) throw new Error(sessionResult.error.message);
+    if (!sessionResult.data.session?.user) {
+      authStatus.textContent = 'Please sign in to manage branding.';
+      location.href = '/login?next=%2Fadmin%2Fbranding';
+      return;
+    }
+    const adminResult = await supabase.rpc('is_admin');
+    if (adminResult.error) throw new Error(adminResult.error.message);
+    if (!adminResult.data) {
+      authStatus.textContent = 'Access denied.';
+      return;
+    }
+    adminReady = true;
+    authStatus.textContent = 'Admin access verified';
+    saveSettingsButton.disabled = false;
+    saveLogoButton.disabled = false;
     await loadSettings();
-  }catch(error){authStatus.textContent=error?.message||'Unable to verify admin access.';}
+  } catch (error) {
+    authStatus.textContent = error?.message || 'Unable to verify admin access.';
+  }
 }
 
 renderThemes();
-const savedLogo=cookie('cleverUseLogoColors');
-const savedTheme=decodeURIComponent(cookie('cleverTheme')||'').toLowerCase();
-const initial=themes.find(t=>t.primary.toLowerCase()===savedTheme)||themes[0];
-if(savedLogo==='true') setLogoMode(true,false); else selectTheme(initial,false);
+const savedLogo = readCookie('cleverUseLogoColors');
+const savedTheme = readCookie('cleverTheme').toLowerCase();
+const initialTheme = themes.find((theme) => theme.primary.toLowerCase() === savedTheme) || themes[0];
+if (savedLogo === 'true') setLogoMode(true, false);
+else selectTheme(initialTheme, false);
+
 updateRibbonPreview();
 updateCodPreview();
-ribbonText.addEventListener('input',updateRibbonPreview);
-codInput.addEventListener('input',updateCodPreview);
-logoToggle.addEventListener('change',()=>setLogoMode(logoToggle.checked,true));
-document.querySelector('#reset-theme').addEventListener('click',()=>setLogoMode(true,true));
-saveSettingsButton.addEventListener('click',async()=>{try{await saveSettings();}catch(error){settingsMessage.textContent=error?.message||'Unable to save store settings.';}finally{saveSettingsButton.disabled=!adminReady;}});
-document.querySelector('#logout').addEventListener('click',async()=>{if(supabase)await supabase.auth.signOut();location.href='/login';});
+ribbonText?.addEventListener('input', updateRibbonPreview);
+codInput?.addEventListener('input', updateCodPreview);
+logoToggle?.addEventListener('change', () => setLogoMode(logoToggle.checked, true));
+document.querySelector('#reset-theme')?.addEventListener('click', () => setLogoMode(true, true));
+saveSettingsButton?.addEventListener('click', async () => {
+  try {
+    await saveSettings();
+  } catch (error) {
+    settingsMessage.textContent = error?.message || 'Unable to save store settings.';
+  } finally {
+    saveSettingsButton.disabled = !adminReady;
+  }
+});
+document.querySelector('#logout')?.addEventListener('click', async () => {
+  if (supabase) await supabase.auth.signOut();
+  location.href = '/login';
+});
 
-saveLogoButton.addEventListener('click',async()=>{
-  const file=document.querySelector('#logo-file').files?.[0];
-  if(!file){logoMessage.textContent='Choose a logo file first.';return;}
-  logoMessage.textContent='Uploading logo…';
-  saveLogoButton.disabled=true;
-  try{
-    const bmp=await createImageBitmap(file);
-    const max=1800;
-    const scale=Math.min(1,max/Math.max(bmp.width,bmp.height));
-    const canvas=document.createElement('canvas');
-    canvas.width=Math.max(1,Math.round(bmp.width*scale));
-    canvas.height=Math.max(1,Math.round(bmp.height*scale));
-    const ctx=canvas.getContext('2d');
-    if(!ctx) throw new Error('Could not prepare the logo.');
-    ctx.drawImage(bmp,0,0,canvas.width,canvas.height);
-    const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Could not convert the logo to WebP.')),'image/webp',.92));
-    const up=await supabase.storage.from('product-images').upload('branding/logo.webp',blob,{contentType:'image/webp',upsert:true,cacheControl:'0'});
-    if(up.error) throw new Error(up.error.message);
-    preview.src=`${logoUrl}?v=${Date.now()}`;
-    logoMessage.textContent='Logo updated successfully.';
-  }catch(error){logoMessage.textContent=error?.message||'Unable to upload the logo.';}
-  finally{saveLogoButton.disabled=!adminReady;}
+saveLogoButton?.addEventListener('click', async () => {
+  const file = document.querySelector('#logo-file')?.files?.[0];
+  if (!file) {
+    logoMessage.textContent = 'Choose a logo file first.';
+    return;
+  }
+  logoMessage.textContent = 'Uploading logo…';
+  saveLogoButton.disabled = true;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const max = 1800;
+    const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not prepare the logo.');
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((resolve, reject) => canvas.toBlob((value) => {
+      if (value) resolve(value);
+      else reject(new Error('Could not convert the logo to WebP.'));
+    }, 'image/webp', 0.92));
+    const upload = await supabase.storage.from('product-images').upload('branding/logo.webp', blob, {
+      contentType: 'image/webp',
+      upsert: true,
+      cacheControl: '0'
+    });
+    if (upload.error) throw new Error(upload.error.message);
+    preview.src = `${logoUrlValue}?v=${Date.now()}`;
+    logoMessage.textContent = 'Logo updated successfully.';
+  } catch (error) {
+    logoMessage.textContent = error?.message || 'Unable to upload the logo.';
+  } finally {
+    saveLogoButton.disabled = !adminReady;
+  }
 });
 
 initAuth();
 </script>
 
 <style>
-.branding-page{max-width:980px;display:grid;gap:20px}.branding-page .admin-head{margin-bottom:4px}.branding-page .admin-head h1{margin:0 0 7px}.branding-page .admin-head p{margin:0;color:#64748b}.branding-card{gap:18px}.section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}.section-heading h2{margin:0 0 5px}.section-heading p:last-child{margin:0;color:#64748b}.status-text{font-size:.84rem;font-weight:800;color:var(--brand-primary);white-space:nowrap}.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.setting-box{display:grid;gap:10px;padding:16px;border:1px solid #e2e8f0;border-radius:16px;background:#f8fafc}.setting-box>input,.branding-card textarea,.branding-card input[type=url],.branding-card input[type=number],.branding-card input[type=file]{width:100%;box-sizing:border-box;min-height:46px;border:1px solid #cbd5e1;border-radius:11px;background:#fff;padding:10px 12px;font:inherit}.branding-card textarea{resize:vertical;min-height:88px}.setting-box small{color:#64748b}.field-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}.field-heading label{font-weight:800}.sync-pill{padding:4px 8px;border-radius:999px;background:#dcfce7;color:#166534;font-size:.72rem;font-weight:800}.switch-row{display:flex!important;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}.switch-row.compact{margin-top:2px}.switch-row span{display:grid;gap:4px}.switch-row small{color:#64748b}.switch-row input{appearance:none;width:50px;height:28px;border-radius:999px;background:#cbd5e1;position:relative;cursor:pointer;transition:.2s;flex:0 0 auto}.switch-row input::after{content:'';position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18);transition:.2s}.switch-row input:checked{background:var(--brand-primary)}.switch-row input:checked::after{transform:translateX(22px)}.preview-ribbon-wrap{padding:12px;background:#f8fafc;border-radius:14px}.ribbon-preview{min-height:42px;display:grid;place-items:center;padding:10px 14px;border-radius:10px;background:var(--brand-primary,#111827);color:#fff;font-weight:800;text-align:center}.ribbon-preview.muted{opacity:.55}.cod-field{display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:14px;align-items:end}.price-hint{min-height:46px;display:flex;align-items:center;justify-content:center;gap:8px;flex-direction:column;padding:8px 10px;border-radius:12px;background:var(--brand-soft,#f3f4f6)}.price-hint strong{font-size:1.25rem;color:var(--brand-primary,#111827)}.price-hint span{font-size:.74rem;color:#64748b;text-align:center}.feature-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.feature-list>div{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}.feature-list>div>span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#dcfce7;color:#166534;font-weight:900}.feature-list p{margin:2px 0 0;color:#475569;font-size:.9rem}.theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.theme-choice{appearance:none;text-align:left;border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:0;overflow:hidden;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}.theme-choice:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(15,23,42,.08)}.theme-choice.selected{border-color:var(--brand-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand-primary) 15%,transparent)}.theme-colors{height:72px;display:flex;align-items:center;padding:14px;gap:7px}.theme-colors i{width:20px;height:20px;border-radius:50%;box-shadow:0 0 0 2px #fff}.theme-colors b{margin-left:auto;font-size:28px}.theme-choice strong,.theme-choice small{display:block;padding-left:14px;padding-right:14px}.theme-choice strong{padding-top:12px}.theme-choice small{padding-top:3px;padding-bottom:14px;color:#64748b}.theme-preview{overflow:hidden;border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}.preview-scene{height:115px;background:var(--preview-soft,#f3e8ff);position:relative;overflow:hidden}.preview-scene span:first-child{position:absolute;left:15%;top:24px;font-size:34px}.preview-scene span:nth-child(2){position:absolute;right:14%;top:15px;font-size:36px}.preview-scene strong{position:absolute;left:52%;bottom:-2px;font-size:38px}.preview-scene b{position:absolute;right:28%;bottom:0;font-size:34px}.preview-content{padding:22px}.preview-content em{display:inline-flex;padding:5px 9px;border-radius:999px;background:var(--preview-accent,#fbbf24);color:#111827;font-size:.72rem;font-style:normal;font-weight:900;letter-spacing:.08em}.preview-content h3{margin:12px 0 5px}.preview-content p{margin:0 0 15px;color:#64748b}.preview-content>div{display:flex;gap:8px;align-items:center}.preview-content>div span,.preview-content>div small{display:inline-flex;padding:9px 12px;border-radius:10px;font-size:.82rem;font-weight:800}.preview-content>div span{background:var(--preview-primary,#7c3aed);color:#fff}.preview-content>div small{background:var(--preview-soft,#f3e8ff);color:#475569}.publish-status{margin:0;padding:10px 12px;border-radius:10px;background:var(--brand-soft);color:#475569;font-size:.9rem}.logo-preview{min-height:180px;display:grid;place-items:center;padding:26px;border:1px dashed #cbd5e1;border-radius:16px;background:linear-gradient(135deg,#f8fafc,#fff)}.logo-preview img{max-width:min(100%,420px);max-height:160px;object-fit:contain}.settings-actions{display:flex;gap:14px;align-items:center;justify-content:flex-start;padding-bottom:30px}.settings-actions p,.branding-card>p{margin:0;color:#64748b}.settings-actions .button{min-width:190px}
+.branding-page{max-width:980px;display:grid;gap:20px}
+.branding-page .admin-head{margin-bottom:4px}
+.branding-page .admin-head h1{margin:0 0 7px}
+.branding-page .admin-head p{margin:0;color:#64748b}
+.branding-card{gap:18px}
+.section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}
+.section-heading h2{margin:0 0 5px}
+.section-heading p:last-child{margin:0;color:#64748b}
+.status-text{font-size:.84rem;font-weight:800;color:var(--brand-primary);white-space:nowrap}
+.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.setting-box{display:grid;gap:10px;padding:16px;border:1px solid #e2e8f0;border-radius:16px;background:#f8fafc}
+.setting-box>input,.branding-card textarea,.branding-card input[type=url],.branding-card input[type=number],.branding-card input[type=file]{width:100%;box-sizing:border-box;min-height:46px;border:1px solid #cbd5e1;border-radius:11px;background:#fff;padding:10px 12px;font:inherit}
+.branding-card textarea{resize:vertical;min-height:88px}
+.setting-box small{color:#64748b}
+.field-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}
+.field-heading label{font-weight:800}
+.sync-pill{padding:4px 8px;border-radius:999px;background:#dcfce7;color:#166534;font-size:.72rem;font-weight:800}
+.switch-row{display:flex!important;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}
+.switch-row.compact{margin-top:2px}
+.switch-row span{display:grid;gap:4px}
+.switch-row small{color:#64748b}
+.switch-row input{appearance:none;width:50px;height:28px;border-radius:999px;background:#cbd5e1;position:relative;cursor:pointer;transition:.2s;flex:0 0 auto}
+.switch-row input::after{content:'';position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18);transition:.2s}
+.switch-row input:checked{background:var(--brand-primary)}
+.switch-row input:checked::after{transform:translateX(22px)}
+.preview-ribbon-wrap{padding:12px;background:#f8fafc;border-radius:14px}
+.ribbon-preview{min-height:42px;display:grid;place-items:center;padding:10px 14px;border-radius:10px;background:var(--brand-primary,#111827);color:#fff;font-weight:800;text-align:center}
+.ribbon-preview.muted{opacity:.55}
+.cod-field{display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:14px;align-items:end}
+.price-hint{min-height:46px;display:flex;align-items:center;justify-content:center;gap:8px;flex-direction:column;padding:8px 10px;border-radius:12px;background:var(--brand-soft,#f3f4f6)}
+.price-hint strong{font-size:1.25rem;color:var(--brand-primary,#111827)}
+.price-hint span{font-size:.74rem;color:#64748b;text-align:center}
+.feature-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.feature-list>div{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}
+.feature-list>div>span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#dcfce7;color:#166534;font-weight:900}
+.feature-list p{margin:2px 0 0;color:#475569;font-size:.9rem}
+.theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.theme-choice{appearance:none;text-align:left;border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:0;overflow:hidden;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+.theme-choice:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(15,23,42,.08)}
+.theme-choice.selected{border-color:var(--brand-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand-primary) 15%,transparent)}
+.theme-colors{height:72px;display:flex;align-items:center;padding:14px;gap:7px}
+.theme-colors i{width:20px;height:20px;border-radius:50%;box-shadow:0 0 0 2px #fff}
+.theme-colors b{margin-left:auto;font-size:28px}
+.theme-choice strong,.theme-choice small{display:block;padding-left:14px;padding-right:14px}
+.theme-choice strong{padding-top:12px}
+.theme-choice small{padding-top:3px;padding-bottom:14px;color:#64748b}
+.theme-preview{overflow:hidden;border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}
+.preview-scene{height:115px;background:var(--preview-soft,#f3e8ff);position:relative;overflow:hidden}
+.preview-scene span:first-child{position:absolute;left:15%;top:24px;font-size:34px}
+.preview-scene span:nth-child(2){position:absolute;right:14%;top:15px;font-size:36px}
+.preview-scene strong{position:absolute;left:52%;bottom:-2px;font-size:38px}
+.preview-scene b{position:absolute;right:28%;bottom:0;font-size:34px}
+.preview-content{padding:22px}
+.preview-content em{display:inline-flex;padding:5px 9px;border-radius:999px;background:var(--preview-accent,#fbbf24);color:#111827;font-size:.72rem;font-style:normal;font-weight:900;letter-spacing:.08em}
+.preview-content h3{margin:12px 0 5px}
+.preview-content p{margin:0 0 15px;color:#64748b}
+.preview-content>div{display:flex;gap:8px;align-items:center}
+.preview-content>div span,.preview-content>div small{display:inline-flex;padding:9px 12px;border-radius:10px;font-size:.82rem;font-weight:800}
+.preview-content>div span{background:var(--preview-primary,#7c3aed);color:#fff}
+.preview-content>div small{background:var(--preview-soft,#f3e8ff);color:#475569}
+.publish-status{margin:0;padding:10px 12px;border-radius:10px;background:var(--brand-soft);color:#475569;font-size:.9rem}
+.logo-preview{min-height:180px;display:grid;place-items:center;padding:26px;border:1px dashed #cbd5e1;border-radius:16px;background:linear-gradient(135deg,#f8fafc,#fff)}
+.logo-preview img{max-width:min(100%,420px);max-height:160px;object-fit:contain}
+.settings-actions{display:flex;gap:14px;align-items:center;justify-content:flex-start;padding-bottom:30px}
+.settings-actions p,.branding-card>p{margin:0;color:#64748b}
+.settings-actions .button{min-width:190px}
 @media(max-width:760px){.settings-grid,.feature-list{grid-template-columns:1fr}.cod-field{grid-template-columns:1fr}.section-heading{flex-direction:column}.status-text{white-space:normal}.theme-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.settings-actions{display:grid}.settings-actions .button{width:100%}}
 @media(max-width:520px){.theme-grid{grid-template-columns:1fr}.switch-row{align-items:flex-start}.switch-row input{margin-top:2px}}
 </style>
