@@ -9,23 +9,84 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 <script>
 const KEY='cleverToysCart';
-const form=document.querySelector('#checkout-form');const summary=document.querySelector('#checkout-summary');const msg=document.querySelector('#form-message');const count=document.querySelector('#cart-count');
-const authConfig=document.querySelector('#auth-config');const supabaseUrl=authConfig?.dataset.url;const supabaseKey=authConfig?.dataset.key;
-const branding=window.__CLEVER_BRANDING__||{};
-const deliveryFee=Math.max(0,Number(branding.codDeliveryPrice||0));
+const form=document.querySelector('#checkout-form');
+const summary=document.querySelector('#checkout-summary');
+const msg=document.querySelector('#form-message');
+const count=document.querySelector('#cart-count');
+const authConfig=document.querySelector('#auth-config');
+const supabaseUrl=authConfig?.dataset.url;
+const supabaseKey=authConfig?.dataset.key;
 const readCart=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]').filter(i=>i&&i.productId&&Number(i.quantity)>0);}catch{return[]}};
-const cart=readCart();
-const money=n=>`$${Number(n).toFixed(2)}`;
-const subtotal=cart.reduce((s,i)=>s+Number(i.price)*Number(i.quantity),0);
-const total=subtotal+deliveryFee;
+const money=n=>`$${Number(n||0).toFixed(2)}`;
+let deliverySettings={codDeliveryPrice:0,freeDeliveryThreshold:0};
+
 const updateCartCount=()=>{const totalItems=readCart().reduce((sum,item)=>sum+Math.max(0,Number(item.quantity)||0),0);if(count){count.textContent=String(totalItems);count.hidden=totalItems===0;}};
+
+const loadDeliverySettings=async()=>{
+  try{
+    const response=await fetch('/api/store-settings',{cache:'no-store'});
+    if(response.ok){
+      const settings=await response.json();
+      deliverySettings={
+        codDeliveryPrice:Math.max(0,Number(settings.codDeliveryPrice||0)),
+        freeDeliveryThreshold:Math.max(0,Number(settings.freeDeliveryThreshold||0))
+      };
+    }
+  }catch{}
+};
+
+const getDeliveryFee=(subtotal)=>{
+  const threshold=deliverySettings.freeDeliveryThreshold;
+  return threshold>0 && subtotal>=threshold ? 0 : deliverySettings.codDeliveryPrice;
+};
+
+const renderSummary=()=>{
+  const currentCart=readCart();
+  const subtotal=currentCart.reduce((s,i)=>s+Number(i.price||0)*Number(i.quantity||0),0);
+  const deliveryFee=getDeliveryFee(subtotal);
+  const total=subtotal+deliveryFee;
+  summary.innerHTML=`<h2>Order Summary</h2>${currentCart.length?currentCart.map(i=>`<div class="summary-line"><span>${i.name}${i.variantName?` · ${i.variantName}`:''} × ${i.quantity}</span><strong>${money(i.price*i.quantity)}</strong></div>`).join('')+`<hr><div class="summary-line"><span>Subtotal</span><strong>${money(subtotal)}</strong></div><div class="summary-line"><span>COD delivery</span><strong>${deliveryFee===0?'Free':money(deliveryFee)}</strong></div>${deliverySettings.freeDeliveryThreshold>0?`<p class="delivery-note">${subtotal>=deliverySettings.freeDeliveryThreshold?'🎉 Free delivery unlocked!':`Free delivery on orders of ${money(deliverySettings.freeDeliveryThreshold)} or more.`}</p>`:''}<div class="summary-line summary-total"><strong>Total</strong><strong>${money(total)}</strong></div><a href="/cart" class="summary-cart-link">Edit Cart</a>`:'<p>Your cart is empty.</p><a href="/products" class="button">Shop Toys</a>'}`;
+  return {subtotal,deliveryFee,total};
+};
+
 updateCartCount();
-summary.innerHTML=`<h2>Order Summary</h2>${cart.length?cart.map(i=>`<div class="summary-line"><span>${i.name}${i.variantName?` · ${i.variantName}`:''} × ${i.quantity}</span><strong>${money(i.price*i.quantity)}</strong></div>`).join('')+'<hr><div class="summary-line"><span>Subtotal</span><strong>'+money(subtotal)+'</strong></div><div class="summary-line"><span>COD delivery</span><strong>'+money(deliveryFee)+'</strong></div><div class="summary-line summary-total"><strong>Total</strong><strong>'+money(total)+'</strong></div><a href="/cart" class="summary-cart-link">Edit Cart</a>':'<p>Your cart is empty.</p><a href="/products" class="button">Shop Toys</a>'}`;
+await loadDeliverySettings();
+let checkoutTotals=renderSummary();
+
 let supabase;
 try{if(supabaseUrl&&supabaseKey&&window.supabase)supabase=window.supabase.createClient(supabaseUrl,supabaseKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});}catch(error){console.warn('Supabase client initialization failed',error);}
-async function prefill(){if(!supabase)return;const {data:{session}}=await supabase.auth.getSession();if(!session?.user)return;const profile=await supabase.from('customer_profiles').select('full_name,phone,governorate,city,area,address').eq('id',session.user.id).maybeSingle();const source=profile.data||{};const meta=session.user.user_metadata||{};const values={customer_name:source.full_name||meta.full_name||'',customer_phone:source.phone||'',customer_email:session.user.email||'',governorate:source.governorate||'',city:source.city||'',area:source.area||'',address:source.address||''};for(const [name,value] of Object.entries(values)){const el=form.elements.namedItem(name);if(el&&!el.value)el.value=value;}}
+
+async function prefill(){
+  if(!supabase)return;
+  const {data:{session}}=await supabase.auth.getSession();
+  if(!session?.user)return;
+  const profile=await supabase.from('customer_profiles').select('full_name,phone,governorate,city,area,address').eq('id',session.user.id).maybeSingle();
+  const source=profile.data||{};
+  const meta=session.user.user_metadata||{};
+  const values={customer_name:source.full_name||meta.full_name||'',customer_phone:source.phone||'',customer_email:session.user.email||'',governorate:source.governorate||'',city:source.city||'',area:source.area||'',address:source.address||''};
+  for(const [name,value] of Object.entries(values)){const el=form.elements.namedItem(name);if(el&&!el.value)el.value=value;}
+}
 prefill();
-form.addEventListener('submit',async(e)=>{e.preventDefault();const currentCart=readCart();if(!currentCart.length){msg.textContent='Your cart is empty. Add a product before checkout.';return;}const data=Object.fromEntries(new FormData(form));const currentSubtotal=currentCart.reduce((s,i)=>s+Number(i.price)*Number(i.quantity),0);const customer={full_name:String(data.customer_name||'').trim(),customer_name:String(data.customer_name||'').trim(),phone:String(data.customer_phone||'').trim(),customer_phone:String(data.customer_phone||'').trim(),email:String(data.customer_email||'').trim(),customer_email:String(data.customer_email||'').trim(),governorate:String(data.governorate||'').trim(),city:String(data.city||'').trim(),area:String(data.area||'').trim(),address:String(data.address||'').trim()};try{localStorage.setItem('cleverToysCustomer',JSON.stringify(customer));}catch{}const order={...data,items:currentCart,subtotal:currentSubtotal,delivery_fee:deliveryFee,total:currentSubtotal+deliveryFee,payment_method:'cash_on_delivery'};msg.textContent='Submitting order…';try{const r=await fetch('/api/orders',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(order)});const out=await r.json();if(!r.ok)throw new Error(out.error||'Unable to place order');localStorage.removeItem(KEY);location.href=`/order-success?order=${encodeURIComponent(out.order_number)}`;}catch(err){msg.textContent=err.message||'Unable to place order.';}});
-window.addEventListener('storage',updateCartCount);
+
+form.addEventListener('submit',async(e)=>{
+  e.preventDefault();
+  const currentCart=readCart();
+  if(!currentCart.length){msg.textContent='Your cart is empty. Add a product before checkout.';return;}
+  const data=Object.fromEntries(new FormData(form));
+  const currentSubtotal=currentCart.reduce((s,i)=>s+Number(i.price)*Number(i.quantity),0);
+  checkoutTotals=renderSummary();
+  const customer={full_name:String(data.customer_name||'').trim(),customer_name:String(data.customer_name||'').trim(),phone:String(data.customer_phone||'').trim(),customer_phone:String(data.customer_phone||'').trim(),email:String(data.customer_email||'').trim(),customer_email:String(data.customer_email||'').trim(),governorate:String(data.governorate||'').trim(),city:String(data.city||'').trim(),area:String(data.area||'').trim(),address:String(data.address||'').trim()};
+  try{localStorage.setItem('cleverToysCustomer',JSON.stringify(customer));}catch{}
+  const order={...data,items:currentCart,subtotal:currentSubtotal,delivery_fee:checkoutTotals.deliveryFee,total:checkoutTotals.total,payment_method:'cash_on_delivery'};
+  msg.textContent='Submitting order…';
+  try{
+    const res=await fetch('/api/orders',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(order)});
+    const out=await res.json();
+    if(!res.ok)throw new Error(out.error||'Unable to place order');
+    localStorage.removeItem(KEY);
+    location.href=`/order-success?order=${encodeURIComponent(out.order_number)}`;
+  }catch(err){msg.textContent=err.message||'Unable to place order.';}
+});
+window.addEventListener('storage',()=>{updateCartCount();renderSummary();});
 </script>
-<style>.cart-link{display:inline-flex;align-items:center;gap:6px}.cart-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#111827;color:#fff;font-size:.72rem;font-weight:800;line-height:1}.summary-cart-link{display:inline-block;margin-top:12px;font-weight:700}.summary-total{font-size:1.08rem}.form-card{scroll-margin-top:24px}</style>
+<style>.cart-link{display:inline-flex;align-items:center;gap:6px}.cart-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#111827;color:#fff;font-size:.72rem;font-weight:800;line-height:1}.summary-cart-link{display:inline-block;margin-top:12px;font-weight:700}.summary-total{font-size:1.08rem}.form-card{scroll-margin-top:24px}.delivery-note{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:#f0fdf4;color:#166534;font-size:.86rem;font-weight:700}</style>
