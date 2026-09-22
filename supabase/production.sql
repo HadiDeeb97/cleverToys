@@ -1,6 +1,8 @@
 -- Clever Toys production hardening
 -- Run this file once in Supabase SQL Editor after the existing tables/functions have been created.
 
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS free_delivery_threshold numeric(10,2) NOT NULL DEFAULT 0 CHECK (free_delivery_threshold >= 0);
+
 DROP POLICY IF EXISTS "Admins can manage categories" ON public.categories;
 CREATE POLICY "Admins can manage categories" ON public.categories FOR ALL TO authenticated USING (public.is_admin()) WITH CHECK (public.is_admin());
 DROP POLICY IF EXISTS "Admins can manage products" ON public.products;
@@ -22,6 +24,7 @@ DECLARE
   requested_qty integer; server_unit_price numeric(10,2); server_subtotal numeric(10,2) := 0; server_total numeric(10,2);
   customer_name_value text; customer_phone_value text; customer_email_value text; governorate_value text; city_value text; area_value text; address_value text; notes_value text;
   cod_delivery_price numeric(10,2) := 0;
+  free_delivery_threshold numeric(10,2) := 0;
   item_product_id uuid; item_variant_id uuid; variant_name_value text; item_sku text;
 BEGIN
   customer_name_value := trim(coalesce(order_payload->>'customer_name',''));
@@ -32,11 +35,13 @@ BEGIN
   area_value := nullif(trim(coalesce(order_payload->>'area','')),'');
   address_value := nullif(trim(coalesce(order_payload->>'address','')),'');
   notes_value := nullif(trim(coalesce(order_payload->>'notes','')),'');
-  SELECT greatest(0, coalesce(s.cod_delivery_price, 0))
-  INTO cod_delivery_price
+  SELECT greatest(0, coalesce(s.cod_delivery_price, 0)),
+         greatest(0, coalesce(s.free_delivery_threshold, 0))
+  INTO cod_delivery_price, free_delivery_threshold
   FROM public.store_settings AS s
   WHERE s.id = 'default';
   cod_delivery_price := coalesce(cod_delivery_price, 0);
+  free_delivery_threshold := coalesce(free_delivery_threshold, 0);
 
   IF customer_name_value = '' OR length(customer_name_value) > 120 THEN RAISE EXCEPTION 'Please enter a valid customer name.'; END IF;
   IF customer_phone_value = '' OR length(customer_phone_value) > 40 THEN RAISE EXCEPTION 'Please enter a valid phone number.'; END IF;
