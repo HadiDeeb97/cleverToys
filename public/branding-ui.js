@@ -6,9 +6,9 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[char]));
 
-  const money = value => `${Number(value || 0).toFixed(2)}`;
+  const money = value => `$${Number(value || 0).toFixed(2)}`;
   const getDeliveryFee = (subtotal, branding) => {
-    const fee = getDeliveryFee(subtotal, branding);
+    const fee = Math.max(0, Number(branding.codDeliveryPrice || 0));
     const threshold = Math.max(0, Number(branding.freeDeliveryThreshold || 0));
     return threshold > 0 && subtotal >= threshold ? 0 : fee;
   };
