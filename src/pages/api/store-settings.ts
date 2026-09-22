@@ -20,11 +20,22 @@ export const GET: APIRoute = async () => {
       return new Response(JSON.stringify(fallback), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
     }
 
-    const response = await fetch(`${base.replace(/\/$/, '')}/rest/v1/store_settings?select=whatsapp_url,instagram_url,show_whatsapp,show_instagram,ribbon_text,show_ribbon,cod_delivery_price,free_delivery_threshold&id=eq.default&limit=1`, {
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    const baseUrl = base.replace(/\/$/, '');
+    const queryWithThreshold = 'select=whatsapp_url,instagram_url,show_whatsapp,show_instagram,ribbon_text,show_ribbon,cod_delivery_price,free_delivery_threshold&id=eq.default&limit=1';
+    const queryWithoutThreshold = 'select=whatsapp_url,instagram_url,show_whatsapp,show_instagram,ribbon_text,show_ribbon,cod_delivery_price&id=eq.default&limit=1';
+
+    let response = await fetch(baseUrl + '/rest/v1/store_settings?' + queryWithThreshold, {
+      headers: { apikey: key, Authorization: 'Bearer ' + key },
       cf: { cacheTtl: 0, cacheEverything: false }
     });
 
+    // Keep the existing COD fee working even before the free-delivery migration is applied.
+    if (!response.ok) {
+      response = await fetch(baseUrl + '/rest/v1/store_settings?' + queryWithoutThreshold, {
+        headers: { apikey: key, Authorization: 'Bearer ' + key },
+        cf: { cacheTtl: 0, cacheEverything: false }
+      });
+    }
     if (!response.ok) {
       return new Response(JSON.stringify(fallback), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
     }
