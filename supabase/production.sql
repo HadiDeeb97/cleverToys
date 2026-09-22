@@ -70,6 +70,10 @@ BEGIN
     server_subtotal := server_subtotal + server_unit_price * requested_qty;
   END LOOP;
 
+  IF free_delivery_threshold > 0 AND server_subtotal >= free_delivery_threshold THEN
+    cod_delivery_price := 0;
+  END IF;
+
   server_total := server_subtotal + cod_delivery_price;
   LOOP
     new_order_number := 'CT-' || to_char(now(),'YYYYMMDD') || '-' || upper(substr(md5(random()::text || clock_timestamp()::text),1,6));
