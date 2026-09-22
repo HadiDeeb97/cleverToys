@@ -251,7 +251,7 @@ document.addEventListener('keydown', event => {
 
 document.addEventListener('click', event => {
   const target = event.target instanceof Element ? event.target : null;
-  if (target?.closest('.quick-view-trigger') || target?.closest('[data-buy-now]')) return;
+  if (target?.closest('.quick-view-trigger')) return;
   const imageEl = target?.closest('.product-image-link img');
   if (!imageEl) return;
   const anchor = imageEl.closest('.product-image-link');
