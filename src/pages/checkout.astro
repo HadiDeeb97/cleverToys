@@ -18,21 +18,45 @@ const supabaseUrl=authConfig?.dataset.url;
 const supabaseKey=authConfig?.dataset.key;
 const readCart=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]').filter(i=>i&&i.productId&&Number(i.quantity)>0);}catch{return[]}};
 const money=n=>`$${Number(n||0).toFixed(2)}`;
-let deliverySettings={codDeliveryPrice:0,freeDeliveryThreshold:0};
+const brandingSettings=window.__CLEVER_BRANDING__||{};
+const brandingCodDeliveryPrice=Math.max(0,Number(brandingSettings.codDeliveryPrice||0));
+const brandingFreeDeliveryThreshold=Math.max(0,Number(brandingSettings.freeDeliveryThreshold||0));
+let deliverySettings={codDeliveryPrice:brandingCodDeliveryPrice,freeDeliveryThreshold:brandingFreeDeliveryThreshold};
 
 const updateCartCount=()=>{const totalItems=readCart().reduce((sum,item)=>sum+Math.max(0,Number(item.quantity)||0),0);if(count){count.textContent=String(totalItems);count.hidden=totalItems===0;}};
 
 const loadDeliverySettings=async()=>{
+  let loaded=false;
   try{
     const response=await fetch('/api/store-settings',{cache:'no-store'});
     if(response.ok){
       const settings=await response.json();
+      const apiCodDeliveryPrice=Math.max(0,Number(settings.codDeliveryPrice||0));
+      const apiFreeDeliveryThreshold=Math.max(0,Number(settings.freeDeliveryThreshold||0));
       deliverySettings={
-        codDeliveryPrice:Math.max(0,Number(settings.codDeliveryPrice||0)),
-        freeDeliveryThreshold:Math.max(0,Number(settings.freeDeliveryThreshold||0))
+        codDeliveryPrice:apiCodDeliveryPrice>0?apiCodDeliveryPrice:brandingCodDeliveryPrice,
+        freeDeliveryThreshold:apiFreeDeliveryThreshold>0?apiFreeDeliveryThreshold:brandingFreeDeliveryThreshold
       };
+      loaded=true;
     }
   }catch{}
+
+  if(!loaded && supabaseUrl && supabaseKey){
+    try{
+      const baseUrl=supabaseUrl.replace(/\\\/$/,'');
+      const response=await fetch(baseUrl+'/rest/v1/store_settings?select=cod_delivery_price,free_delivery_threshold&id=eq.default&limit=1',{
+        headers:{apikey:supabaseKey,Authorization:'Bearer '+supabaseKey},
+        cache:'no-store'
+      });
+      if(response.ok){
+        const row=(await response.json())?.[0]||{};
+        deliverySettings={
+          codDeliveryPrice:Math.max(0,Number(row.cod_delivery_price||0)),
+          freeDeliveryThreshold:Math.max(0,Number(row.free_delivery_threshold||0))
+        };
+      }
+    }catch{}
+  }
 };
 
 const getDeliveryFee=(subtotal)=>{
