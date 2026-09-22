@@ -21,6 +21,7 @@ DECLARE
   product_row public.products%ROWTYPE; variant_row public.product_variants%ROWTYPE;
   requested_qty integer; server_unit_price numeric(10,2); server_subtotal numeric(10,2) := 0; server_total numeric(10,2);
   customer_name_value text; customer_phone_value text; customer_email_value text; governorate_value text; city_value text; area_value text; address_value text; notes_value text;
+  cod_delivery_price numeric(10,2) := 0;
   item_product_id uuid; item_variant_id uuid; variant_name_value text; item_sku text;
 BEGIN
   customer_name_value := trim(coalesce(order_payload->>'customer_name',''));
@@ -31,6 +32,11 @@ BEGIN
   area_value := nullif(trim(coalesce(order_payload->>'area','')),'');
   address_value := nullif(trim(coalesce(order_payload->>'address','')),'');
   notes_value := nullif(trim(coalesce(order_payload->>'notes','')),'');
+  SELECT greatest(0, coalesce(s.cod_delivery_price, 0))
+  INTO cod_delivery_price
+  FROM public.store_settings AS s
+  WHERE s.id = 'default';
+  cod_delivery_price := coalesce(cod_delivery_price, 0);
 
   IF customer_name_value = '' OR length(customer_name_value) > 120 THEN RAISE EXCEPTION 'Please enter a valid customer name.'; END IF;
   IF customer_phone_value = '' OR length(customer_phone_value) > 40 THEN RAISE EXCEPTION 'Please enter a valid phone number.'; END IF;
@@ -59,12 +65,12 @@ BEGIN
     server_subtotal := server_subtotal + server_unit_price * requested_qty;
   END LOOP;
 
-  server_total := server_subtotal;
+  server_total := server_subtotal + cod_delivery_price;
   LOOP
     new_order_number := 'CT-' || to_char(now(),'YYYYMMDD') || '-' || upper(substr(md5(random()::text || clock_timestamp()::text),1,6));
     BEGIN
       INSERT INTO public.orders (order_number,customer_id,customer_name,customer_phone,customer_email,governorate,city,area,address,subtotal,delivery_fee,discount,total,payment_method,status,notes)
-      VALUES (new_order_number,auth.uid(),customer_name_value,customer_phone_value,customer_email_value,governorate_value,city_value,area_value,address_value,server_subtotal,0,0,server_total,'cash_on_delivery','pending',notes_value)
+      VALUES (new_order_number,auth.uid(),customer_name_value,customer_phone_value,customer_email_value,governorate_value,city_value,area_value,address_value,server_subtotal,cod_delivery_price,0,server_total,'cash_on_delivery','pending',notes_value)
       RETURNING id INTO new_order_id;
       EXIT;
     EXCEPTION WHEN unique_violation THEN NULL;
@@ -93,7 +99,7 @@ BEGIN
     VALUES (new_order_id,product_row.id,item_variant_id,product_row.name,variant_name_value,item_sku,requested_qty,server_unit_price,server_unit_price*requested_qty);
   END LOOP;
 
-  RETURN jsonb_build_object('order_id',new_order_id,'order_number',new_order_number,'total',server_total);
+  RETURN jsonb_build_object('order_id',new_order_id,'order_number',new_order_number,'delivery_fee',cod_delivery_price,'total',server_total);
 END;
 $$;
 
