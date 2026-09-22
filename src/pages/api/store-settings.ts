@@ -8,7 +8,8 @@ const fallback = {
   showInstagram: false,
   ribbonText: '',
   showRibbon: false,
-  codDeliveryPrice: 0
+  codDeliveryPrice: 0,
+  freeDeliveryThreshold: 0
 };
 
 export const GET: APIRoute = async () => {
@@ -19,7 +20,7 @@ export const GET: APIRoute = async () => {
       return new Response(JSON.stringify(fallback), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
     }
 
-    const response = await fetch(`${base.replace(/\/$/, '')}/rest/v1/store_settings?select=whatsapp_url,instagram_url,show_whatsapp,show_instagram,ribbon_text,show_ribbon,cod_delivery_price&id=eq.default&limit=1`, {
+    const response = await fetch(`${base.replace(/\/$/, '')}/rest/v1/store_settings?select=whatsapp_url,instagram_url,show_whatsapp,show_instagram,ribbon_text,show_ribbon,cod_delivery_price,free_delivery_threshold&id=eq.default&limit=1`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
       cf: { cacheTtl: 0, cacheEverything: false }
     });
@@ -36,7 +37,8 @@ export const GET: APIRoute = async () => {
       showInstagram: Boolean(row.show_instagram),
       ribbonText: typeof row.ribbon_text === 'string' ? row.ribbon_text.slice(0, 180) : '',
       showRibbon: Boolean(row.show_ribbon),
-      codDeliveryPrice: Math.max(0, Number(row.cod_delivery_price || 0))
+      codDeliveryPrice: Math.max(0, Number(row.cod_delivery_price || 0)),
+      freeDeliveryThreshold: Math.max(0, Number(row.free_delivery_threshold || 0))
     };
 
     return new Response(JSON.stringify(output), {
