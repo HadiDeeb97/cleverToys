@@ -6,7 +6,12 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[char]));
 
-  const money = value => `$${Number(value || 0).toFixed(2)}`;
+  const money = value => `${Number(value || 0).toFixed(2)}`;
+  const getDeliveryFee = (subtotal, branding) => {
+    const fee = getDeliveryFee(subtotal, branding);
+    const threshold = Math.max(0, Number(branding.freeDeliveryThreshold || 0));
+    return threshold > 0 && subtotal >= threshold ? 0 : fee;
+  };
   const isProductDetailPage = () => /^\/product\/[^/]+\/?$/.test(location.pathname);
 
   const readStoredCustomer = () => {
@@ -34,7 +39,8 @@
   const getBranding = () => ({
     ...(window.__CLEVER_BRANDING__ || {}),
     whatsappUrl: window.__CLEVER_BRANDING__?.whatsappUrl || fallbackWhatsappUrl,
-    codDeliveryPrice: Math.max(0, Number(window.__CLEVER_BRANDING__?.codDeliveryPrice || 0))
+    codDeliveryPrice: Math.max(0, Number(window.__CLEVER_BRANDING__?.codDeliveryPrice || 0)),
+    freeDeliveryThreshold: Math.max(0, Number(window.__CLEVER_BRANDING__?.freeDeliveryThreshold || 0))
   });
 
   const applyHeaderSocials = () => {
@@ -212,7 +218,7 @@
         : null;
       const selectedName = selected?.textContent?.trim() || '';
       const unitPrice = Number(String(priceEl.textContent || '').replace(/[^0-9.]/g, '')) || 0;
-      const delivery = Math.max(0, Number(branding.codDeliveryPrice || 0));
+      const delivery = getDeliveryFee(subtotal, branding);
       const subtotal = unitPrice * qty;
       const total = subtotal + delivery;
       const customer = readStoredCustomer();
@@ -225,7 +231,7 @@
         `🔢 Quantity: ${qty}`,
         '━━━━━━━━━━━━━━━━━━',
         `💰 Subtotal: ${money(subtotal)}`,
-        `🚚 COD delivery: ${money(delivery)}`,
+        `🚚 COD delivery: ${delivery === 0 ? 'Free' : money(delivery)}`,
         `💵 TOTAL: ${money(total)}`,
         '💳 Payment: Cash on delivery',
         customer.full_name || customer.customer_name ? '' : null,
