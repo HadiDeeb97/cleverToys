@@ -93,8 +93,10 @@ const logoUrl = supabaseUrl
         </div>
       </div>
       <div class="cod-field">
-        <label for="cod-price">COD delivery price (USD)<input id="cod-price" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" /></label>
-        <div class="price-hint"><strong id="cod-preview">$0.00</strong><span>Use 0.00 for free delivery.</span></div>
+        <label for="cod-price">COD delivery price (USD)<input id="cod-price" type="number" min="0" step="0.01" inputmode="decimal" placeholder="5.00" /></label>
+        <div class="price-hint"><strong id="cod-preview">$0.00</strong><span>Standard delivery fee when the order does not qualify for free delivery.</span></div>
+        <label for="free-delivery-threshold">Free delivery above (USD)<input id="free-delivery-threshold" type="number" min="0" step="0.01" inputmode="decimal" placeholder="60.00" /></label>
+        <div class="price-hint"><strong id="free-delivery-preview">Disabled</strong><span>Set 0.00 to disable the free-delivery threshold.</span></div>
       </div>
     </section>
 
@@ -172,6 +174,8 @@ const saveLogoButton = document.querySelector('#save-logo');
 const preview = document.querySelector('#preview');
 const codInput = document.querySelector('#cod-price');
 const codPreview = document.querySelector('#cod-preview');
+const freeDeliveryInput = document.querySelector('#free-delivery-threshold');
+const freeDeliveryPreview = document.querySelector('#free-delivery-preview');
 const ribbonText = document.querySelector('#ribbon-text');
 const ribbonPreview = document.querySelector('#ribbon-preview');
 const logoToggle = document.querySelector('#use-logo-colors');
@@ -189,7 +193,8 @@ const defaults = {
   show_instagram: false,
   ribbon_text: '',
   show_ribbon: false,
-  cod_delivery_price: 0
+  cod_delivery_price: 0,
+  free_delivery_threshold: 0
 };
 
 const themes = [
@@ -247,6 +252,11 @@ function updateRibbonPreview() {
 
 function updateCodPreview() {
   if (codPreview) codPreview.textContent = money(codInput?.value || 0);
+}
+function updateFreeDeliveryPreview() {
+  if (!freeDeliveryPreview) return;
+  const value = Math.max(0, Number(freeDeliveryInput?.value || 0));
+  freeDeliveryPreview.textContent = value > 0 ? 'Free above ' + money(value) : 'Disabled';
 }
 
 function normalizeWhatsapp(value) {
@@ -357,8 +367,10 @@ async function loadSettings() {
   ribbonText.value = settings.ribbon_text || '';
   document.querySelector('#show-ribbon').checked = Boolean(settings.show_ribbon);
   codInput.value = Number(settings.cod_delivery_price || 0).toFixed(2);
+  if (freeDeliveryInput) freeDeliveryInput.value = Number(settings.free_delivery_threshold || 0).toFixed(2);
   updateRibbonPreview();
   updateCodPreview();
+  updateFreeDeliveryPreview();
 }
 
 async function saveSettings() {
@@ -371,6 +383,7 @@ async function saveSettings() {
     ribbon_text: String(ribbonText.value || '').trim(),
     show_ribbon: document.querySelector('#show-ribbon').checked,
     cod_delivery_price: Math.max(0, Number(codInput.value || 0)),
+    free_delivery_threshold: Math.max(0, Number(freeDeliveryInput?.value || 0)),
     updated_at: new Date().toISOString()
   };
 
@@ -426,6 +439,8 @@ updateRibbonPreview();
 updateCodPreview();
 ribbonText?.addEventListener('input', updateRibbonPreview);
 codInput?.addEventListener('input', updateCodPreview);
+freeDeliveryInput?.addEventListener('input', updateFreeDeliveryPreview);
+updateFreeDeliveryPreview();
 logoToggle?.addEventListener('change', () => setLogoMode(logoToggle.checked, true));
 document.querySelector('#reset-theme')?.addEventListener('click', () => setLogoMode(true, true));
 saveSettingsButton?.addEventListener('click', async () => {
