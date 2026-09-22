@@ -1,7 +1,8 @@
 (() => {
   const CART_KEY = 'cleverToysCart';
   const STORE_NAME = 'Clever Toys';
-  const WHATSAPP_URL = 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product';
+  const DEFAULT_WHATSAPP_URL = 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product';
+  const getWhatsappUrl = () => String(window.__CLEVER_BRANDING__?.whatsappUrl || '').trim() || DEFAULT_WHATSAPP_URL;
   const branding = window.__CLEVER_BRANDING__ || {};
   const FALLBACK_LOGO = branding.logoUrl || '';
   const THEME_KEY = 'cleverToysTheme';
@@ -27,8 +28,9 @@
   const ensureControls = () => {
     if (location.pathname.startsWith('/admin')) return;
     let root = document.querySelector('.clever-floating-controls');
-    if (!root) { root = document.createElement('div'); root.className = 'clever-floating-controls'; root.innerHTML = `<a id="clever-floating-cart" class="clever-floating-cart" href="/cart" title="View your cart" aria-label="Shopping cart"><span class="floating-cart-icon" aria-hidden="true">🛒</span><span class="floating-cart-count" aria-hidden="true" hidden>0</span></a><a id="clever-floating-whatsapp" class="clever-floating-whatsapp" href="${WHATSAPP_URL}" target="_blank" rel="noopener noreferrer" aria-label="Chat with Clever Toys on WhatsApp" title="Chat with us on WhatsApp">${whatsappSvg}</a>`; document.body.appendChild(root); }
-    else { const whatsapp = root.querySelector('#clever-floating-whatsapp'); if (whatsapp) { whatsapp.href = WHATSAPP_URL; whatsapp.innerHTML = whatsappSvg; } }
+    const whatsappUrl = getWhatsappUrl();
+    if (!root) { root = document.createElement('div'); root.className = 'clever-floating-controls'; root.innerHTML = `<a id="clever-floating-cart" class="clever-floating-cart" href="/cart" title="View your cart" aria-label="Shopping cart"><span class="floating-cart-icon" aria-hidden="true">🛒</span><span class="floating-cart-count" aria-hidden="true" hidden>0</span></a><a id="clever-floating-whatsapp" class="clever-floating-whatsapp" href="${whatsappUrl}" target="_blank" rel="noopener noreferrer" aria-label="Chat with Clever Toys on WhatsApp" title="Chat with us on WhatsApp">${whatsappSvg}</a>`; document.body.appendChild(root); }
+    else { const whatsapp = root.querySelector('#clever-floating-whatsapp'); if (whatsapp) { whatsapp.href = whatsappUrl; whatsapp.innerHTML = whatsappSvg; } }
     updateCartUI();
   };
   const ensureCartLinks = () => {
@@ -36,7 +38,7 @@
     document.querySelectorAll('.main-nav').forEach(nav => { const links = [...nav.querySelectorAll('a[href="/cart"],a[href="/cart/"]')]; if (!links.length) { const cart = document.createElement('a'); cart.href = '/cart'; nav.appendChild(cart); } const all = [...nav.querySelectorAll('a[href="/cart"],a[href="/cart/"]')]; all.slice(1).forEach(link => link.remove()); });
     updateCartUI();
   };
-  const patchLogos = () => document.querySelectorAll('.logo').forEach(logo => { let image = logo.querySelector('.site-logo-image'); let text = logo.querySelector('.logo-text'); if (!image) { image = document.createElement('img'); image.className = 'site-logo-image'; image.alt = STORE_NAME; image.decoding = 'async'; logo.prepend(image); } if (!text) { text = document.createElement('span'); text.className = 'logo-text'; logo.appendChild(text); } text.textContent = STORE_NAME; if (FALLBACK_LOGO) { image.src = FALLBACK_LOGO; image.hidden = false; } });
+  const patchLogos = () => document.querySelectorAll('.logo').forEach(logo => { let image = logo.querySelector('.site-logo-image'); let text = logo.querySelector('.logo-text'); if (!image) { image = document.createElement('img'); image.className = 'site-logo-image'; image.alt = STORE_NAME; image.decoding = 'async'; image.addEventListener('error', () => { image.hidden = true; }); logo.prepend(image); } if (!text) { text = document.createElement('span'); text.className = 'logo-text'; logo.appendChild(text); } text.textContent = STORE_NAME; if (FALLBACK_LOGO) { image.src = FALLBACK_LOGO; image.hidden = false; } else { image.removeAttribute('src'); image.hidden = true; } });
   const validHex = value => /^#[0-9a-f]{6}$/i.test(String(value || ''));
   const applyTheme = theme => { if (!theme || !validHex(theme.primary) || !validHex(theme.soft) || !validHex(theme.accent)) return false; const root = document.documentElement; root.style.setProperty('--brand-primary', theme.primary); root.style.setProperty('--brand-primary-hover', theme.primary); root.style.setProperty('--brand-soft', theme.soft); root.style.setProperty('--theme-accent', theme.accent); root.style.setProperty('--brand-text-on-primary', '#fff'); try { localStorage.setItem(THEME_KEY, theme.primary); } catch {} return true; };
   const resetTheme = () => { const root = document.documentElement; root.style.setProperty('--brand-primary', DEFAULT_THEME.primary); root.style.setProperty('--brand-primary-hover', DEFAULT_THEME.primary); root.style.setProperty('--brand-soft', DEFAULT_THEME.soft); root.style.setProperty('--theme-accent', DEFAULT_THEME.accent); root.style.setProperty('--brand-text-on-primary', '#fff'); try { localStorage.removeItem(THEME_KEY); } catch {} };
