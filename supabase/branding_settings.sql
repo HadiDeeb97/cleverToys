@@ -76,10 +76,10 @@ BEGIN
   address_value := nullif(trim(coalesce(order_payload->>'address','')),'');
   notes_value := nullif(trim(coalesce(order_payload->>'notes','')),'');
 
-  SELECT greatest(0, coalesce(cod_delivery_price, 0))
+  SELECT greatest(0, coalesce(s.cod_delivery_price, 0))
   INTO cod_delivery_price
-  FROM public.store_settings
-  WHERE id = 'default';
+  FROM public.store_settings AS s
+  WHERE s.id = 'default';
   cod_delivery_price := coalesce(cod_delivery_price, 0);
 
   IF customer_name_value = '' OR length(customer_name_value) > 120 THEN
