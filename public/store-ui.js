@@ -63,5 +63,5 @@
   };
   const refresh = () => { detectDevice(); if (location.pathname.startsWith('/admin')) return; patchLogos(); ensureCartLinks(); ensureControls(); bindImageViewer(); initVisitorAnalytics(); updateCartUI(); };
   applyCachedThemeImmediately(); refresh(); loadGlobalTheme().then(refresh);
-  window.addEventListener('resize', detectDevice, { passive: true }); window.addEventListener('orientationchange', detectDevice, { passive: true }); window.addEventListener('storage', e => { if (e.key === CART_KEY) refresh(); }); window.addEventListener('clever-cart-updated', refresh); window.addEventListener('cart-updated', refresh); window.addEventListener('pageshow', refresh); document.addEventListener('DOMContentLoaded', refresh); setInterval(refresh, 500);
+  window.addEventListener('resize', detectDevice, { passive: true }); window.addEventListener('orientationchange', detectDevice, { passive: true }); window.addEventListener('storage', e => { if (e.key === CART_KEY) refresh(); }); window.addEventListener('clever-cart-updated', refresh); window.addEventListener('cart-updated', refresh); window.addEventListener('pageshow', refresh); document.addEventListener('DOMContentLoaded', refresh);;
 })();
