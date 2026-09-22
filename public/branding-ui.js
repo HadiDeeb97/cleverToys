@@ -104,62 +104,6 @@
     if (floating && branding.whatsappUrl) floating.href = branding.whatsappUrl;
   };
 
-  const patchCheckoutDelivery = async () => {
-    if (location.pathname !== '/checkout') return;
-    let branding = getBranding();
-    try {
-      const response = await fetch('/api/store-settings', { cache: 'no-store' });
-      if (response.ok) {
-        const settings = await response.json();
-        branding = { ...branding, ...settings };
-        window.__CLEVER_BRANDING__ = branding;
-      }
-    } catch {}
-
-    const fee = Math.max(0, Number(branding.codDeliveryPrice || 0));
-    const summary = document.querySelector('#checkout-summary');
-    if (!(summary instanceof HTMLElement) || !summary.textContent) return;
-
-    const cart = (() => {
-      try {
-        const items = JSON.parse(localStorage.getItem('cleverToysCart') || '[]');
-        return Array.isArray(items) ? items : [];
-      } catch {
-        return [];
-      }
-    })();
-    if (!cart.length) return;
-    const subtotal = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
-    const total = subtotal + fee;
-
-    let deliveryLine = summary.querySelector('[data-cod-delivery-line]');
-    if (!deliveryLine) {
-      deliveryLine = document.createElement('div');
-      deliveryLine.className = 'summary-line';
-      deliveryLine.dataset.codDeliveryLine = 'true';
-      deliveryLine.innerHTML = '<span>COD delivery</span><strong></strong>';
-      const totalRow = summary.querySelector('.summary-total');
-      const cartLink = summary.querySelector('.summary-cart-link');
-      if (totalRow) totalRow.before(deliveryLine);
-      else if (cartLink) summary.insertBefore(deliveryLine, cartLink);
-      else summary.appendChild(deliveryLine);
-    }
-    const feeStrong = deliveryLine.querySelector('strong');
-    if (feeStrong) feeStrong.textContent = money(fee);
-
-    const totalRow = summary.querySelector('.summary-total');
-    const totalValues = totalRow?.querySelectorAll('strong');
-    if (totalValues?.length) totalValues[totalValues.length - 1].textContent = money(total);
-
-    let style = document.getElementById('clever-checkout-delivery-style');
-    if (!style) {
-      style = document.createElement('style');
-      style.id = 'clever-checkout-delivery-style';
-      style.textContent = '.summary-line{display:flex;justify-content:space-between;gap:14px;align-items:center;margin:8px 0}.summary-total{padding-top:10px;margin-top:10px;border-top:1px solid #e2e8f0}.summary-line span{color:#475569}.summary-line strong{font-variant-numeric:tabular-nums}';
-      document.head.appendChild(style);
-    }
-  };
-
   const addWhatsappProductButton = async () => {
     if (!isProductDetailPage()) {
       document.querySelectorAll('[data-buy-whatsapp]').forEach((element) => element.remove());
@@ -218,8 +162,8 @@
         : null;
       const selectedName = selected?.textContent?.trim() || '';
       const unitPrice = Number(String(priceEl.textContent || '').replace(/[^0-9.]/g, '')) || 0;
-      const delivery = getDeliveryFee(subtotal, branding);
       const subtotal = unitPrice * qty;
+      const delivery = getDeliveryFee(subtotal, branding);
       const total = subtotal + delivery;
       const customer = readStoredCustomer();
       const lines = [
@@ -251,7 +195,6 @@
     applyHeaderSocials();
     moveRibbonBelowHeader();
     patchFloatingWhatsapp();
-    await patchCheckoutDelivery();
     await addWhatsappProductButton();
   };
 
