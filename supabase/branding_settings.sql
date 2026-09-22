@@ -10,9 +10,11 @@ CREATE TABLE IF NOT EXISTS public.store_settings (
   ribbon_text text NOT NULL DEFAULT '',
   show_ribbon boolean NOT NULL DEFAULT false,
   cod_delivery_price numeric(10,2) NOT NULL DEFAULT 0 CHECK (cod_delivery_price >= 0),
+  free_delivery_threshold numeric(10,2) NOT NULL DEFAULT 0 CHECK (free_delivery_threshold >= 0),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS free_delivery_threshold numeric(10,2) NOT NULL DEFAULT 0;
 ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Public can view store settings" ON public.store_settings;
@@ -54,6 +56,7 @@ DECLARE
   server_subtotal numeric(10,2) := 0;
   server_total numeric(10,2);
   cod_delivery_price numeric(10,2) := 0;
+  free_delivery_threshold numeric(10,2) := 0;
   customer_name_value text;
   customer_phone_value text;
   customer_email_value text;
@@ -76,11 +79,13 @@ BEGIN
   address_value := nullif(trim(coalesce(order_payload->>'address','')),'');
   notes_value := nullif(trim(coalesce(order_payload->>'notes','')),'');
 
-  SELECT greatest(0, coalesce(s.cod_delivery_price, 0))
-  INTO cod_delivery_price
+  SELECT greatest(0, coalesce(s.cod_delivery_price, 0)),
+         greatest(0, coalesce(s.free_delivery_threshold, 0))
+  INTO cod_delivery_price, free_delivery_threshold
   FROM public.store_settings AS s
   WHERE s.id = 'default';
   cod_delivery_price := coalesce(cod_delivery_price, 0);
+  free_delivery_threshold := coalesce(free_delivery_threshold, 0);
 
   IF customer_name_value = '' OR length(customer_name_value) > 120 THEN
     RAISE EXCEPTION 'Please enter a valid customer name.';
@@ -139,6 +144,10 @@ BEGIN
 
     server_subtotal := server_subtotal + server_unit_price * requested_qty;
   END LOOP;
+
+  IF free_delivery_threshold > 0 AND server_subtotal >= free_delivery_threshold THEN
+    cod_delivery_price := 0;
+  END IF;
 
   server_total := server_subtotal + cod_delivery_price;
 
