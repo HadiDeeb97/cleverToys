@@ -179,7 +179,10 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     if (!path.startsWith('/admin')) {
       const active = (href: string) => path === href || (href !== '/' && path.startsWith(href + '/'));
       const navLink = (href: string, label: string) => `<a href="${href}"${active(href) ? ' aria-current="page"' : ''}>${label}</a>`;
-      const standardHeader = `<header class="site-header" data-clever-standard-header><div class="container header-inner"><a href="/" class="logo" aria-label="Clever Toys home">${logoMarkup}</a><nav class="main-nav" aria-label="Main navigation">${navLink('/', 'Home')}${navLink('/products', 'Shop')}${navLink('/categories', 'Categories')}${navLink('/account', 'Account')}<a href="/cart" class="cart-link" aria-label="Shopping cart">Cart <span class="cart-count-badge" aria-hidden="true" hidden>0</span></a></nav></div></header>`;
+      const standardLogoMarkup = logoUrl
+        ? `<img class="site-logo-image" src="${escapeAttr(logoUrl)}" alt="Clever Toys" decoding="async" onerror="this.hidden=true"><span class="logo-text">Clever Toys</span>`
+        : '<span class="logo-text">Clever Toys</span>';
+      const standardHeader = `<header class="site-header" data-clever-standard-header><div class="container header-inner"><a href="/" class="logo" aria-label="Clever Toys home">${standardLogoMarkup}</a><nav class="main-nav" aria-label="Main navigation">${navLink('/', 'Home')}${navLink('/products', 'Shop')}${navLink('/categories', 'Categories')}${navLink('/account', 'Account')}<a href="/cart" class="cart-link" aria-label="Shopping cart">Cart <span class="cart-count-badge" aria-hidden="true" hidden>0</span></a></nav></div></header>`;
       const headerPattern = /<header([^>]*class=["'][^"']*site-header[^"']*["'][^>]*)>[\s\S]*?<\/header>/i;
       if (headerPattern.test(output)) {
         output = output.replace(headerPattern, standardHeader);
