@@ -157,10 +157,6 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
           <h2><a href={`/product/${product.slug}`}>{product.name}</a></h2>
           {product.short_description&&<p>{product.short_description}</p>}
           <div class="shop-price"><span class="price">${displayPrice.toFixed(2)}</span>{originalPrice!=null&&<span class="shop-original-price">${originalPrice.toFixed(2)}</span>}</div>
-          <div class="buy-now-box">
-            <label class="buy-qty">Qty<input type="number" min="1" max={Math.max(1, Number(product.stock_quantity || 0))} value="1" inputmode="numeric" disabled={!inStock} data-buy-qty /></label>
-            <button class="button whatsapp-buy" type="button" data-buy-now data-product-id={product.id} data-product-name={product.name} data-product-price={displayPrice.toFixed(2)} data-product-stock={product.stock_quantity} disabled={!inStock}>Buy Now on WhatsApp</button>
-          </div>
           <a class="view-product" href={`/product/${product.slug}`}>{inStock?'View product':'View details'}</a>
         </div>
       </article>;
@@ -192,75 +188,6 @@ const setFilterOpen = (open) => {
 };
 filterToggle?.addEventListener('click', () => setFilterOpen(filterPanel?.hidden !== false));
 filterClose?.addEventListener('click', () => setFilterOpen(false));
-
-const money = value => `$${Number(value || 0).toFixed(2)}`;
-const readCustomer = () => {
-  try {
-    const raw = JSON.parse(localStorage.getItem('cleverToysCustomer') || '{}');
-    return raw && typeof raw === 'object' ? raw : {};
-  } catch {
-    return {};
-  }
-};
-const whatsappHref = (baseUrl, message) => {
-  const encoded = encodeURIComponent(message);
-  try {
-    const url = new URL(baseUrl || 'https://wa.me/96171220251');
-    if (url.hostname.toLowerCase().includes('wa.me') || url.hostname.toLowerCase().includes('whatsapp.com')) {
-      url.searchParams.set('text', message);
-      return url.toString();
-    }
-    return `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}text=${encoded}`;
-  } catch {
-    return `https://wa.me/96171220251?text=${encoded}`;
-  }
-};
-const buildReceipt = ({name, price, quantity, customer, deliveryFee}) => {
-  const subtotal = price * quantity;
-  const total = subtotal + deliveryFee;
-  const lines = [
-    '🧸 CLEVER TOYS — WHATSAPP ORDER',
-    '────────────────────────',
-    `🧸 ${name}`,
-    `🔢 Quantity: ${quantity}`,
-    `💵 Unit price: ${money(price)}`,
-    `🧾 Subtotal: ${money(subtotal)}`,
-    `🚚 COD delivery: ${money(deliveryFee)}`,
-    `💰 TOTAL: ${money(total)}`,
-    '💳 Payment: Cash on delivery'
-  ];
-  const customerLines = [];
-  if (customer.full_name || customer.customer_name) customerLines.push(`👤 Name: ${customer.full_name || customer.customer_name}`);
-  if (customer.phone || customer.customer_phone) customerLines.push(`📞 Phone: ${customer.phone || customer.customer_phone}`);
-  if (customer.email || customer.customer_email) customerLines.push(`✉️ Email: ${customer.email || customer.customer_email}`);
-  const location = [customer.governorate, customer.city, customer.area].filter(Boolean).join(' · ');
-  if (location) customerLines.push(`📍 ${location}`);
-  if (customer.address) customerLines.push(`🏠 Address: ${customer.address}`);
-  if (customerLines.length) lines.push('', '👤 CUSTOMER', ...customerLines);
-  lines.push('', 'Please confirm my order.');
-  return lines.join('\n');
-};
-
-document.querySelectorAll('[data-buy-now]').forEach(button => {
-  button.addEventListener('click', () => {
-    const card = button.closest('.product-card');
-    const qtyInput = card?.querySelector('[data-buy-qty]');
-    const quantity = Math.max(1, Math.floor(Number(qtyInput?.value || 1)));
-    const stock = Math.max(0, Math.floor(Number(button.dataset.productStock || 0)));
-    if (stock && quantity > stock) {
-      if (qtyInput) qtyInput.value = String(stock);
-      qtyInput?.focus();
-      return;
-    }
-    if (qtyInput) qtyInput.value = String(quantity);
-    const price = Number(button.dataset.productPrice || 0);
-    const name = String(button.dataset.productName || 'Toy');
-    const branding = window.__CLEVER_BRANDING__ || {};
-    const deliveryFee = Math.max(0, Number(branding.codDeliveryPrice || 0));
-    const message = buildReceipt({name, price, quantity, customer: readCustomer(), deliveryFee});
-    window.open(whatsappHref(branding.whatsappUrl || 'https://wa.me/96171220251', message), '_blank', 'noopener,noreferrer');
-  });
-});
 
 const modal = document.querySelector('#quick-view-modal');
 const modalImage = document.querySelector('#quick-view-image');
@@ -333,4 +260,5 @@ document.addEventListener('click', event => {
   event.stopImmediatePropagation();
   location.href = anchor.href;
 }, true);
+
 </script>
