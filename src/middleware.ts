@@ -101,7 +101,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     ? `<style id="clever-theme">:root{--brand-primary:${published.theme.primary};--brand-primary-hover:${published.theme.primary};--brand-soft:${published.theme.soft};--brand-text-on-primary:#fff;--theme-accent:${published.theme.accent}}</style>`
     : '';
   const requiredFieldStyle = `<style id="clever-required-fields">.form-card label:has(input:required),.form-card label:has(textarea:required),.form-card label:has(select:required){position:relative;padding-left:13px!important}.form-card label:has(input:required)::after,.form-card label:has(textarea:required)::after,.form-card label:has(select:required)::after{content:'*';position:absolute;left:0;top:0;margin:0;color:#e11d48;font-weight:900;font-size:1em;line-height:1.25;pointer-events:none}.form-card label:has(input:required) input,.form-card label:has(textarea:required) textarea,.form-card label:has(select:required) select{margin-top:0}@media(max-width:640px){.form-card label:has(input:required),.form-card label:has(textarea:required),.form-card label:has(select:required){padding-left:12px!important}}</style>`;
-  const storeScript = '<script src="/store-ui.js?v=20260915-globaltheme4" defer></script><script src="/branding-ui.js?v=20260922-1" defer></script>';
+  const storeScript = '<script src="/store-ui.js?v=20260922-2" defer></script><script src="/branding-ui.js?v=20260922-3" defer></script>';
   const adminBrandingLink = path.startsWith('/admin') && !path.startsWith('/admin/branding') ? '<a href="/admin/branding">Branding</a>' : '';
   const adminSeoLink = path.startsWith('/admin') && !path.startsWith('/admin/seo') ? '<a href="/admin/seo">SEO</a>' : '';
   let output = html;
@@ -173,6 +173,20 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     const ribbon = showRibbon
       ? `<div class="clever-ribbon" role="status"><div class="container">${escapeHtml(ribbonText)}</div></div>`
       : '';
+
+    // Normalize the public storefront header on every page so individual page templates
+    // cannot produce different layouts, missing links, or overlapping mobile navigation.
+    if (!path.startsWith('/admin')) {
+      const active = (href: string) => path === href || (href !== '/' && path.startsWith(href + '/'));
+      const navLink = (href: string, label: string) => `<a href="${href}"${active(href) ? ' aria-current="page"' : ''}>${label}</a>`;
+      const standardHeader = `<header class="site-header" data-clever-standard-header><div class="container header-inner"><a href="/" class="logo" aria-label="Clever Toys home">${logoMarkup}</a><nav class="main-nav" aria-label="Main navigation">${navLink('/', 'Home')}${navLink('/products', 'Shop')}${navLink('/categories', 'Categories')}${navLink('/account', 'Account')}<a href="/cart" class="cart-link" aria-label="Shopping cart">Cart <span class="cart-count-badge" aria-hidden="true" hidden>0</span></a></nav></div></header>`;
+      const headerPattern = /<header([^>]*class=["'][^"']*site-header[^"']*["'][^>]*)>[\s\S]*?<\/header>/i;
+      if (headerPattern.test(output)) {
+        output = output.replace(headerPattern, standardHeader);
+      } else {
+        output = output.replace(/<body([^>]*)>/i, (match) => `${match}${standardHeader}`);
+      }
+    }
 
     if (headerSocials) {
       output = output.replace(/(<nav[^>]*class=[\"'][^\"']*main-nav[^\"']*[\"'][^>]*>)([\s\S]*?)(<\/nav>)/gi, (match, open, body, close) => {
