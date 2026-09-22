@@ -62,7 +62,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   if (!path.startsWith('/admin') && !path.startsWith('/api') && base && publishableKey) {
     try {
-      const settingsResponse = await fetch(`${base.replace(/\/$/, '')}/rest/v1/store_settings?select=whatsapp_url,instagram_url,show_whatsapp,show_instagram,ribbon_text,show_ribbon,cod_delivery_price&id=eq.default&limit=1`, {
+      const settingsResponse = await fetch(`${base.replace(/\/$/, '')}/rest/v1/store_settings?select=whatsapp_url,instagram_url,show_whatsapp,show_instagram,ribbon_text,show_ribbon,cod_delivery_price,free_delivery_threshold&id=eq.default&limit=1`, {
         headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
         cf: { cacheTtl: 0, cacheEverything: false }
       });
@@ -93,7 +93,8 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     showInstagram,
     ribbonText,
     showRibbon,
-    codDeliveryPrice
+    codDeliveryPrice,
+    freeDeliveryThreshold: Math.max(0, Number(storeSettings.free_delivery_threshold || 0))
   };
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify(branding)};</script>`;
   const earlyTheme = published.mode === 'theme' && published.theme
