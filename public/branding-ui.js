@@ -40,35 +40,48 @@
   const applyHeaderSocials = () => {
     if (location.pathname.startsWith('/admin')) return;
     const branding = getBranding();
-    const header = document.querySelector('header.site-header');
-    const nav = header?.querySelector('.main-nav');
-    if (!header || !nav) return;
+
+    document.querySelectorAll('header.site-header').forEach((header) => {
+      const headerInner = header.querySelector('.header-inner');
+      if (!headerInner) return;
+
+      let nav = headerInner.querySelector('.main-nav');
+      if (!nav) {
+        nav = document.createElement('nav');
+        nav.className = 'main-nav';
+        nav.setAttribute('aria-label', 'Main navigation');
+        headerInner.appendChild(nav);
+      }
+
+      let socials = nav.querySelector('.clever-header-socials');
+      if (!socials) {
+        socials = document.createElement('span');
+        socials.className = 'clever-header-socials';
+        socials.setAttribute('aria-label', 'Social links');
+        nav.appendChild(socials);
+      }
+
+      const whatsappIcon = '<svg class="clever-header-social-icon" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13.25" fill="#25D366"/><path d="M11.5 9.8c-.35 0-.72.08-1.02.45-.4.45-1.3 1.27-1.3 3.1 0 1.82 1.33 3.57 1.52 3.81.19.25 2.55 3.99 6.21 5.42 3.07 1.2 3.69.96 4.35.9.66-.06 2.12-.87 2.42-1.71.3-.84.3-1.56.21-1.71-.09-.15-.35-.25-.74-.45-.39-.2-2.3-1.14-2.66-1.27-.36-.14-.63-.2-.89.2-.26.4-1.02 1.27-1.25 1.53-.23.26-.46.3-.85.1-.39-.2-1.65-.61-3.15-1.95-1.16-1.03-1.94-2.3-2.17-2.69-.23-.4-.02-.61.18-.81.18-.18.39-.46.58-.69.2-.23.26-.4.39-.65.13-.26.06-.49-.03-.69-.1-.2-.89-2.12-1.22-2.9-.32-.75-.66-.65-.89-.65h-.76Z" fill="#fff"/></svg>';
+      const instagramIcon = '<svg class="clever-header-social-icon" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="clever-instagram-gradient" x1="5" y1="27" x2="27" y2="5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFDC80"/><stop offset=".35" stop-color="#F77737"/><stop offset=".67" stop-color="#E1306C"/><stop offset="1" stop-color="#833AB4"/></linearGradient></defs><rect x="5.25" y="5.25" width="21.5" height="21.5" rx="6" fill="none" stroke="url(#clever-instagram-gradient)" stroke-width="2.4"/><circle cx="16" cy="16" r="5" fill="none" stroke="url(#clever-instagram-gradient)" stroke-width="2.4"/><circle cx="22.4" cy="9.7" r="1.55" fill="#E1306C"/></svg>';
+
+      const links = [];
+      if (branding.showWhatsapp && branding.whatsappUrl) {
+        links.push('<a class="clever-header-social clever-header-whatsapp" href="' + escapeHtml(branding.whatsappUrl) + '" target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="Chat with Clever Toys on WhatsApp">' + whatsappIcon + '</a>');
+      }
+      if (branding.showInstagram && branding.instagramUrl) {
+        links.push('<a class="clever-header-social clever-header-instagram" href="' + escapeHtml(branding.instagramUrl) + '" target="_blank" rel="noopener noreferrer" title="Instagram" aria-label="Clever Toys on Instagram">' + instagramIcon + '</a>');
+      }
+      socials.innerHTML = links.join('');
+      socials.hidden = links.length === 0;
+    });
 
     document.querySelector('.clever-topbar')?.remove();
-
-    let socials = nav.querySelector('.clever-header-socials');
-    if (!socials) {
-      socials = document.createElement('span');
-      socials.className = 'clever-header-socials';
-      socials.setAttribute('aria-label', 'Social links');
-      nav.appendChild(socials);
-    }
-
-    const links = [];
-    if (branding.showWhatsapp && branding.whatsappUrl) {
-      links.push(`<a class="clever-header-social clever-header-whatsapp" href="${escapeHtml(branding.whatsappUrl)}" target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="Chat with Clever Toys on WhatsApp">🟢</a>`);
-    }
-    if (branding.showInstagram && branding.instagramUrl) {
-      links.push(`<a class="clever-header-social clever-header-instagram" href="${escapeHtml(branding.instagramUrl)}" target="_blank" rel="noopener noreferrer" title="Instagram" aria-label="Clever Toys on Instagram">📸</a>`);
-    }
-    socials.innerHTML = links.join('');
-    socials.hidden = links.length === 0;
 
     let styles = document.getElementById('clever-header-social-styles');
     if (!styles) {
       styles = document.createElement('style');
       styles.id = 'clever-header-social-styles';
-      styles.textContent = `.clever-header-socials{display:inline-flex;align-items:center;gap:6px;margin-left:2px}.clever-header-social{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:999px;text-decoration:none;font-size:18px;line-height:1;background:rgba(15,23,42,.05);transition:transform .16s ease,background .16s ease;flex:0 0 auto}.clever-header-social:hover{transform:translateY(-1px);background:rgba(15,23,42,.1)}.clever-header-whatsapp{background:rgba(37,211,102,.12)}.clever-header-whatsapp:hover{background:rgba(37,211,102,.2)}.clever-header-instagram{background:rgba(225,48,108,.1)}.clever-header-instagram:hover{background:rgba(225,48,108,.18)}@media(max-width:640px){.clever-header-social{width:32px;height:32px;font-size:17px}.clever-header-socials{gap:4px}}`;
+      styles.textContent = '.clever-header-socials{display:inline-flex;align-items:center;gap:6px;margin-left:2px}.clever-header-social{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:999px;text-decoration:none;line-height:1;transition:transform .16s ease,background .16s ease;flex:0 0 auto}.clever-header-social:hover{transform:translateY(-1px)}.clever-header-social-icon{display:block;width:20px;height:20px}.clever-header-whatsapp:hover{background:rgba(37,211,102,.08)}.clever-header-instagram:hover{background:rgba(225,48,108,.08)}@media(max-width:640px){.clever-header-social{width:32px;height:32px}.clever-header-social-icon{width:19px;height:19px}.clever-header-socials{gap:4px}}';
       document.head.appendChild(styles);
     }
   };
