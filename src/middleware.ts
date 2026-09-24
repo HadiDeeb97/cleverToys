@@ -248,6 +248,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       ['/admin/accounting', 'Accounting', '<path d="M4 4h16v16H4zM4 9h16M9 9v11M13 13h4M13 17h4"/>'],
       ['/admin', 'Products', '<path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/>'],
       ['/admin/analytics', 'Visitors', '<path d="M3 20V10M9 20V4M15 20v-7M21 20v-11"/>'],
+      ['/admin/team', 'Team', '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>'],
       ['/admin/seo', 'SEO', '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'],
       ['/admin/branding', 'Branding & settings', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>']
     ];

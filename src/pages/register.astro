@@ -9,34 +9,59 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
   <meta name="description" content="Create your Clever Toys customer account to track your orders and manage your details." />
 </head>
 <header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart">Cart</a><a href="/login">Sign in</a></nav></div></header>
-<main class="section"><div class="container narrow"><div class="section-header"><h1>Create your account</h1><p>Save your details and track your Clever Toys orders.</p></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><form id="register-form" class="form-card"><label>Full name<input name="full_name" required autocomplete="name"></label><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label>Confirm password<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label><button class="button" type="submit">Create Account</button><p id="message" role="status"></p><p>Already have an account? <a href="/login"><strong>Sign in</strong></a></p></form></div></main>
+<main class="section"><div class="container narrow"><div class="section-header"><h1>Create your account</h1><p>Save your details and track your Clever Toys orders.</p></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><form id="register-form" class="form-card"><label>Full name<input name="full_name" required autocomplete="name"></label><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label>Confirm password<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label><button class="button" type="submit">Create Account</button><p id="message" role="status"></p><button id="resend" class="button secondary-button" type="button" hidden>Resend confirmation email</button><p>Already have an account? <a href="/login"><strong>Sign in</strong></a></p></form></div></main>
 <script>
 import { createClient } from '@supabase/supabase-js';
-const config = document.querySelector('#auth-config');
+import { authMessage } from '../scripts/auth-messages';
+const config = document.querySelector<HTMLElement>('#auth-config');
 const url = config?.dataset.url;
 const key = config?.dataset.key;
-const form = document.querySelector('#register-form');
-const msg = document.querySelector('#message');
-let supabase;
+const form = document.querySelector<HTMLFormElement>('#register-form');
+const msg = document.querySelector<HTMLElement>('#message')!;
+const resend = document.querySelector<HTMLButtonElement>('#resend')!;
+// After clicking the link in the confirmation email, customers land on the sign-in page, which signs them in.
+const emailRedirectTo = `${location.origin}/login?confirmed=1`;
+let supabase: ReturnType<typeof createClient> | undefined;
+let pendingEmail = '';
 try {
   if (!url || !key) throw new Error('Supabase browser configuration is missing.');
   supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
 } catch (error) {
-  msg.textContent = error?.message || 'Could not initialize account creation.';
+  msg.textContent = error instanceof Error ? error.message : 'Could not initialize account creation.';
 }
 form?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!supabase) return;
   const data = Object.fromEntries(new FormData(form));
+  const email = String(data.email || '').trim();
   const password = String(data.password || '');
   if (password !== String(data.confirm_password || '')) { msg.textContent = 'Passwords do not match.'; return; }
+  const submit = form.querySelector<HTMLButtonElement>('button[type=submit]');
+  if (submit) submit.disabled = true;
+  resend.hidden = true;
   msg.textContent = 'Creating your account…';
   const { data: result, error } = await supabase.auth.signUp({
-    email: String(data.email).trim(), password,
-    options: { data: { full_name: String(data.full_name).trim() } }
+    email, password,
+    options: { emailRedirectTo, data: { full_name: String(data.full_name || '').trim() } }
   });
-  if (error) { msg.textContent = error.message; return; }
-  if (result.session) location.href = '/account';
-  else msg.textContent = 'Account created. Check your email to confirm your account, then sign in.';
+  if (submit) submit.disabled = false;
+  if (error) { msg.textContent = authMessage(error, 'Could not create your account.'); return; }
+  if (result.session) { location.href = '/account'; return; }
+  // With email confirmation on, Supabase hides whether an email is taken by returning a user with no identities.
+  if (result.user && Array.isArray(result.user.identities) && result.user.identities.length === 0) {
+    msg.innerHTML = 'An account with this email already exists. <a href="/login"><strong>Sign in</strong></a> or <a href="/forgot-password">reset your password</a>.';
+    return;
+  }
+  pendingEmail = email;
+  form.querySelectorAll('input').forEach((input) => { if (input.type === 'password') input.value = ''; });
+  msg.textContent = `Almost done! We sent a confirmation link to ${email}. Open it to activate your account (check your spam folder too).`;
+  resend.hidden = false;
+});
+resend.addEventListener('click', async () => {
+  if (!supabase || !pendingEmail) return;
+  resend.disabled = true;
+  const { error } = await supabase.auth.resend({ type: 'signup', email: pendingEmail, options: { emailRedirectTo } });
+  msg.textContent = error ? authMessage(error, 'Could not resend the email.') : `We sent a new confirmation link to ${pendingEmail}.`;
+  setTimeout(() => { resend.disabled = false; }, 30000);
 });
 </script>

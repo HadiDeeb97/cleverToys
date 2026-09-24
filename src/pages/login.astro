@@ -11,18 +11,21 @@ const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '';
   <meta name="description" content="Sign in to your Clever Toys account or admin dashboard." />
 </head>
 <header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart">Cart</a></nav></div></header>
-<main class="section"><div class="container narrow"><div class="section-header"><h1>Sign in</h1><p>Access your Clever Toys account or admin dashboard.</p></div><div id="login-config" data-url={supabaseUrl} data-key={supabaseKey} data-next={safeNext} hidden></div><form id="login-form" class="form-card"><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign In</button><p id="message" role="status"></p><p><a href="/forgot-password">Forgot your password?</a></p><p>New to Clever Toys? <a href="/register"><strong>Create an account</strong></a></p></form></div></main>
+<main class="section"><div class="container narrow"><div class="section-header"><h1>Sign in</h1><p>Access your Clever Toys account or admin dashboard.</p></div><div id="login-config" data-url={supabaseUrl} data-key={supabaseKey} data-next={safeNext} hidden></div><form id="login-form" class="form-card"><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign In</button><p id="message" role="status"></p><button id="resend" class="button secondary-button" type="button" hidden>Resend confirmation email</button><p><a href="/forgot-password">Forgot your password?</a></p><p>New to Clever Toys? <a href="/register"><strong>Create an account</strong></a></p></form></div></main>
 <script>
   import { createClient } from '@supabase/supabase-js';
+  import { authMessage, needsConfirmation } from '../scripts/auth-messages';
 
-  const config = document.querySelector('#login-config');
+  const config = document.querySelector<HTMLElement>('#login-config');
   const url = config?.dataset.url;
   const key = config?.dataset.key;
   const next = config?.dataset.next || '';
-  const form = document.querySelector('#login-form');
-  const msg = document.querySelector('#message');
+  const form = document.querySelector<HTMLFormElement>('#login-form');
+  const msg = document.querySelector<HTMLElement>('#message')!;
+  const resend = document.querySelector<HTMLButtonElement>('#resend')!;
+  const emailRedirectTo = `${location.origin}/login?confirmed=1`;
 
-  let supabase;
+  let supabase: ReturnType<typeof createClient> | undefined;
 
   try {
     if (!url || !key) throw new Error('Supabase browser configuration is missing on the Worker.');
@@ -34,13 +37,39 @@ const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '';
       }
     });
   } catch (error) {
-    msg.textContent = error?.message || 'Could not initialize sign-in.';
+    msg.textContent = error instanceof Error ? error.message : 'Could not initialize sign-in.';
+  }
+
+  async function goToDashboard() {
+    if (!supabase) return;
+    const { data: admin, error: adminError } = await supabase.rpc('is_admin');
+    if (adminError) {
+      msg.textContent = adminError.message;
+      return;
+    }
+    location.href = next || (admin ? '/admin' : '/account');
+  }
+
+  // The confirmation email links back here; the client reads the session from the link and signs the customer in.
+  const params = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(location.hash.slice(1));
+  if (supabase && params.has('confirmed')) {
+    if (hash.get('error_description') || params.get('error_description')) {
+      msg.textContent = 'This confirmation link has expired or was already used. Sign in below, or request a new link.';
+    } else {
+      msg.textContent = 'Email confirmed! Signing you in…';
+      supabase.auth.getSession().then(({ data }) => {
+        if (data.session) goToDashboard();
+        else msg.textContent = 'Your email is confirmed. Sign in below.';
+      });
+    }
   }
 
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!supabase) return;
     msg.textContent = 'Signing in…';
+    resend.hidden = true;
 
     const data = Object.fromEntries(new FormData(form));
     const { data: signInData, error } = await supabase.auth.signInWithPassword({
@@ -49,7 +78,8 @@ const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '';
     });
 
     if (error) {
-      msg.textContent = error.message;
+      msg.textContent = authMessage(error, 'Could not sign in.');
+      resend.hidden = !needsConfirmation(error);
       return;
     }
 
@@ -58,12 +88,16 @@ const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '';
       return;
     }
 
-    const { data: admin, error: adminError } = await supabase.rpc('is_admin');
-    if (adminError) {
-      msg.textContent = adminError.message;
-      return;
-    }
+    await goToDashboard();
+  });
 
-    location.href = next || (admin ? '/admin' : '/account');
+  resend.addEventListener('click', async () => {
+    if (!supabase || !form) return;
+    const email = String(new FormData(form).get('email') || '').trim();
+    if (!email) { msg.textContent = 'Enter your email above first.'; return; }
+    resend.disabled = true;
+    const { error } = await supabase.auth.resend({ type: 'signup', email, options: { emailRedirectTo } });
+    msg.textContent = error ? authMessage(error, 'Could not resend the email.') : `We sent a new confirmation link to ${email}. Check your inbox and spam folder.`;
+    setTimeout(() => { resend.disabled = false; }, 30000);
   });
 </script>

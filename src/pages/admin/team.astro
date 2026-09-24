@@ -1,0 +1,172 @@
+---
+import '../../styles/global.css';
+import { supabaseConfig } from '../../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
+---
+<head>
+  <title>Team | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Access</p>
+        <h1>Team</h1>
+        <p>Choose who can open this admin panel.</p>
+      </div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+
+    <div id="app" hidden>
+      <div id="setup-notice" class="acc-notice" hidden>
+        Team management needs one database update. In Supabase, open <strong>SQL Editor</strong>, paste the contents of <code>supabase/accounts_and_admins.sql</code> and press <strong>Run</strong>. Then reload this page.
+      </div>
+
+      <div class="team-layout">
+        <section class="admin-panel" aria-labelledby="add-title">
+          <h2 id="add-title">Add an admin</h2>
+          <ol class="team-steps">
+            <li>Ask the person to <a href="/register" target="_blank" rel="noopener">create an account</a> on the store and confirm their email.</li>
+            <li>Enter the email they signed up with below.</li>
+            <li>They sign out and back in, and the admin panel opens for them.</li>
+          </ol>
+          <form id="add-form" class="team-form">
+            <label for="add-email" class="acc-label">Account email</label>
+            <div class="team-form-row">
+              <input id="add-email" class="admin-input" type="email" required autocomplete="off" placeholder="name@example.com" />
+              <button id="add-button" class="button" type="submit">Make admin</button>
+            </div>
+            <p id="add-message" class="team-message" role="status"></p>
+          </form>
+          <p class="team-warning">Admins can see every order and customer, and change products, prices, settings and the admin team. Only add people you trust.</p>
+        </section>
+
+        <section class="admin-panel" aria-labelledby="list-title">
+          <div class="team-list-head"><h2 id="list-title">Current admins</h2><span id="admin-count" class="chip"></span></div>
+          <div id="admin-list" class="team-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+import { createClient } from '@supabase/supabase-js';
+
+type Admin = { user_id: string; email: string; added_at: string | null; last_sign_in_at: string | null; is_you: boolean };
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+const toast = (message: string, tone = 'success') => (window as any).adminToast?.(message, tone);
+const when = (v: string | null) => v ? new Date(v).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Never';
+// PostgREST reports a missing function as PGRST202 (or 42883 from Postgres).
+const missingFunction = (error: { code?: string; message?: string } | null) => Boolean(error && (error.code === 'PGRST202' || error.code === '42883' || /could not find the function/i.test(error.message || '')));
+
+let supabase: ReturnType<typeof createClient>;
+let admins: Admin[] = [];
+
+function render() {
+  $('#admin-count').textContent = `${admins.length} ${admins.length === 1 ? 'admin' : 'admins'}`;
+  $('#admin-list').innerHTML = admins.map((a) => `
+    <div class="team-row">
+      <span class="team-avatar" aria-hidden="true">${esc((a.email || '?').charAt(0).toUpperCase())}</span>
+      <div class="team-info">
+        <strong>${esc(a.email)}${a.is_you ? ' <span class="team-you">You</span>' : ''}</strong>
+        <small>Admin since ${esc(when(a.added_at))} · Last sign-in ${esc(when(a.last_sign_in_at))}</small>
+      </div>
+      ${a.is_you || admins.length <= 1 ? '' : `<button type="button" class="small-button danger-button" data-remove="${esc(a.user_id)}" data-email="${esc(a.email)}">Remove</button>`}
+    </div>`).join('') || '<p class="muted">No admins found.</p>';
+  document.querySelectorAll<HTMLButtonElement>('[data-remove]').forEach((button) => {
+    button.onclick = () => remove(button.dataset.remove || '', button.dataset.email || '', button);
+  });
+}
+
+async function load() {
+  const { data, error } = await supabase.rpc('admin_list_admins');
+  if (missingFunction(error)) {
+    $('#setup-notice').hidden = false;
+    $<HTMLButtonElement>('#add-button').disabled = true;
+    $('#admin-list').innerHTML = '<p class="muted">The admin list appears here after the database update.</p>';
+    return;
+  }
+  if (error) throw new Error(error.message);
+  admins = (data as Admin[]) || [];
+  render();
+}
+
+async function remove(userId: string, email: string, button: HTMLButtonElement) {
+  if (!userId || !confirm(`Remove admin access for ${email}? Their customer account stays active.`)) return;
+  button.disabled = true;
+  const { error } = await supabase.rpc('admin_remove_admin', { p_user_id: userId });
+  if (error) { button.disabled = false; toast(error.message, 'error'); return; }
+  toast(`${email} is no longer an admin.`);
+  await load();
+}
+
+$('#add-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const input = $<HTMLInputElement>('#add-email');
+  const button = $<HTMLButtonElement>('#add-button');
+  const message = $('#add-message');
+  const email = input.value.trim();
+  if (!email) return;
+  button.disabled = true;
+  message.textContent = 'Adding…';
+  const { data, error } = await supabase.rpc('admin_add_admin', { p_email: email });
+  button.disabled = false;
+  if (error) { message.textContent = error.message; toast('Could not add admin.', 'error'); return; }
+  if (data === 'already_admin') { message.textContent = `${email} is already an admin.`; return; }
+  message.textContent = `${email} is now an admin. They need to sign out and back in.`;
+  toast(`${email} added as admin.`);
+  input.value = '';
+  await load();
+});
+
+async function init() {
+  const guard = $('#guard');
+  try {
+    const cfg = $('#auth-config');
+    const url = cfg.dataset.url, key = cfg.dataset.key;
+    if (!url || !key) throw new Error('Supabase browser configuration is missing.');
+    supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) { location.href = `/login?next=${encodeURIComponent('/admin/team')}`; return; }
+    const { data: isAdmin, error } = await supabase.rpc('is_admin');
+    if (error) throw new Error(error.message);
+    if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><a class="button" href="/">Back to store</a>'; return; }
+    guard.hidden = true;
+    $('#app').hidden = false;
+    await load();
+  } catch (error) {
+    guard.hidden = false;
+    guard.innerHTML = `<h2>Team could not load</h2><p>${esc(error instanceof Error ? error.message : 'Unknown error')}</p>`;
+  }
+}
+init();
+</script>
+
+<style is:global>
+.acc-notice{margin-bottom:16px;padding:14px 16px;border:1.5px solid #f0b429;border-radius:14px;background:#fff9e8;color:#6b4a00;font-weight:600}
+.acc-notice code{padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.06)}
+.acc-label{color:var(--muted);font-size:.75rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.team-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.2fr);gap:18px;align-items:start}
+.team-layout h2{margin:0 0 12px;font-size:1.15rem}
+.team-steps{margin:0 0 18px;padding-left:20px;display:grid;gap:6px;color:var(--muted);line-height:1.5}
+.team-form{display:grid;gap:8px}
+.team-form-row{display:flex;gap:10px;flex-wrap:wrap}
+.team-form-row .admin-input{flex:1 1 220px;min-width:0}
+.team-message{margin:0;min-height:1.4em;font-weight:700}
+.team-warning{margin:14px 0 0;padding:12px 14px;border-radius:12px;background:var(--surface-2);color:var(--muted);font-size:.88rem;line-height:1.5}
+.team-list-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+.team-list-head h2{margin:0}
+.team-list{display:grid}
+.team-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.team-row:first-child{border-top:0}
+.team-avatar{flex:0 0 40px;height:40px;display:grid;place-items:center;border-radius:50%;background:var(--brand-gradient,var(--brand-primary));color:#fff;font-weight:900}
+.team-info{flex:1;min-width:0;display:grid;gap:2px}
+.team-info strong{overflow-wrap:anywhere}
+.team-info small{color:var(--muted)}
+.team-you{margin-left:6px;padding:1px 8px;border-radius:99px;background:var(--brand-soft);color:var(--primary-strong);font-size:.72rem}
+@media(max-width:860px){.team-layout{grid-template-columns:1fr}}
+</style>
