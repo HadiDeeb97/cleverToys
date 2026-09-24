@@ -106,7 +106,8 @@ export const POST: APIRoute = async ({ request }) => {
     const orderNumber = result?.order_number || result?.orderNumber || 'New Order';
     const notificationBody = {
       ...body,
-      subtotal: result?.subtotal ?? body.subtotal,
+      // Prefer server-calculated amounts; older create_order versions do not return subtotal.
+      subtotal: result?.subtotal ?? (result?.total != null && result?.delivery_fee != null ? Number(result.total) - Number(result.delivery_fee) : body.subtotal),
       delivery_fee: result?.delivery_fee ?? body.delivery_fee,
       total: result?.total ?? body.total
     };

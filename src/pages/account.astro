@@ -10,6 +10,7 @@ const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHA
 import { createClient } from '@supabase/supabase-js';
 const config=document.querySelector('#auth-config');
 const url=config?.dataset.url; const key=config?.dataset.key;
+const esc=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const email=document.querySelector('#account-email'); const orders=document.querySelector('#orders'); const message=document.querySelector('#account-message');
 let supabase;
 async function init(){
@@ -21,7 +22,7 @@ async function init(){
     const user=session.user; email.textContent=user.email||'';
     const {data,error}=await supabase.from('orders').select('order_number,total,status,created_at').eq('customer_id',user.id).order('created_at',{ascending:false});
     if(error) throw new Error(error.message);
-    orders.innerHTML=data?.length?`<div class="table-wrap"><table><thead><tr><th>Order</th><th>Date</th><th>Total</th><th>Status</th></tr></thead><tbody>${data.map(o=>`<tr><td>${o.order_number}</td><td>${new Date(o.created_at).toLocaleDateString()}</td><td>$${Number(o.total).toFixed(2)}</td><td>${o.status}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state"><h2>No orders yet</h2><a class="button" href="/products">Start Shopping</a></div>';
+    orders.innerHTML=data?.length?`<div class="table-wrap"><table><thead><tr><th>Order</th><th>Date</th><th>Total</th><th>Status</th></tr></thead><tbody>${data.map(o=>`<tr><td>${esc(o.order_number)}</td><td>${new Date(o.created_at).toLocaleDateString()}</td><td>$${Number(o.total).toFixed(2)}</td><td>${esc(o.status)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state"><h2>No orders yet</h2><a class="button" href="/products">Start Shopping</a></div>';
   }catch(error){ message.textContent=error?.message||'Could not load your account.'; }
 }
 init();
