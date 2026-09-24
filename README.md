@@ -33,6 +33,7 @@ Run the SQL files in `supabase/` from the Supabase SQL Editor. They can safely b
 - `accounting.sql`: cost prices and expenses for Admin → Accounting
 - `accounts_and_admins.sql`: customer profiles on sign-up and Admin → Team
 - `seo_advanced.sql`: Admin → SEO indexing, sitemap, verification and business details; fixes product/category fallback titles
+- `branding_assets.sql`: small, cached logo and the uploadable website icon (Admin → Branding)
 
 ## Project structure
 

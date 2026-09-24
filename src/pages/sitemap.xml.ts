@@ -1,3 +1,7 @@
+/**
+ * GET /sitemap.xml: every public page, category and product (with photos) for search engines.
+ * Options (what to include, hidden pages, priority) come from Admin → SEO.
+ */
 import type { APIRoute } from 'astro';
 import { supabase } from '../lib/supabase';
 import { PRIVATE_PATH, STATIC_PAGES, parseSeoSettings } from '../lib/seo';

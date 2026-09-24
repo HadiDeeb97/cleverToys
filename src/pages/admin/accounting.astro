@@ -1,4 +1,8 @@
 ---
+/**
+ * Admin → Accounting: revenue, cost of goods, expenses and profit for any period, with Excel/PDF export.
+ * Needs supabase/accounting.sql (cost prices and the expenses table).
+ */
 import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
@@ -141,7 +145,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 </main>
 
 <script>
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { exportPdf, exportXlsx, type ExportCell, type ExportColumn } from '../../scripts/table-export';
 
 type Row = Record<string, any>;
@@ -156,7 +160,8 @@ const parseDay = (s: string) => { const [y, m, d] = s.split('-').map(Number); re
 const EXPENSE_CATEGORIES = ['Inventory purchase', 'Delivery & shipping', 'Marketing & ads', 'Packaging', 'Rent', 'Salaries', 'Utilities & internet', 'Fees & taxes', 'Equipment', 'Other'];
 const OPEN_STATUSES = ['pending', 'confirmed', 'processing', 'shipped'];
 
-let supabase: ReturnType<typeof createClient>;
+// No generated database types in this project, so table rows are typed loosely.
+let supabase: SupabaseClient<any, 'public', any>;
 let period = 'month';
 let orders: Row[] = [];
 let items: Row[] = [];
@@ -552,7 +557,7 @@ html[data-area=admin] .admin-tabs{margin-bottom:16px}
 .acc-chart .axis{fill:var(--muted);font-size:10px;font-weight:700}
 .acc-chart .bar-rev{fill:var(--brand-primary)}.acc-chart .bar-exp{fill:var(--theme-accent)}
 .acc-chart .ln-profit{fill:none;stroke:var(--success);stroke-width:2.5;vector-effect:non-scaling-stroke}
-.acc-chart .hit{fill:transparent}.acc-chart .hit:hover{fill:color-mix(in srgb,var(--brand-primary) 7%,transparent)}
+.acc-chart .hit{fill:transparent}@media (hover:hover){.acc-chart .hit:hover{fill:color-mix(in srgb,var(--brand-primary) 7%,transparent)}}
 .small-note{margin:-4px 0 12px;font-size:.85rem}
 .cash-list{display:grid;gap:10px}
 .cash-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px;border-radius:14px;background:var(--surface-2)}

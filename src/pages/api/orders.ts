@@ -1,3 +1,11 @@
+/**
+ * POST /api/orders: places a cash-on-delivery order from the checkout page.
+ *
+ * 1. Cleans the incoming data (length limits, only known fields).
+ * 2. Calls the create_order database function, which recalculates every price and the
+ *    delivery fee on the server, checks stock and saves the order.
+ * 3. Sends a Telegram message to the shop (in the background, so the customer is not kept waiting).
+ */
 import type { APIRoute } from 'astro';
 import { createClient } from '@supabase/supabase-js';
 import { env } from 'cloudflare:workers';
@@ -97,7 +105,7 @@ const sanitizeOrder = (raw: any) => ({
   }))
 });
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, locals }) => {
   try {
     const declaredLength = Number(request.headers.get('content-length') || 0);
     const rawBody = await request.text();
@@ -145,12 +153,13 @@ export const POST: APIRoute = async ({ request }) => {
       delivery_fee: result?.delivery_fee ?? 0,
       total: result?.total ?? 0
     };
-    const telegramNotificationSent = await sendTelegramOrderNotification(notificationBody, orderNumber);
+    // Let the Worker finish the Telegram message after replying, so checkout is not slowed down.
+    const notification = sendTelegramOrderNotification(notificationBody, orderNumber);
+    const cfContext = (locals as { cfContext?: { waitUntil(promise: Promise<unknown>): void } }).cfContext;
+    if (cfContext?.waitUntil) cfContext.waitUntil(notification);
+    else await notification;
 
-    return new Response(JSON.stringify({
-      ...(result && typeof result === 'object' ? result : { order_number: orderNumber }),
-      telegram_notification_sent: telegramNotificationSent
-    }), {
+    return new Response(JSON.stringify(result && typeof result === 'object' ? result : { order_number: orderNumber }), {
       status: 200,
       headers: { 'content-type': 'application/json; charset=utf-8' }
     });

@@ -1,3 +1,7 @@
+/**
+ * POST /api/track-order: returns an order's status and items when the order number AND phone match
+ * (so nobody can look up someone else's order with just a number).
+ */
 import type { APIRoute } from 'astro';
 import { supabaseConfig } from '../../lib/config';
 

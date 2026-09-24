@@ -1,4 +1,7 @@
 ---
+/**
+ * Admin → Orders: every order with search and status filters; change status, see items and customer details.
+ */
 import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
@@ -41,7 +44,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 </main>
 
 <script>
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 const STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
 const LABELS: Record<string, string> = { pending: 'Pending', confirmed: 'Confirmed', processing: 'Preparing', shipped: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -52,7 +55,8 @@ const money = (n: unknown) => `$${Number(n || 0).toFixed(2)}`;
 const toast = (message: string, tone = 'success') => (window as any).adminToast?.(message, tone);
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
-let supabase: ReturnType<typeof createClient>;
+// No generated database types in this project, so table rows are typed loosely.
+let supabase: SupabaseClient<any, 'public', any>;
 let orders: any[] = [];
 const itemsByOrder = new Map<string, any[]>();
 const params = new URLSearchParams(location.search);

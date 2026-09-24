@@ -1,22 +1,121 @@
 ---
+/**
+ * Cart page: /cart
+ *
+ * The cart is stored in this browser (localStorage key "cleverToysCart"), so the whole list is
+ * drawn by the script below. Quantity and remove buttons use one tap handler on the list
+ * (event delegation), so they keep working after the list is redrawn.
+ */
 import '../styles/global.css';
 ---
-<header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart" class="cart-link">Cart <span class="cart-count" id="cart-count" hidden>0</span></a></nav></div></header>
-<main class="section"><div class="container"><div class="section-header"><h1>Your Cart</h1><p>Review your items before checkout.</p></div><div id="cart-root"></div></div></main>
-<footer class="site-footer"><div class="container"><p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p></div></footer>
+<head>
+  <title>Your Cart | Clever Toys</title>
+</head>
+{/* Replaced by the shared store header in src/middleware.ts */}
+<header class="site-header"></header>
+<main class="section">
+  <div class="container">
+    <div class="section-header"><h1>Your Cart</h1><p>Review your items before checkout.</p></div>
+    <div id="cart-root" aria-live="polite"></div>
+  </div>
+</main>
+<footer class="site-footer"></footer>
+
 <script>
-const root=document.querySelector('#cart-root');const KEY='cleverToysCart';
-const read=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]').map(i=>({...i,quantity:Math.max(1,Number(i.quantity)||1)}));}catch{return[];}};
-const save=(cart)=>{localStorage.setItem(KEY,JSON.stringify(cart));window.dispatchEvent(new CustomEvent('clever-cart-updated'));window.dispatchEvent(new CustomEvent('cart-updated'));};
-const money=(n)=>`$${Number(n).toFixed(2)}`;
-// Nudge toward the free-delivery threshold configured in Admin → Branding.
-const deliveryProgress=(subtotal)=>{const threshold=Math.max(0,Number(window.__CLEVER_BRANDING__?.freeDeliveryThreshold||0));if(!threshold)return'';const remaining=Math.max(0,threshold-subtotal);const pct=Math.min(100,Math.round(subtotal/threshold*100));return `<div class="delivery-progress" role="status"><p>${remaining>0?`Add <strong>${money(remaining)}</strong> more for free delivery 🚚`:'🎉 You unlocked free delivery!'}</p><div class="delivery-progress-track" aria-hidden="true"><i style="width:${pct}%"></i></div></div>`;};
-const esc=(v)=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
-const updateCartCount=()=>{const total=read().reduce((sum,item)=>sum+Number(item.quantity||0),0);const el=document.querySelector('#cart-count');if(el){el.textContent=String(total);el.hidden=total===0;}};
-function render(){const cart=read();updateCartCount();if(!cart.length){root.innerHTML='<div class="empty-state"><h2>Your cart is empty</h2><p>Add some toys to get started.</p><a class="button" href="/products">Continue Shopping</a></div>';return;}const subtotal=cart.reduce((s,i)=>s+Number(i.price)*Number(i.quantity),0);root.innerHTML=`<div class="cart-list">${cart.map((i,idx)=>`<article class="cart-item"><div>${i.image?`<img src="${esc(i.image)}" alt="${esc(i.name)}" loading="lazy">`:'<div class="cart-placeholder">Toy</div>'}</div><div class="cart-item-info"><h2><a href="/product/${encodeURIComponent(i.slug)}">${esc(i.name)}</a></h2>${i.variantName?`<p class="cart-variant">Option: ${esc(i.variantName)}</p>`:''}<p>${money(i.price)} each</p><div class="quantity-control"><button type="button" aria-label="Decrease quantity" data-minus="${idx}">−</button><strong>${i.quantity}</strong><button type="button" aria-label="Increase quantity" data-plus="${idx}">+</button><button type="button" class="remove-link" data-remove="${idx}">Remove</button></div>${Number.isFinite(Number(i.maxStock))?`<small>Available: ${Number(i.maxStock)}</small>`:''}</div><strong class="line-total">${money(Number(i.price)*Number(i.quantity))}</strong></article>`).join('')}</div><div class="cart-summary"><div><span>Subtotal</span><strong>${money(subtotal)}</strong></div>${deliveryProgress(subtotal)}<p>Delivery fee will be calculated at checkout.</p><p class="checkout-question">Ready to place your order?</p><a class="button" href="/checkout">Proceed to Checkout</a></div>`;
-root.querySelectorAll('[data-minus]').forEach(b=>b.onclick=()=>{const c=read();const i=Number(b.dataset.minus);c[i].quantity=Math.max(1,c[i].quantity-1);save(c);render();});
-root.querySelectorAll('[data-plus]').forEach(b=>b.onclick=()=>{const c=read();const i=Number(b.dataset.plus);const max=Number(c[i].maxStock);c[i].quantity=Number.isFinite(max)&&max>0?Math.min(c[i].quantity+1,max):c[i].quantity+1;save(c);render();});
-root.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{const c=read();c.splice(Number(b.dataset.remove),1);save(c);render();});}
-render();window.addEventListener('storage',render);window.addEventListener('clever-cart-updated',render);
+type CartItem = { productId: string; variantId?: string | null; variantName?: string | null; slug: string; name: string; image?: string; price: number; quantity: number; maxStock?: number };
+
+const CART_KEY = 'cleverToysCart';
+const root = document.querySelector<HTMLElement>('#cart-root')!;
+const money = (n: number) => `$${Number(n).toFixed(2)}`;
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+
+const read = (): CartItem[] => {
+  try {
+    const cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
+    return Array.isArray(cart) ? cart.filter(Boolean).map((i) => ({ ...i, quantity: Math.max(1, Number(i.quantity) || 1) })) : [];
+  } catch {
+    return [];
+  }
+};
+/** Saves the cart and tells the header/floating cart badges to update. */
+const save = (cart: CartItem[]) => {
+  localStorage.setItem(CART_KEY, JSON.stringify(cart));
+  window.dispatchEvent(new CustomEvent('clever-cart-updated'));
+};
+
+/** Progress bar toward the free-delivery amount set in Admin → Branding. */
+function deliveryProgress(subtotal: number) {
+  const threshold = Math.max(0, Number((window as any).__CLEVER_BRANDING__?.freeDeliveryThreshold || 0));
+  if (!threshold) return '';
+  const remaining = Math.max(0, threshold - subtotal);
+  const pct = Math.min(100, Math.round((subtotal / threshold) * 100));
+  return `<div class="delivery-progress" role="status"><p>${remaining > 0 ? `Add <strong>${money(remaining)}</strong> more for free delivery 🚚` : '🎉 You unlocked free delivery!'}</p><div class="delivery-progress-track" aria-hidden="true"><i style="width:${pct}%"></i></div></div>`;
+}
+
+function render() {
+  const cart = read();
+  if (!cart.length) {
+    root.innerHTML = '<div class="empty-state"><h2>Your cart is empty</h2><p>Add some toys to get started.</p><a class="button" href="/products">Continue Shopping</a></div>';
+    return;
+  }
+  const subtotal = cart.reduce((sum, i) => sum + Number(i.price) * Number(i.quantity), 0);
+  const items = cart.map((i, idx) => {
+    const max = Number(i.maxStock);
+    const atMax = Number.isFinite(max) && max > 0 && i.quantity >= max;
+    return `<article class="cart-item">
+      <div>${i.image ? `<img src="${esc(i.image)}" alt="${esc(i.name)}" loading="lazy" decoding="async" width="110" height="110">` : '<div class="cart-placeholder">Toy</div>'}</div>
+      <div class="cart-item-info">
+        <h2><a href="/product/${encodeURIComponent(i.slug)}">${esc(i.name)}</a></h2>
+        ${i.variantName ? `<p class="cart-variant">Option: ${esc(i.variantName)}</p>` : ''}
+        <p>${money(i.price)} each</p>
+        <div class="quantity-control">
+          <button type="button" aria-label="Decrease quantity of ${esc(i.name)}" data-action="minus" data-index="${idx}"${i.quantity <= 1 ? ' disabled' : ''}>−</button>
+          <strong aria-label="Quantity">${i.quantity}</strong>
+          <button type="button" aria-label="Increase quantity of ${esc(i.name)}" data-action="plus" data-index="${idx}"${atMax ? ' disabled' : ''}>+</button>
+          <button type="button" class="remove-link" data-action="remove" data-index="${idx}">Remove</button>
+        </div>
+        ${Number.isFinite(max) ? `<small>Available: ${max}</small>` : ''}
+      </div>
+      <strong class="line-total">${money(Number(i.price) * Number(i.quantity))}</strong>
+    </article>`;
+  }).join('');
+  root.innerHTML = `<div class="cart-list">${items}</div>
+    <div class="cart-summary">
+      <div><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
+      ${deliveryProgress(subtotal)}
+      <p>Delivery fee will be calculated at checkout.</p>
+      <p class="checkout-question">Ready to place your order?</p>
+      <a class="button" href="/checkout">Proceed to Checkout</a>
+    </div>`;
+}
+
+// One handler for every −, + and Remove button.
+root.addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-action]');
+  if (!button || button.disabled) return;
+  const cart = read();
+  const item = cart[Number(button.dataset.index)];
+  if (!item) return;
+  const max = Number(item.maxStock);
+  if (button.dataset.action === 'minus') item.quantity = Math.max(1, item.quantity - 1);
+  else if (button.dataset.action === 'plus') item.quantity = Number.isFinite(max) && max > 0 ? Math.min(item.quantity + 1, max) : item.quantity + 1;
+  else if (button.dataset.action === 'remove') cart.splice(Number(button.dataset.index), 1);
+  save(cart);
+  render();
+});
+
+render();
+// Cart changed in another tab: redraw.
+window.addEventListener('storage', (event) => { if (event.key === CART_KEY) render(); });
 </script>
-<style is:global>.delivery-progress{display:block!important;margin:4px 0 14px;padding:12px 14px;border-radius:14px;background:var(--surface-2)}.delivery-progress p{margin:0 0 8px;color:var(--ink);font-size:.92rem;font-weight:700}.delivery-progress-track{height:10px;border-radius:99px;background:var(--line);overflow:hidden}.delivery-progress-track i{display:block;height:100%;border-radius:99px;background:var(--brand-gradient);transition:width .3s}.cart-variant{margin:.2rem 0;color:var(--muted);font-size:.9rem}.cart-item small{display:block;margin-top:6px;color:var(--muted)}.checkout-question{font-weight:700;margin:12px 0}</style>
+
+<style is:global>
+.delivery-progress{display:block!important;margin:4px 0 14px;padding:12px 14px;border-radius:14px;background:var(--surface-2)}
+.delivery-progress p{margin:0 0 8px;color:var(--ink);font-size:.92rem;font-weight:700}
+.delivery-progress-track{height:10px;border-radius:99px;background:var(--line);overflow:hidden}
+.delivery-progress-track i{display:block;height:100%;border-radius:99px;background:var(--brand-gradient);transition:width .3s}
+.cart-variant{margin:.2rem 0;color:var(--muted);font-size:.9rem}
+.cart-item small{display:block;margin-top:6px;color:var(--muted)}
+.checkout-question{font-weight:700;margin:12px 0}
+.quantity-control button:disabled{opacity:.4;cursor:not-allowed}
+</style>

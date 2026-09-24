@@ -1,4 +1,8 @@
 ---
+/**
+ * Admin → Products (/admin): add and edit toys, photos, options (variants), cost prices and categories,
+ * bulk import from Excel, and quick visibility toggles.
+ */
 import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
@@ -104,7 +108,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 </main>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
 <script>
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 type Row = Record<string, any>;
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -116,7 +120,8 @@ const money = (n: unknown) => `$${Number(n || 0).toFixed(2)}`;
 const toast = (message: string, tone = 'success') => (window as any).adminToast?.(message, tone);
 const friendly = (message: string) => /duplicate key|unique/i.test(message) ? 'That slug or SKU is already used by another item. Choose a different one.' : message;
 
-let supabase: ReturnType<typeof createClient>;
+// No generated database types in this project, so table rows are typed loosely.
+let supabase: SupabaseClient<any, 'public', any>;
 let categories: Row[] = [];
 let products: Row[] = [];
 let links: Row[] = [];
@@ -179,7 +184,7 @@ function renderProducts() {
       <div class="product-main"><button type="button" class="product-name" data-edit="${p.id}">${esc(p.name)}</button><small>${esc(p.sku || 'No SKU')} · ${money(price)}${p.sale_price != null ? ` <s>${money(p.price)}</s>` : ''}${p.cost_price != null && p.cost_price !== '' ? ` · cost ${money(p.cost_price)}${price ? ` (${Math.round(((price - Number(p.cost_price)) / price) * 100)}% margin)` : ''}` : ' · <span class="no-cost">no cost set</span>'}${p.is_featured ? ' · ⭐ Featured' : ''}</small></div>
       <label class="stock-edit ${stockClass}" title="Stock">Stock<input type="number" min="0" value="${Number(p.stock_quantity)}" data-stock="${p.id}" aria-label="Stock for ${esc(p.name)}" /></label>
       <label class="row-toggle" title="Visible in store"><input class="toggle" type="checkbox" data-active="${p.id}"${p.is_active ? ' checked' : ''} aria-label="Visible: ${esc(p.name)}" /></label>
-      <div class="item-actions"><button class="small-button" data-edit="${p.id}" type="button">Edit</button><button class="small-button" data-duplicate="${p.id}" type="button" title="Duplicate">Copy</button><a class="small-button" href="/product/${encodeURIComponent(p.slug)}" target="_blank" rel="noopener" title="View on store">↗</a><button class="small-button danger-button" data-del="${p.id}" type="button" aria-label="Delete ${esc(p.name)}">Delete</button></div>
+      <div class="item-actions"><button class="small-button" data-edit="${p.id}" type="button">Edit</button><button class="small-button" data-duplicate="${p.id}" type="button" title="Duplicate">Copy</button>${p.is_active === false ? '' : `<a class="small-button" href="/product/${encodeURIComponent(p.slug)}" target="_blank" rel="noopener" title="View on store" aria-label="View ${esc(p.name)} on the store">↗</a>`}<button class="small-button danger-button" data-del="${p.id}" type="button" aria-label="Delete ${esc(p.name)}">Delete</button></div>
     </div>`;
   }).join('') : '<div class="empty-state"><h2>No products here</h2><p>Try another filter or add a product.</p></div>';
 }
@@ -190,7 +195,7 @@ function renderCategories() {
   $('#categories').innerHTML = categories.length ? categories.map((c, i) => `<div class="category-row${c.is_active === false ? ' is-hidden' : ''}">
     <div class="order-buttons"><button type="button" class="small-button" data-move="${c.id}" data-dir="-1" aria-label="Move ${esc(c.name)} up"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" class="small-button" data-move="${c.id}" data-dir="1" aria-label="Move ${esc(c.name)} down"${i === categories.length - 1 ? ' disabled' : ''}>↓</button></div>
     <div class="product-main"><button type="button" class="product-name" data-edit-cat="${c.id}">${esc(c.name)}</button><small>/${esc(c.slug)} · ${counts.get(c.id) || 0} products${c.is_active === false ? ' · hidden' : ''}</small></div>
-    <div class="item-actions"><button class="small-button" data-edit-cat="${c.id}" type="button">Edit</button><a class="small-button" href="/category/${encodeURIComponent(c.slug)}" target="_blank" rel="noopener" title="View on store">↗</a><button class="small-button danger-button" data-cat="${c.id}" type="button">Delete</button></div>
+    <div class="item-actions"><button class="small-button" data-edit-cat="${c.id}" type="button">Edit</button>${c.is_active === false ? '' : `<a class="small-button" href="/category/${encodeURIComponent(c.slug)}" target="_blank" rel="noopener" title="View on store" aria-label="View ${esc(c.name)} on the store">↗</a>`}<button class="small-button danger-button" data-cat="${c.id}" type="button">Delete</button></div>
   </div>`).join('') : '<div class="empty-state"><h2>No categories yet</h2><p>Add your first category on the right.</p></div>';
 }
 
@@ -217,7 +222,8 @@ async function editProduct(id: string) {
   renderCategoryChecks(ids.length ? ids : p.category_id ? [p.category_id] : []);
   updateProfitHint();
   $('#form-title').textContent = `Edit: ${p.name}`;
-  const view = $<HTMLAnchorElement>('#view-on-store'); view.href = `/product/${encodeURIComponent(p.slug)}`; view.hidden = false;
+  // Hidden products have no public page, so only offer the link for visible ones.
+  const view = $<HTMLAnchorElement>('#view-on-store'); view.href = `/product/${encodeURIComponent(p.slug)}`; view.hidden = p.is_active === false;
   const [v, im] = await Promise.all([
     supabase.from('product_variants').select('*').eq('product_id', id).order('created_at'),
     supabase.from('product_images').select('*').eq('product_id', id).order('sort_order')
@@ -256,9 +262,11 @@ async function saveProductCategories(id: string, ids: string[]) {
   if (up.error) throw new Error(up.error.message);
 }
 
+// Product photos are resized to at most 1400 px and saved as WebP before upload. That is sharp on
+// phones and big screens (the photo is shown at most ~700 px wide) while keeping pages light.
 async function toWebp(file: File) {
   const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, 1800 / Math.max(bmp.width, bmp.height));
+  const scale = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(bmp.width * scale));
   canvas.height = Math.max(1, Math.round(bmp.height * scale));
@@ -539,7 +547,7 @@ $('#import').addEventListener('click', async () => {
         const matched = String(row.categories || row.category || '').split(',').map((x) => x.trim()).filter(Boolean).map((n) => categories.find((c) => c.name.toLowerCase() === n.toLowerCase() || c.slug === slugify(n))).filter(Boolean) as Row[];
         const payload = { name, slug, sku: String(row.sku || '').trim() || null, category_id: matched[0]?.id || null, price, sale_price: num(row.sale_price), stock_quantity: int(row.stock_quantity, 0), ...costFromRow(row), age_min: int(row.age_min), age_max: int(row.age_max), brand: String(row.brand || '').trim() || null, short_description: String(row.short_description || ''), description: String(row.description || ''), primary_image_url: String(row.primary_image_url || '').trim() || null, seo_title: String(row.seo_title || '').trim() || null, seo_description: String(row.seo_description || '').trim() || null, is_active: String(row.is_active).toLowerCase() !== 'false', is_featured: String(row.is_featured).toLowerCase() === 'true', updated_at: new Date().toISOString() };
         const existing = products.find((p) => p.slug === slug) || (payload.sku ? products.find((p) => p.sku === payload.sku) : undefined);
-        const r = existing ? await supabase.from('products').update(payload).eq('id', existing.id).select().single() : await supabase.from('products').insert(payload).select().single();
+        const r = existing ? await supabase.from('products').update(payload as Row).eq('id', existing.id).select().single() : await supabase.from('products').insert(payload as Row).select().single();
         if (r.error) throw new Error(friendly(r.error.message));
         await saveProductCategories((r.data as Row).id, matched.map((c) => c.id));
         if (existing) updated++; else created++;
@@ -595,7 +603,7 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .product-thumb img{width:100%;height:100%;object-fit:cover}
 .product-main{min-width:0}
 .product-name{display:block;max-width:100%;padding:0;border:0;background:none;color:var(--ink);font-weight:800;text-align:left;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.product-name:hover{color:var(--primary-strong);text-decoration:underline}
+@media (hover:hover){.product-name:hover{color:var(--primary-strong);text-decoration:underline}}
 .product-main small{display:block;color:var(--muted);font-size:.8rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .stock-edit{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.66rem;font-weight:900;text-transform:uppercase}
 .stock-edit input{width:62px;min-height:34px;padding:4px 8px;border:1.5px solid var(--line-strong);border-radius:10px;font-weight:800}

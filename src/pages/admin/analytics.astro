@@ -1,4 +1,8 @@
 ---
+/**
+ * Admin → Visitors: who is on the site now, visits over time, top pages, sources and devices,
+ * with a sortable visits table that exports to Excel/PDF. Data comes from public/visitor-analytics.js.
+ */
 import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
@@ -100,7 +104,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 </main>
 
 <script>
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { exportPdf, exportXlsx, type ExportColumn } from '../../scripts/table-export';
 
 type Session = { session_id: string; visitor_id: string; started_at: string; last_seen_at: string; landing_path: string; current_path: string; entry_referrer: string | null; country: string | null; device: string; browser: string; os: string; page_count: number; duration: number; source: string };
@@ -119,7 +123,8 @@ const duration = (secs: number) => { if (secs < 60) return `${Math.round(secs)}s
 const when = (iso: string) => new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const ago = (iso: string) => { const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000); if (s < 60) return 'just now'; if (s < 3600) return `${Math.floor(s / 60)} min ago`; if (s < 86400) return `${Math.floor(s / 3600)} h ago`; return when(iso); };
 
-let supabase: ReturnType<typeof createClient>;
+// No generated database types in this project, so table rows are typed loosely.
+let supabase: SupabaseClient<any, 'public', any>;
 let range = Number(new URLSearchParams(location.search).get('range')) || 30;
 if (![1, 7, 30, 90].includes(range)) range = 30;
 let sessions: Session[] = [];
@@ -351,7 +356,7 @@ init();
 .trend .axis{fill:var(--muted);font-size:10px;font-weight:700}
 .trend .ln-views{fill:none;stroke:var(--brand-primary);stroke-width:2.5;vector-effect:non-scaling-stroke}
 .trend .ln-visitors{fill:none;stroke:var(--brand-primary-2);stroke-width:2.5;stroke-dasharray:6 4;vector-effect:non-scaling-stroke}
-.trend .hit{fill:transparent}.trend .hit:hover{fill:color-mix(in srgb,var(--brand-primary) 8%,transparent)}
+.trend .hit{fill:transparent}@media (hover:hover){.trend .hit:hover{fill:color-mix(in srgb,var(--brand-primary) 8%,transparent)}}
 .donut-wrap{display:grid;justify-items:center;gap:16px}
 .donut{position:relative;display:grid;place-items:center;width:170px;height:170px;border-radius:50%}
 .donut span{display:grid;place-items:center;width:112px;height:112px;border-radius:50%;background:var(--surface);text-align:center}

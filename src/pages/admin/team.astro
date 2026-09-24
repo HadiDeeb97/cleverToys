@@ -1,4 +1,7 @@
 ---
+/**
+ * Admin → Team: list, add and remove admin accounts. Needs supabase/accounts_and_admins.sql.
+ */
 import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
@@ -53,7 +56,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 </main>
 
 <script>
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 type Admin = { user_id: string; email: string; added_at: string | null; last_sign_in_at: string | null; is_you: boolean };
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -63,7 +66,8 @@ const when = (v: string | null) => v ? new Date(v).toLocaleDateString(undefined,
 // PostgREST reports a missing function as PGRST202 (or 42883 from Postgres).
 const missingFunction = (error: { code?: string; message?: string } | null) => Boolean(error && (error.code === 'PGRST202' || error.code === '42883' || /could not find the function/i.test(error.message || '')));
 
-let supabase: ReturnType<typeof createClient>;
+// No generated database types in this project, so table rows are typed loosely.
+let supabase: SupabaseClient<any, 'public', any>;
 let admins: Admin[] = [];
 
 function render() {

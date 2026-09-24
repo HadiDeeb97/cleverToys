@@ -1,4 +1,7 @@
 ---
+/**
+ * Admin → Dashboard: today's numbers, recent orders and low-stock toys at a glance.
+ */
 import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
@@ -60,7 +63,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 </main>
 
 <script>
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // Order fields come from anonymous checkout input, so everything rendered as HTML is escaped.
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
@@ -72,7 +75,8 @@ const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const config = document.querySelector<HTMLElement>('#auth-config');
 const guard = $('guard');
 const dash = $('dashboard');
-let supabase: ReturnType<typeof createClient>;
+// No generated database types in this project, so table rows are typed loosely.
+let supabase: SupabaseClient<any, 'public', any>;
 
 const delta = (current: number, previous: number) => {
   if (!previous) return current ? 'New this month' : 'No change';
@@ -173,7 +177,7 @@ init();
 .kpi strong{font-family:var(--font-display);font-size:1.75rem;font-weight:600;color:var(--ink)}
 .kpi small{color:var(--muted);font-size:.78rem;font-weight:700}
 .kpi-link{transition:transform .15s,border-color .15s}
-.kpi-link:hover{transform:translateY(-2px);border-color:var(--brand-primary)}
+@media (hover:hover){.kpi-link:hover{transform:translateY(-2px);border-color:var(--brand-primary)}}
 .kpi-link small{color:var(--primary-strong)}
 .dash-grid{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:18px}
 .panel-title .muted,.muted{color:var(--muted);font-weight:700}
@@ -184,11 +188,11 @@ init();
 .bar-col span{color:var(--muted);font-size:.72rem;font-weight:700}
 .status-list{display:grid;gap:6px}
 .status-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:12px}
-.status-row:hover{background:var(--surface-2)}
+@media (hover:hover){.status-row:hover{background:var(--surface-2)}}
 .rank-list{display:grid;gap:4px;margin:0;padding:0;list-style:none}
 .rank-list li{display:flex;justify-content:space-between;gap:12px;padding:9px 10px;border-radius:12px;font-weight:700}
 .rank-list li:nth-child(odd){background:var(--surface-2)}
-.rank-list a:hover{color:var(--primary-strong);text-decoration:underline}
+@media (hover:hover){.rank-list a:hover{color:var(--primary-strong);text-decoration:underline}}
 .rank-list strong.low{color:#8a5a00}.rank-list strong.out{color:var(--danger)}
 #recent .table-wrap{border:0}
 @media(max-width:1200px){.kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}

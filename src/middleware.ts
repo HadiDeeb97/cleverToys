@@ -1,3 +1,13 @@
+/**
+ * Runs on every request (see onRequest at the bottom of this file).
+ *
+ * HTML pages are finished here, so individual page files stay small:
+ *  - the shared store header, footer, announcement ribbon and floating cart/WhatsApp buttons
+ *  - theme colours, logo, website icon and settings from Admin → Branding (window.__CLEVER_BRANDING__)
+ *  - SEO tags from Admin → SEO (per page, or the /product/* and /category/* templates)
+ *  - the admin sidebar on /admin pages
+ *  - security headers on every response
+ */
 import type { MiddlewareHandler } from 'astro';
 import { supabaseConfig } from './lib/config';
 import { PRIVATE_PATH, fillTemplate, parseSeoSettings } from './lib/seo';
@@ -56,7 +66,104 @@ const withSecurityHeaders = (headers: Headers) => {
   return headers;
 };
 
+// ---------- Website icon ----------
+/**
+ * <link> tags for the website icon. Admin → Branding uploads PNG sizes to
+ * product-images/branding/icons/<version>/icon-{32,180,192,512}.png and saves the 32px URL
+ * in store_settings.favicon_url. Without an upload the default teddy-bear icon in public/ is used.
+ */
+const siteIconTags = (faviconUrl: unknown, base: string | undefined) => {
+  const url = String(faviconUrl ?? '').trim();
+  const prefix = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/icons/` : '';
+  const manifest = '<link rel="manifest" href="/manifest.webmanifest" />';
+  if (prefix && url.startsWith(prefix) && /\/icon-32\.png$/.test(url) && !/["<>\s]/.test(url)) {
+    const size = (n: number) => escapeAttr(url.replace(/icon-32\.png$/, `icon-${n}.png`));
+    return `<link rel="icon" type="image/png" sizes="32x32" href="${escapeAttr(url)}" /><link rel="icon" type="image/png" sizes="192x192" href="${size(192)}" /><link rel="apple-touch-icon" sizes="180x180" href="${size(180)}" />${manifest}`;
+  }
+  // Default Clever Toys icon (public/favicon.svg, favicon.ico and apple-touch-icon.png).
+  return `<link rel="icon" href="/favicon.ico" sizes="48x48" /><link rel="icon" href="/favicon.svg" type="image/svg+xml" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />${manifest}`;
+};
+
+// ---------- Data every storefront page needs (store settings, theme, SEO row) ----------
+
+type PublishedTheme = { mode: string; theme: null | { primary: string; primary2?: string; soft: string; accent: string; id?: string; name?: string } };
+
+/** Accepts the published theme payload ({ mode, theme: { primary, soft, accent } }). Anything invalid is ignored. */
+const parseTheme = (d: any): PublishedTheme | null => {
+  if (d?.mode === 'theme' && safeHex(d?.theme?.primary) && safeHex(d?.theme?.soft) && safeHex(d?.theme?.accent)) {
+    return {
+      mode: 'theme',
+      theme: {
+        primary: safeHex(d.theme.primary)!,
+        // Optional gradient end color; themes without it render solid.
+        primary2: safeHex(d.theme.primary2) || undefined,
+        soft: safeHex(d.theme.soft)!,
+        accent: safeHex(d.theme.accent)!,
+        id: typeof d.theme.id === 'string' ? d.theme.id : undefined,
+        name: typeof d.theme.name === 'string' ? d.theme.name : undefined
+      }
+    };
+  }
+  return d?.mode === 'logo' ? { mode: 'logo', theme: null } : null;
+};
+
+type PageData = { storeSettings: Record<string, any>; published: PublishedTheme; seo: any };
+
+/**
+ * Loads the store settings (Admin → Branding), the published theme and the page's SEO row.
+ * Never throws: if Supabase is unreachable the page still renders with defaults.
+ * Always read fresh (no caching), so changes in the admin panel show up on the next page load.
+ */
+async function loadPageData(path: string): Promise<PageData> {
+  const { url: base, key } = supabaseConfig();
+  const data: PageData = { storeSettings: { ...defaultStoreSettings }, published: { mode: 'logo', theme: null }, seo: null };
+  if (!base || !key) return data;
+  const rest = `${base.replace(/\/$/, '')}/rest/v1`;
+  const init = { headers: { apikey: key, Authorization: `Bearer ${key}` }, cf: { cacheTtl: 0, cacheEverything: false } };
+
+  const loadSettings = async () => {
+    try {
+      // select=* so a missing optional column (e.g. before a migration) does not break the whole query.
+      const r = await fetch(`${rest}/store_settings?select=*&id=eq.default&limit=1`, init);
+      const row = r.ok ? (await r.json())?.[0] : null;
+      if (row) data.storeSettings = { ...defaultStoreSettings, ...row };
+      let theme = parseTheme(row?.theme);
+      // Very old setups published the theme as a JSON file in storage; only look there if the database has none.
+      if (!theme) {
+        const file = await fetch(`${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/theme.json?theme=${Date.now()}`, { cf: { cacheTtl: 0, cacheEverything: false } }).catch(() => null);
+        if (file?.ok) theme = parseTheme(JSON.parse(await file.text()));
+      }
+      if (theme) data.published = theme;
+    } catch {}
+  };
+
+  const loadSeo = async () => {
+    if (path.startsWith('/admin')) return;
+    try {
+      // One request for the exact page and, on product/category pages, the fallback template; the exact page wins.
+      const wildcard = path.startsWith('/product/') ? '/product/*' : path.startsWith('/category/') ? '/category/*' : '';
+      const keys = [path, ...(wildcard ? [wildcard] : [])].map((k) => `"${k.replace(/["\\]/g, '')}"`).join(',');
+      const r = await fetch(`${rest}/seo_pages?select=*&path_key=in.(${encodeURIComponent(keys)})`, init);
+      if (!r.ok) return;
+      const rows: any[] = await r.json();
+      data.seo = rows.find((row) => row.path_key === path) || rows.find((row) => row.path_key === wildcard) || null;
+    } catch {}
+  };
+
+  await Promise.all([loadSettings(), loadSeo()]);
+  return data;
+}
+
+// ---------- The middleware ----------
+// Runs for every request. Non-HTML responses (API, files) only get security headers.
+// HTML pages are rewritten: shared header/footer, theme colours, branding settings, SEO tags,
+// floating cart/WhatsApp buttons and the admin sidebar.
 export const onRequest: MiddlewareHandler = async (context, next) => {
+  const path = context.url.pathname;
+  // Start loading page data now, while Astro renders the page, instead of after it (saves a full round trip).
+  const looksLikePage = context.request.method === 'GET' && !path.startsWith('/api') && !/\.[a-z0-9]{2,11}$/i.test(path);
+  const pageDataPromise = looksLikePage ? loadPageData(path) : null;
+
   const response = await next();
   const contentType = response.headers.get('content-type');
   if (!contentType?.toLowerCase().includes('text/html')) {
@@ -70,81 +177,12 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   }
 
   const html = await response.text();
-  const path = context.url.pathname;
-  const { url: base, key: publishableKey } = supabaseConfig();
-  const logoUrl = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/logo.webp` : '';
-  const themeUrl = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/theme.json` : '';
-  type PublishedTheme = { mode: string; theme: null | { primary: string; primary2?: string; soft: string; accent: string; id?: string; name?: string } };
-  // Accepts the published theme payload ({ mode, theme: { primary, soft, accent } }) from either source.
-  const parseTheme = (d: any): PublishedTheme | null => {
-    if (d?.mode === 'theme' && safeHex(d?.theme?.primary) && safeHex(d?.theme?.soft) && safeHex(d?.theme?.accent)) {
-      return {
-        mode: 'theme',
-        theme: {
-          primary: safeHex(d.theme.primary)!,
-          // Optional gradient end color; themes without it render solid.
-          primary2: safeHex(d.theme.primary2) || undefined,
-          soft: safeHex(d.theme.soft)!,
-          accent: safeHex(d.theme.accent)!,
-          id: typeof d.theme.id === 'string' ? d.theme.id : undefined,
-          name: typeof d.theme.name === 'string' ? d.theme.name : undefined
-        }
-      };
-    }
-    return d?.mode === 'logo' ? { mode: 'logo', theme: null } : null;
-  };
-  let published: PublishedTheme = { mode: 'logo', theme: null };
-  let fileTheme: PublishedTheme | null = null;
-  let settingsTheme: PublishedTheme | null = null;
-  let storeSettings: Record<string, any> = { ...defaultStoreSettings };
-
-  // Older setups published the theme as a JSON file in storage; it is only used when store_settings has no theme.
-  const loadTheme = async () => {
-    if (!themeUrl) return;
-    try {
-      const r = await fetch(`${themeUrl}?theme=${Date.now()}`, { cf: { cacheTtl: 0, cacheEverything: false } });
-      if (r.ok) fileTheme = parseTheme(JSON.parse(await r.text()));
-    } catch {}
-  };
-
-  const loadStoreSettings = async () => {
-    if (path.startsWith('/api') || !base || !publishableKey) return;
-    try {
-      // select=* so a missing optional column (e.g. before a migration) does not break the whole query.
-      const settingsResponse = await fetch(`${base.replace(/\/$/, '')}/rest/v1/store_settings?select=*&id=eq.default&limit=1`, {
-        headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
-        cf: { cacheTtl: 0, cacheEverything: false }
-      });
-      if (settingsResponse.ok) {
-        const row = (await settingsResponse.json())?.[0];
-        if (row) {
-          storeSettings = { ...defaultStoreSettings, ...row };
-          settingsTheme = parseTheme(row.theme);
-        }
-      }
-    } catch {}
-  };
-
-  const loadSeo = async (): Promise<any> => {
-    if (path.startsWith('/admin') || path.startsWith('/api') || !base || !publishableKey) return null;
-    try {
-      // One request for the exact page and, on product/category pages, the fallback template; the exact page wins.
-      const wildcard = path.startsWith('/product/') ? '/product/*' : path.startsWith('/category/') ? '/category/*' : '';
-      const keys = [path, ...(wildcard ? [wildcard] : [])].map((key) => `"${key.replace(/["\\]/g, '')}"`).join(',');
-      const r = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?select=*&path_key=in.(${encodeURIComponent(keys)})`, {
-        headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
-        cf: { cacheTtl: 0, cacheEverything: false }
-      });
-      if (!r.ok) return null;
-      const rows: any[] = await r.json();
-      return rows.find((row) => row.path_key === path) || rows.find((row) => row.path_key === wildcard) || null;
-    } catch {
-      return null;
-    }
-  };
-
-  const [, , seo] = await Promise.all([loadTheme(), loadStoreSettings(), loadSeo()]);
-  published = settingsTheme || fileTheme || published;
+  const { url: base } = supabaseConfig();
+  const { storeSettings, published, seo } = await (pageDataPromise ?? loadPageData(path));
+  // Logo from Admin → Branding: the versioned upload (store_settings.logo_url) or the older fixed file.
+  const brandingFolder = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/` : '';
+  const savedLogo = String(storeSettings.logo_url ?? '').trim();
+  const logoUrl = brandingFolder && savedLogo.startsWith(`${brandingFolder}logo/`) && !/["<>\s]/.test(savedLogo) ? savedLogo : brandingFolder ? `${brandingFolder}logo.webp` : '';
 
   // The WhatsApp link from Admin → Branding is used exactly as saved (number and greeting).
   const whatsappUrl = safeExternalUrl(storeSettings.whatsapp_url, fallbackWhatsappUrl);
@@ -173,7 +211,13 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify(branding).replace(/</g, '\\u003c')};</script>`;
   const earlyTheme = published.mode === 'theme' && published.theme ? `<style id="clever-theme">:root{${themeVariables(published.theme)}}</style>` : '';
   const fontLinks = '<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" media="print" onload="this.media=\'all\'" /><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" /></noscript>';
-  const storeScript = '<script src="/store-ui.js?v=20260925-1" defer></script><script src="/branding-ui.js?v=20260925-4" defer></script>';
+  // Bump the ?v= number whenever these files change, so browsers fetch the new version.
+  const storeScript = '<script src="/store-ui.js?v=20260926-1" defer></script><script src="/branding-ui.js?v=20260926-1" defer></script>';
+  // Warm up the connection to Supabase (photos, logo, sign-in) before the browser discovers it needs it.
+  const supabaseOrigin = base ? new URL(base).origin : '';
+  const preconnect = supabaseOrigin ? `<link rel="preconnect" href="${escapeAttr(supabaseOrigin)}" /><link rel="dns-prefetch" href="${escapeAttr(supabaseOrigin)}" />` : '';
+  // Website icon (browser tab, bookmarks, phone home screen) from Admin → Branding, or the default icon.
+  const iconTags = siteIconTags(storeSettings.favicon_url, base);
   let output = html;
 
   // Several page templates have no <head> or <body>. Give every page a real <head> so the theme,
@@ -264,7 +308,8 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     if (extra.length) output = output.replace('</head>', `${extra.join('')}</head>`);
   }
 
-  if (!output.includes('/store-ui.js')) output = output.replace('</head>', `${fontLinks}${earlyTheme}${storeConfig}${storeScript}</head>`);
+  output = output.replace(/<link\s+rel=["'](?:shortcut )?icon["'][^>]*>|<link\s+rel=["']apple-touch-icon["'][^>]*>/gi, '');
+  if (!output.includes('/store-ui.js')) output = output.replace('</head>', `${preconnect}${iconTags}${fontLinks}${earlyTheme}${storeConfig}${storeScript}</head>`);
 
   if (isAdmin) {
     // One admin layout for every admin page: sidebar navigation on desktop, compact top bar on phones.
@@ -330,7 +375,9 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   const headers = withSecurityHeaders(new Headers(response.headers));
   headers.set('content-type', 'text/html; charset=utf-8');
-  headers.set('cache-control', 'no-store');
+  // Admin pages are never stored. Store pages may be kept for the Back button (instant back navigation)
+  // but are always re-checked with the server, so prices and stock are never stale.
+  headers.set('cache-control', isAdmin ? 'no-store' : 'private, no-cache');
   headers.delete('content-length');
   return new Response(output, { status: response.status, statusText: response.statusText, headers });
 };

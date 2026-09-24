@@ -1,4 +1,11 @@
 ---
+/**
+ * Create account: /register
+ *
+ * Creates a Supabase account with the customer's name. If "Confirm email" is on in Supabase, a
+ * confirmation email is sent (its link opens /login?confirmed=1) and can be re-sent from here.
+ * The database trigger in supabase/accounts_and_admins.sql creates the customer's profile.
+ */
 import '../styles/global.css';
 import { supabaseConfig } from '../lib/config';
 

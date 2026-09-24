@@ -58,6 +58,10 @@ p{text-wrap:pretty}
 a{color:inherit;text-decoration:none}
 img{display:block;max-width:100%;height:auto}
 button,a{-webkit-tap-highlight-color:transparent}
+/* Finger-sized (44px) targets for small text links on touch screens. */
+@media (pointer:coarse){.text-link,.summary-cart-link,.cart-item h2 a,.shop-result-row a,.pagination a{display:inline-flex;align-items:center;min-height:44px}}
+/* Taps fire immediately: no waiting to see if it is a double-tap zoom (still pinch-zoomable). */
+a,button,input,select,textarea,label,summary,[role=button]{touch-action:manipulation}
 button,input,textarea,select{font:inherit;color:inherit}
 ::selection{background:color-mix(in srgb,var(--theme-accent) 55%,#fff);color:var(--ink)}
 :focus-visible{outline:3px solid color-mix(in srgb,var(--brand-primary) 45%,#fff);outline-offset:2px;border-radius:6px}
@@ -77,7 +81,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .site-logo-image[hidden]{display:none}
 .main-nav{display:flex;align-items:center;gap:4px;min-width:0;font-weight:700;font-size:.97rem}
 .main-nav a{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:8px 14px;border-radius:var(--radius-pill);color:var(--muted);white-space:nowrap;transition:background .18s,color .18s}
-.main-nav a:hover{background:var(--surface-2);color:var(--primary-strong)}
+@media (hover:hover){.main-nav a:hover{background:var(--surface-2);color:var(--primary-strong)}}
 .main-nav a[aria-current=page]{background:var(--brand-soft);color:var(--primary-strong)}
 .header-search{flex:1 1 260px;max-width:360px;margin-left:auto;position:relative}
 .header-search input{width:100%;min-height:44px;padding:0 16px 0 42px;border:1.5px solid var(--line);border-radius:var(--radius-pill);background:var(--surface-2);outline:none;transition:border-color .18s,background .18s,box-shadow .18s}
@@ -87,11 +91,11 @@ button,input,textarea,select{font:inherit;color:inherit}
 .header-actions{display:flex;align-items:center;gap:6px;flex:0 0 auto}
 .header-search+.header-actions{margin-left:0}
 .header-icon-link{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:50%;color:var(--muted);transition:background .18s,color .18s}
-.header-icon-link:hover,.header-icon-link[aria-current=page]{background:var(--surface-2);color:var(--primary-strong)}
+.header-icon-link[aria-current=page]{background:var(--surface-2);color:var(--primary-strong)}@media (hover:hover){.header-icon-link:hover{background:var(--surface-2);color:var(--primary-strong)}}
 .header-icon-link svg{width:22px;height:22px}
 .header-search-link{display:none}
 .cart-link{position:relative;display:inline-flex!important;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px!important;border-radius:var(--radius-pill);background:var(--brand-gradient);color:var(--brand-text-on-primary)!important;font-weight:800;box-shadow:0 3px 0 var(--primary-strong);transition:transform .15s,box-shadow .15s,filter .15s}
-.cart-link:hover{filter:brightness(.93);transform:translateY(-1px)}
+@media (hover:hover){.cart-link:hover{filter:brightness(.93);transform:translateY(-1px)}}
 .cart-link:active{transform:translateY(2px);box-shadow:0 1px 0 var(--primary-strong)}
 .cart-icon{font-size:1.1rem;line-height:1;display:inline-flex}
 .cart-count-badge{display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-pill);background:var(--theme-accent);color:var(--theme-text-on-accent);font-size:.75rem;font-weight:900;line-height:1}
@@ -100,26 +104,26 @@ button,input,textarea,select{font:inherit;color:inherit}
 .clever-header-socials{display:inline-flex;align-items:center;gap:4px}
 .clever-header-socials[hidden]{display:none}
 .clever-header-social{display:inline-grid;place-items:center;width:40px;height:40px;border-radius:50%;transition:transform .16s,background .16s}
-.clever-header-social:hover{transform:translateY(-1px);background:var(--surface-2)}
+@media (hover:hover){.clever-header-social:hover{transform:translateY(-1px);background:var(--surface-2)}}
 .clever-header-social-icon{display:block;width:22px;height:22px}
 .clever-ribbon{background:linear-gradient(90deg,var(--brand-primary),var(--brand-primary-2));color:var(--brand-text-on-primary);text-align:center;font-size:.88rem;font-weight:800;letter-spacing:.01em}
 .clever-ribbon .container{min-height:40px;display:grid;place-items:center;padding-block:8px}
 
 /* Buttons */
 .button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:0 26px;border:0;border-radius:var(--radius-pill);background:var(--brand-gradient);color:var(--brand-text-on-primary);font-weight:800;font-size:1rem;line-height:1.1;text-align:center;cursor:pointer;box-shadow:0 4px 0 var(--primary-strong);transition:transform .15s,box-shadow .15s,filter .15s,opacity .15s}
-.button:hover{filter:brightness(.93);transform:translateY(-2px);box-shadow:0 6px 0 var(--primary-strong)}
+@media (hover:hover){.button:hover{filter:brightness(.93);transform:translateY(-2px);box-shadow:0 6px 0 var(--primary-strong)}}
 .button:active{transform:translateY(3px);box-shadow:0 1px 0 var(--primary-strong)}
 .button:disabled,.button[aria-disabled=true]{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
 .secondary-button,.button.secondary-button{background:var(--surface);color:var(--primary-strong);box-shadow:inset 0 0 0 2px var(--line-strong)}
-.secondary-button:hover,.button.secondary-button:hover{filter:none;background:var(--surface-2);box-shadow:inset 0 0 0 2px var(--brand-primary);transform:translateY(-2px)}
+@media (hover:hover){.secondary-button:hover,.button.secondary-button:hover{filter:none;background:var(--surface-2);box-shadow:inset 0 0 0 2px var(--brand-primary);transform:translateY(-2px)}}
 .secondary-button:active,.button.secondary-button:active{transform:translateY(1px)}
 .small-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:38px;padding:0 14px;border:1.5px solid var(--line-strong);border-radius:var(--radius-pill);background:var(--surface);color:var(--ink);font-weight:700;font-size:.88rem;cursor:pointer;transition:transform .16s,border-color .16s,background .16s}
-.small-button:hover{transform:translateY(-1px);border-color:var(--brand-primary);background:var(--surface-2)}
+@media (hover:hover){.small-button:hover{transform:translateY(-1px);border-color:var(--brand-primary);background:var(--surface-2)}}
 .danger-button{color:var(--danger)}
-.danger-button:hover{border-color:var(--danger);background:var(--danger-soft)}
+@media (hover:hover){.danger-button:hover{border-color:var(--danger);background:var(--danger-soft)}}
 .text-gradient{background:var(--brand-gradient);-webkit-background-clip:text;background-clip:text;color:transparent}
 .text-link{color:var(--primary-strong);font-weight:800}
-.text-link:hover{text-decoration:underline;text-underline-offset:3px}
+@media (hover:hover){.text-link:hover{text-decoration:underline;text-underline-offset:3px}}
 
 /* Hero */
 .hero{position:relative;overflow:hidden;padding:88px 0 80px;background:
@@ -149,8 +153,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 .category-card::before{content:"";position:absolute;right:-26px;top:-26px;width:96px;height:96px;border-radius:50%;background:color-mix(in srgb,var(--theme-accent) 40%,transparent);transition:transform .3s}
 .category-card:nth-child(3n+2)::before{background:color-mix(in srgb,var(--brand-primary-2) 20%,transparent)}
 .category-card:nth-child(3n)::before{background:color-mix(in srgb,var(--brand-soft) 90%,var(--brand-primary))}
-.category-card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:var(--line-strong)}
-.category-card:hover::before{transform:scale(1.25)}
+@media (hover:hover){.category-card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:var(--line-strong)}}
+@media (hover:hover){.category-card:hover::before{transform:scale(1.25)}}
 .category-card>*{position:relative}
 .category-card strong{font-family:var(--font-display);font-size:1.2rem;font-weight:600}
 .category-card p{margin:6px 0 0;color:var(--muted);font-size:.9rem;line-height:1.5}
@@ -159,9 +163,9 @@ button,input,textarea,select{font:inherit;color:inherit}
 /* Product cards */
 .product-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
 .product-card{position:relative;display:flex;flex-direction:column;overflow:hidden;border:1.5px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);transition:transform .2s,box-shadow .2s,border-color .2s}
-.product-card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:var(--line-strong)}
+@media (hover:hover){.product-card:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:var(--line-strong)}}
 .product-image{aspect-ratio:1/1;width:100%;object-fit:cover;background:var(--surface-2);transition:transform .35s}
-.product-card:hover .product-image{transform:scale(1.04)}
+@media (hover:hover){.product-card:hover .product-image{transform:scale(1.04)}}
 .product-placeholder{aspect-ratio:1/1;display:grid;place-items:center;background:var(--surface-2);color:var(--subtle);font-weight:700}
 .product-info{display:flex;flex-direction:column;flex:1;padding:16px 18px 18px}
 .product-info h2,.product-info h3{margin:0 0 6px;font-family:var(--font-body);font-size:1.02rem;font-weight:800;line-height:1.3;letter-spacing:0}
@@ -169,6 +173,10 @@ button,input,textarea,select{font:inherit;color:inherit}
 .price{font-family:var(--font-display);font-size:1.25rem;font-weight:600;color:var(--primary-strong)}
 .shop-original-price{color:var(--subtle);text-decoration:line-through;font-size:.9rem}
 .view-product{display:inline-flex;align-self:flex-start;align-items:center;justify-content:center;margin-top:auto;padding-top:12px;color:var(--primary-strong);font-size:.9rem;font-weight:800}
+/* The whole product card is one big tap target: the title link is stretched over the card.
+   Buttons inside the card (like "Quick view") sit above it so they still work on their own. */
+.product-info h2 a::after,.product-info h3 a::after{content:"";position:absolute;inset:0;z-index:3}
+.product-card .quick-view-trigger{z-index:4}
 .sale-badge,.stock-badge{position:absolute;top:12px;z-index:2;padding:6px 11px;border-radius:var(--radius-pill);font-size:.74rem;font-weight:900;letter-spacing:.02em;box-shadow:var(--shadow-sm)}
 .sale-badge{left:12px;background:var(--theme-accent);color:var(--theme-text-on-accent)}
 .stock-badge{right:12px;background:var(--surface);color:var(--danger)}
@@ -182,7 +190,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .footer-col h2{margin:0 0 12px;font-family:var(--font-body);font-size:.8rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
 .footer-col ul{display:grid;gap:8px;margin:0;padding:0;list-style:none}
 .footer-col a{font-weight:700;font-size:.94rem}
-.footer-col a:hover{color:var(--primary-strong)}
+@media (hover:hover){.footer-col a:hover{color:var(--primary-strong)}}
 .footer-bottom{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-top:22px;border-top:1px solid var(--line);font-size:.88rem}
 .footer-inner{display:flex;justify-content:space-between;gap:30px;align-items:flex-start;margin-bottom:22px}
 .footer-links{display:flex;gap:16px;flex-wrap:wrap;font-weight:700;font-size:.92rem}
@@ -200,7 +208,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .form-card label:has(input:required)::after,.form-card label:has(textarea:required)::after,.form-card label:has(select:required)::after{content:"*";position:absolute;left:0;top:0;color:var(--danger);font-weight:900;line-height:1.3}
 .form-card input,.form-card textarea,.form-card select,#product-search{width:100%;min-height:50px;padding:12px 16px;border:1.5px solid var(--line-strong);border-radius:14px;background:var(--surface);color:var(--ink);font-weight:600;outline:none;transition:border-color .18s,box-shadow .18s,background .18s}
 .form-card textarea{min-height:auto;resize:vertical}
-.form-card input:hover,.form-card textarea:hover,.form-card select:hover{border-color:color-mix(in srgb,var(--brand-primary) 40%,var(--line-strong))}
+@media (hover:hover){.form-card input:hover,.form-card textarea:hover,.form-card select:hover{border-color:color-mix(in srgb,var(--brand-primary) 40%,var(--line-strong))}}
 .form-card input:focus,.form-card textarea:focus,.form-card select:focus,#product-search:focus{border-color:var(--brand-primary);box-shadow:0 0 0 4px color-mix(in srgb,var(--brand-primary) 15%,transparent)}
 .form-card input::placeholder,.form-card textarea::placeholder{color:var(--subtle);font-weight:500}
 .form-card input:user-invalid,.form-card textarea:user-invalid,.form-card select:user-invalid{border-color:var(--danger);box-shadow:0 0 0 4px var(--danger-soft)}
@@ -229,14 +237,14 @@ input[type=checkbox],input[type=radio]{accent-color:var(--brand-primary)}
 .cart-item{display:grid;grid-template-columns:110px 1fr auto;gap:20px;align-items:center;padding:16px;border:1.5px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
 .cart-item img,.cart-placeholder{width:110px;height:110px;object-fit:cover;border-radius:var(--radius);background:var(--surface-2);display:grid;place-items:center;color:var(--subtle)}
 .cart-item h2{margin:0 0 6px;font-family:var(--font-body);font-size:1.05rem;font-weight:800}
-.cart-item h2 a:hover{color:var(--primary-strong)}
+@media (hover:hover){.cart-item h2 a:hover{color:var(--primary-strong)}}
 .cart-item-info p{margin:0 0 12px;color:var(--muted)}
 .quantity-control{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .quantity-control strong{min-width:28px;text-align:center}
 .quantity-control button{display:inline-grid;place-items:center;width:40px;height:40px;border:1.5px solid var(--line-strong);border-radius:50%;background:var(--surface);color:var(--ink);font-size:1.1rem;font-weight:800;cursor:pointer;transition:border-color .16s,background .16s}
-.quantity-control button:hover{border-color:var(--brand-primary);background:var(--surface-2)}
+@media (hover:hover){.quantity-control button:hover{border-color:var(--brand-primary);background:var(--surface-2)}}
 .quantity-control .remove-link{width:auto;height:auto;padding:6px 10px;border:0;border-radius:var(--radius-pill);color:var(--danger);font-size:.9rem}
-.quantity-control .remove-link:hover{background:var(--danger-soft)}
+@media (hover:hover){.quantity-control .remove-link:hover{background:var(--danger-soft)}}
 .line-total{font-family:var(--font-display);font-size:1.2rem;font-weight:600;white-space:nowrap}
 .cart-summary,.checkout-summary{margin-top:20px;padding:24px;border:1.5px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-sm)}
 .checkout-summary h2{margin:0 0 16px;font-size:1.35rem}
@@ -271,14 +279,14 @@ input[type=checkbox],input[type=radio]{accent-color:var(--brand-primary)}
 table{width:100%;border-collapse:collapse;min-width:760px}
 th,td{text-align:left;padding:14px 16px;border-bottom:1px solid var(--line);vertical-align:top}
 tbody tr:last-child td{border-bottom:0}
-tbody tr:hover td{background:color-mix(in srgb,var(--surface-2) 50%,transparent)}
+@media (hover:hover){tbody tr:hover td{background:color-mix(in srgb,var(--surface-2) 50%,transparent)}}
 th{font-size:.76rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--surface-2)}
 td small{color:var(--muted)}
 .table-wrap select{padding:7px 10px;border:1.5px solid var(--line-strong);border-radius:10px;background:var(--surface)}
 
 .whatsapp-order{display:grid;gap:8px;margin-top:10px}
 .button.whatsapp-buy-button{width:100%;background:#25d366;color:#fff;box-shadow:0 4px 0 #1a9e4b}
-.button.whatsapp-buy-button:hover{background:#20c05c;filter:none;box-shadow:0 6px 0 #1a9e4b}
+@media (hover:hover){.button.whatsapp-buy-button:hover{background:#20c05c;filter:none;box-shadow:0 6px 0 #1a9e4b}}
 .button.whatsapp-buy-button:active{box-shadow:0 1px 0 #1a9e4b}
 .whatsapp-buy-button svg{width:22px;height:22px;flex:0 0 auto}
 .whatsapp-order-note{margin:0;color:var(--muted);font-size:.82rem;font-weight:600;text-align:center}
@@ -317,12 +325,12 @@ html[data-area=admin] .admin-head #logout,html[data-area=admin] .admin-head>.but
 .admin-brand-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:var(--brand-gradient);font-size:22px;box-shadow:0 8px 20px rgba(0,0,0,.25)}
 .admin-nav{display:grid;gap:4px}
 .admin-nav a{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:12px;color:color-mix(in srgb,#fff 72%,transparent);font-weight:700;font-size:.94rem;transition:background .15s,color .15s}
-.admin-nav a:hover{background:rgba(255,255,255,.07);color:#fff}
+@media (hover:hover){.admin-nav a:hover{background:rgba(255,255,255,.07);color:#fff}}
 .admin-nav a[aria-current=page]{background:rgba(255,255,255,.12);color:#fff;box-shadow:inset 3px 0 0 var(--theme-accent)}
 .admin-nav svg{flex:0 0 20px;width:20px;height:20px}
 .admin-sidebar-footer{display:grid;gap:6px;margin-top:auto;padding-top:16px;border-top:1px solid rgba(255,255,255,.1)}
 .admin-sidebar-footer a,.admin-sidebar-footer button{padding:10px 12px;border:0;border-radius:12px;background:none;color:color-mix(in srgb,#fff 70%,transparent);font-weight:700;text-align:left;cursor:pointer}
-.admin-sidebar-footer a:hover,.admin-sidebar-footer button:hover{background:rgba(255,255,255,.07);color:#fff}
+@media (hover:hover){.admin-sidebar-footer a:hover,.admin-sidebar-footer button:hover{background:rgba(255,255,255,.07);color:#fff}}
 html[data-area=admin] .admin-head{margin-bottom:22px}
 html[data-area=admin] .admin-head .eyebrow{margin-bottom:8px}
 html[data-area=admin] .form-card,html[data-area=admin] .admin-panel{border-radius:20px;border-color:var(--line);box-shadow:var(--shadow-sm)}
@@ -340,10 +348,11 @@ html[data-area=admin] .form-card,html[data-area=admin] .admin-panel{border-radiu
 .chip.active{border-color:var(--brand-primary);background:var(--brand-soft);color:var(--primary-strong)}
 .admin-input{min-height:42px;padding:8px 14px;border:1.5px solid var(--line-strong);border-radius:12px;background:var(--surface);color:var(--ink);font-weight:600}
 .admin-input:focus{outline:none;border-color:var(--brand-primary);box-shadow:0 0 0 4px color-mix(in srgb,var(--brand-primary) 14%,transparent)}
-.toggle{appearance:none;position:relative;width:40px;height:22px;border-radius:99px;background:var(--line-strong);cursor:pointer;transition:background .15s;flex:0 0 auto}
-.toggle::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s}
+.toggle{appearance:none;position:relative;width:44px;height:26px;margin:0;border-radius:99px;background:var(--line-strong);cursor:pointer;transition:background .15s;flex:0 0 auto}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s}
 .toggle:checked{background:var(--brand-primary)}
 .toggle:checked::after{transform:translateX(18px)}
+.toggle:focus-visible{outline:3px solid color-mix(in srgb,var(--brand-primary) 45%,transparent);outline-offset:2px}
 @media (max-width:900px){
   html[data-area=admin] body{display:block}
   .admin-sidebar{position:sticky;z-index:1000;height:auto;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;overflow-x:auto;scrollbar-width:none}
@@ -366,15 +375,14 @@ html[data-area=admin] .form-card,html[data-area=admin] .admin-panel{border-radiu
 .clever-floating-cart,.clever-floating-whatsapp{position:fixed;bottom:22px;width:58px;height:58px;border-radius:50%;display:grid;place-items:center;text-decoration:none;pointer-events:auto;box-shadow:0 10px 26px color-mix(in srgb,var(--ink) 25%,transparent);transition:transform .2s,box-shadow .2s}
 .clever-floating-cart{right:22px;font-size:0;background:var(--brand-gradient);color:var(--brand-text-on-primary)}
 .clever-floating-whatsapp{left:22px;background:#25d366;color:#fff}
-.clever-floating-cart:hover,.clever-floating-whatsapp:hover{transform:translateY(-3px) scale(1.04)}
+@media (hover:hover){.clever-floating-cart:hover,.clever-floating-whatsapp:hover{transform:translateY(-3px) scale(1.04)}}
 .clever-floating-cart .floating-cart-icon{font-size:25px;line-height:1}
 .clever-floating-cart .floating-cart-count{position:absolute;right:-3px;top:-3px;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-pill);display:grid;place-items:center;background:var(--theme-accent);color:var(--theme-text-on-accent);font-size:11px;font-weight:900;line-height:1;box-shadow:0 0 0 2px var(--surface)}
 .clever-floating-controls .floating-cart-count[hidden]{display:none}
 .clever-floating-whatsapp svg{width:30px;height:30px;display:block}
 
-/* Motion: only opacity and transform, so animations stay on the compositor and never trigger layout. */
-@view-transition{navigation:auto}
-::view-transition-old(root),::view-transition-new(root){animation-duration:.22s;animation-timing-function:ease}
+/* Motion: only opacity and transform, so animations stay on the compositor and never trigger layout.
+   No cross-page view transitions: they block taps while the old page fades out. */
 @keyframes ct-rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 @keyframes ct-pop{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
 .hero-content>*,.shop-hero .container>*,.category-hero .container>*,.category-heading>div>*,main>.section:first-child .section-header>*{animation:ct-rise .6s cubic-bezier(.2,.7,.2,1) both}

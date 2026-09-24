@@ -1,4 +1,8 @@
 ---
+/**
+ * All categories: /categories
+ * One card per active category (Admin → Products → Categories), linking to /category/<slug>.
+ */
 import { supabase } from '../lib/supabase';
 import '../styles/global.css';
 
@@ -23,17 +27,7 @@ const canonicalUrl = new URL('/categories', Astro.site ?? Astro.url.origin).href
   <meta property="og:url" content={canonicalUrl} />
 </head>
 
-<header class="site-header">
-  <div class="container header-inner">
-    <a href="/" class="logo">Clever Toys</a>
-    <nav class="main-nav" aria-label="Main navigation">
-      <a href="/">Home</a>
-      <a href="/products">Shop</a>
-      <a href="/categories" aria-current="page">Categories</a>
-      <a href="/cart" aria-label="Shopping cart">Cart</a>
-    </nav>
-  </div>
-</header>
+<header class="site-header"></header>
 
 <main>
   <section class="category-hero">
@@ -56,7 +50,7 @@ const canonicalUrl = new URL('/categories', Astro.site ?? Astro.url.origin).href
           {categories.map((category) => (
             <a class="category-page-card" href={`/category/${category.slug}`}>
               {category.image_url ? (
-                <img src={category.image_url} alt={category.name} loading="lazy" />
+                <img src={category.image_url} alt="" loading="lazy" decoding="async" />
               ) : (
                 <div class="category-page-placeholder" aria-hidden="true">
                   <span>{category.name.slice(0, 1)}</span>
@@ -129,10 +123,10 @@ const canonicalUrl = new URL('/categories', Astro.site ?? Astro.url.origin).href
     transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
 
-  .category-page-card:hover {
+  @media (hover:hover){.category-page-card:hover{
     transform: translateY(-4px);
     box-shadow: 0 14px 34px rgba(15, 23, 42, 0.09);
-  }
+  }}
 
   .category-page-card img,
   .category-page-placeholder {

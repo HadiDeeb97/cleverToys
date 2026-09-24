@@ -1,4 +1,9 @@
 ---
+/**
+ * Track order: /track-order (optionally ?order=<number>)
+ *
+ * Customers enter their order number and phone; /api/track-order checks both match and returns the status.
+ */
 import '../styles/global.css';
 
 const initialOrder = (Astro.url.searchParams.get('order') || '').slice(0, 40);

@@ -1,4 +1,7 @@
 ---
+/**
+ * Admin → Products → "Download template": builds the Excel file used to import products in bulk.
+ */
 import '../../styles/global.css';
 ---
 
@@ -33,8 +36,9 @@ import '../../styles/global.css';
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script>
-  document.querySelector('#download-template').onclick = () => {
-    const message=document.querySelector('#message');
+  // Builds the Excel import template (a sample row plus an Instructions sheet) with SheetJS.
+  document.querySelector<HTMLButtonElement>('#download-template')!.onclick = () => {
+    const message=document.querySelector<HTMLElement>('#message')!;
     if(!window.XLSX){message.textContent='Excel tools are still loading. Please try again.';return;}
     const headers=['name','slug','sku','category','price','sale_price','cost_price','stock_quantity','age_min','age_max','brand','short_description','description','primary_image_url','image_1','image_2','image_3','seo_title','seo_description','is_active','is_featured'];
     const rows=[headers,['Piano Game','piano-game','CT-001','Educational Toys',8.8,'',5.2,30,3,8,'Clever Toys','Fun educational piano game for kids.','A fun educational piano game designed for children.','','','','','Piano Game for Kids | Clever Toys','Buy the Piano Game for kids from Clever Toys Lebanon.',true,false]];

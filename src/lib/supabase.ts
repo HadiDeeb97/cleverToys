@@ -1,3 +1,6 @@
+/**
+ * Server-side Supabase client used by pages while they render (public, read-only access).
+ */
 import { createClient } from '@supabase/supabase-js';
 import { supabaseConfig } from './config';
 

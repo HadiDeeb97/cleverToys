@@ -1,4 +1,11 @@
 ---
+/**
+ * Sign-in page: /login
+ *
+ * Customers go to /account after signing in, admins to /admin (or to ?next= when a page sent them here).
+ * The confirmation email from /register also lands here (?confirmed=1) and signs the customer in.
+ * Unconfirmed accounts get a "Resend confirmation email" button.
+ */
 import '../styles/global.css';
 import { supabaseConfig } from '../lib/config';
 

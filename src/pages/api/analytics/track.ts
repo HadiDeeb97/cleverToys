@@ -1,3 +1,8 @@
+/**
+ * POST /api/analytics/track: records a page view or heartbeat from public/visitor-analytics.js
+ * for Admin → Visitors. Visitors are identified only by a random id; the country comes from Cloudflare
+ * and no names, emails or IP addresses are stored.
+ */
 import type { APIRoute } from 'astro';
 import { supabaseConfig } from '../../../lib/config';
 

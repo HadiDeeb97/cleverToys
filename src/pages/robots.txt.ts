@@ -1,3 +1,7 @@
+/**
+ * GET /robots.txt: tells search engines which parts of the store to skip, plus any extra rules
+ * from Admin → SEO → Sitemap & robots, and where the sitemap is.
+ */
 import type { APIRoute } from 'astro';
 import { supabase } from '../lib/supabase';
 import { DEFAULT_DISALLOW, cleanRobotsLines, parseSeoSettings } from '../lib/seo';

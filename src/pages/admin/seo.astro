@@ -1,4 +1,8 @@
 ---
+/**
+ * Admin → SEO: health score, titles/descriptions for pages, products and categories, sitemap and
+ * robots.txt options, verification codes and a live check of every page. Needs supabase/seo_advanced.sql.
+ */
 import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
@@ -223,7 +227,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 </main>
 
 <script>
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { exportPdf, exportXlsx } from '../../scripts/table-export';
 
 type Row = Record<string, any>;
@@ -244,7 +248,8 @@ const lengthState = (kind: 'title' | 'description', value: string): Level | 'ok'
   return value.length > max || value.length < min ? 'warn' : 'ok';
 };
 
-let supabase: ReturnType<typeof createClient>;
+// No generated database types in this project, so table rows are typed loosely.
+let supabase: SupabaseClient<any, 'public', any>;
 let pages: Row[] = [];
 let products: Row[] = [];
 let categories: Row[] = [];
@@ -954,7 +959,7 @@ init();
 .seo-kpi small{color:var(--muted)}
 .seo-issues{display:grid;gap:8px}
 .seo-issue{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,background .15s}
-.seo-issue:hover{border-color:var(--brand-primary);background:var(--brand-soft)}
+@media (hover:hover){.seo-issue:hover{border-color:var(--brand-primary);background:var(--brand-soft)}}
 .seo-issue>span:nth-child(2){flex:1}
 .seo-issue-go{color:var(--brand-primary);font-weight:800;white-space:nowrap}
 .seo-dot{flex:0 0 10px;height:10px;border-radius:50%;background:#94a3b8}
@@ -984,7 +989,7 @@ td.seo-pills .seo-pill{margin:2px}
 .seo-page-list-card .seo-search{max-width:none;width:100%;margin-bottom:10px}
 .seo-page-list{display:grid;gap:6px;max-height:640px;overflow:auto}
 .seo-page-choice{display:grid;gap:2px;width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
-.seo-page-choice:hover,.seo-page-choice.selected{border-color:var(--brand-primary);background:var(--brand-soft)}
+.seo-page-choice.selected{border-color:var(--brand-primary);background:var(--brand-soft)}@media (hover:hover){.seo-page-choice:hover{border-color:var(--brand-primary);background:var(--brand-soft)}}
 .seo-page-choice>span{color:var(--muted);font-size:.78rem}
 .seo-tags{display:flex;flex-wrap:wrap;gap:4px}
 .seo-tags:empty{display:none}

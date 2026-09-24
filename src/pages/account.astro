@@ -1,29 +1,155 @@
 ---
+/**
+ * Customer account page: /account (signed-in customers only)
+ *
+ * - "My orders": every order placed while signed in, newest first, with its items and status
+ * - "My delivery details": saved to customer_profiles and used to fill in checkout automatically
+ * Guests are sent to /login and brought back here after signing in.
+ */
 import '../styles/global.css';
 import { supabaseConfig } from '../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
-<header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart">Cart</a></nav></div></header>
-<main class="section"><div class="container narrow"><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><div class="section-header"><h1>My Account</h1><p id="account-email">Loading…</p></div><div id="account-message" role="status"></div><div id="orders"></div><button id="logout" class="button secondary-button" type="button">Sign Out</button></div></main>
+<head>
+  <title>My Account | Clever Toys</title>
+</head>
+{/* Replaced by the shared store header in src/middleware.ts */}
+<header class="site-header"></header>
+<main class="section">
+  <div class="container narrow account-page">
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div class="section-header account-head">
+      <div><h1>My Account</h1><p id="account-email">Loading…</p></div>
+      <button id="logout" class="button secondary-button" type="button">Sign Out</button>
+    </div>
+    <p id="account-message" role="status"></p>
+
+    <section class="account-section" aria-labelledby="orders-title">
+      <h2 id="orders-title">My orders</h2>
+      <div id="orders"><p class="muted">Loading your orders…</p></div>
+    </section>
+
+    <section class="account-section" aria-labelledby="details-title">
+      <h2 id="details-title">My delivery details</h2>
+      <p class="muted">Saved here, they are filled in for you at checkout.</p>
+      <form id="details-form" class="form-card account-details">
+        <label>Full name<input name="full_name" autocomplete="name" maxlength="120" /></label>
+        <label>Phone number<input name="phone" type="tel" autocomplete="tel" maxlength="40" /></label>
+        <label>Governorate<input name="governorate" autocomplete="address-level1" maxlength="80" /></label>
+        <label>City<input name="city" autocomplete="address-level2" maxlength="80" /></label>
+        <label>Area<input name="area" autocomplete="address-level3" maxlength="120" /></label>
+        <label class="wide">Full address<textarea name="address" rows="2" autocomplete="street-address" maxlength="500"></textarea></label>
+        <div class="wide account-details-actions"><button class="button" type="submit">Save details</button><span id="details-message" role="status"></span></div>
+      </form>
+    </section>
+  </div>
+</main>
+<footer class="site-footer"></footer>
+
 <script>
-import { createClient } from '@supabase/supabase-js';
-const config=document.querySelector('#auth-config');
-const url=config?.dataset.url; const key=config?.dataset.key;
-const esc=(v)=>String(v??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const email=document.querySelector('#account-email'); const orders=document.querySelector('#orders'); const message=document.querySelector('#account-message');
-let supabase;
-async function init(){
-  try{
-    if(!url||!key) throw new Error('Supabase browser configuration is missing.');
-    supabase=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-    const {data:{session}}=await supabase.auth.getSession();
-    if(!session?.user){ location.href='/login?next=/account'; return; }
-    const user=session.user; email.textContent=user.email||'';
-    const {data,error}=await supabase.from('orders').select('order_number,total,status,created_at').eq('customer_id',user.id).order('created_at',{ascending:false});
-    if(error) throw new Error(error.message);
-    orders.innerHTML=data?.length?`<div class="table-wrap"><table><thead><tr><th>Order</th><th>Date</th><th>Total</th><th>Status</th></tr></thead><tbody>${data.map(o=>`<tr><td>${esc(o.order_number)}</td><td>${new Date(o.created_at).toLocaleDateString()}</td><td>$${Number(o.total).toFixed(2)}</td><td>${esc(o.status)}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state"><h2>No orders yet</h2><a class="button" href="/products">Start Shopping</a></div>';
-  }catch(error){ message.textContent=error?.message||'Could not load your account.'; }
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+
+type Order = { id: string; order_number: string; total: number; status: string; created_at: string; order_items?: Array<{ product_name?: string; variant_name?: string | null; quantity: number; unit_price?: number }> };
+
+const config = document.querySelector<HTMLElement>('#auth-config');
+const email = document.querySelector<HTMLElement>('#account-email')!;
+const ordersEl = document.querySelector<HTMLElement>('#orders')!;
+const message = document.querySelector<HTMLElement>('#account-message')!;
+const form = document.querySelector<HTMLFormElement>('#details-form')!;
+const detailsMessage = document.querySelector<HTMLElement>('#details-message')!;
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+const money = (n: number) => `$${Number(n || 0).toFixed(2)}`;
+const FIELDS = ['full_name', 'phone', 'governorate', 'city', 'area', 'address'] as const;
+let supabase: SupabaseClient | null = null;
+let userId = '';
+
+/** Order cards: number, date, status, items and total. */
+function renderOrders(orders: Order[]) {
+  if (!orders.length) {
+    ordersEl.innerHTML = '<div class="empty-state"><h2>No orders yet</h2><p>Orders you place while signed in appear here.</p><a class="button" href="/products">Start Shopping</a></div>';
+    return;
+  }
+  ordersEl.innerHTML = orders.map((o) => {
+    const items = (o.order_items || []).map((i) => `<li>${esc(i.product_name || 'Toy')}${i.variant_name ? ` · ${esc(i.variant_name)}` : ''} × ${Number(i.quantity)}</li>`).join('');
+    return `<article class="account-order">
+      <div class="account-order-head">
+        <div><strong>#${esc(o.order_number)}</strong><small>${new Date(o.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</small></div>
+        <span class="status-pill status-${esc(o.status)}">${esc(o.status)}</span>
+      </div>
+      ${items ? `<ul class="account-order-items">${items}</ul>` : ''}
+      <div class="account-order-foot"><span>Total <strong>${money(o.total)}</strong></span><a class="text-link" href="/track-order?order=${encodeURIComponent(o.order_number)}">Track order →</a></div>
+    </article>`;
+  }).join('');
 }
+
+async function init() {
+  try {
+    const url = config?.dataset.url, key = config?.dataset.key;
+    if (!url || !key) throw new Error('Supabase browser configuration is missing.');
+    supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) { location.href = '/login?next=/account'; return; }
+    userId = session.user.id;
+    email.textContent = session.user.email || '';
+
+    const [orders, profile] = await Promise.all([
+      supabase.from('orders').select('id,order_number,total,status,created_at,order_items(product_name,variant_name,quantity,unit_price)').eq('customer_id', userId).order('created_at', { ascending: false }),
+      supabase.from('customer_profiles').select('full_name,phone,governorate,city,area,address').eq('id', userId).maybeSingle()
+    ]);
+    // Older databases may not allow reading order items; show the orders without them.
+    if (orders.error) {
+      const plain = await supabase.from('orders').select('id,order_number,total,status,created_at').eq('customer_id', userId).order('created_at', { ascending: false });
+      if (plain.error) throw new Error(plain.error.message);
+      renderOrders((plain.data || []) as Order[]);
+    } else {
+      renderOrders((orders.data || []) as Order[]);
+    }
+    const values: Record<string, string> = profile.data || {};
+    if (!values.full_name) values.full_name = session.user.user_metadata?.full_name || '';
+    for (const name of FIELDS) (form.elements.namedItem(name) as HTMLInputElement).value = values[name] || '';
+  } catch (error) {
+    message.textContent = error instanceof Error ? error.message : 'Could not load your account.';
+  }
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!supabase || !userId) return;
+  const button = form.querySelector<HTMLButtonElement>('button[type=submit]')!;
+  button.disabled = true;
+  detailsMessage.textContent = 'Saving…';
+  const data = Object.fromEntries(FIELDS.map((name) => [name, String((form.elements.namedItem(name) as HTMLInputElement).value).trim() || null]));
+  const { error } = await supabase.from('customer_profiles').upsert({ id: userId, ...data, updated_at: new Date().toISOString() });
+  button.disabled = false;
+  detailsMessage.textContent = error ? error.message : 'Saved ✓';
+});
+
+document.querySelector('#logout')!.addEventListener('click', async () => {
+  if (supabase) await supabase.auth.signOut();
+  location.href = '/';
+});
+
 init();
-document.querySelector('#logout').onclick=async()=>{if(supabase) await supabase.auth.signOut();location.href='/';};
 </script>
+
+<style is:global>
+.account-page{display:grid;gap:8px}
+.account-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;text-align:left}
+.account-head p{margin:4px 0 0;color:var(--muted)}
+.account-head .button{width:auto;flex:0 0 auto}
+.account-section{margin-top:18px}
+.account-section h2{margin:0 0 10px;font-size:1.3rem}
+.account-section .muted{margin:-4px 0 12px;color:var(--muted)}
+.account-order{display:grid;gap:10px;margin-bottom:12px;padding:16px 18px;border:1.5px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
+.account-order-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.account-order-head div{display:grid;gap:2px}
+.account-order-head small{color:var(--muted)}
+.account-order-items{margin:0;padding-left:18px;color:var(--muted);font-size:.92rem;line-height:1.6}
+.account-order-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-top:8px;border-top:1px solid var(--line)}
+.account-details{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
+.account-details .wide{grid-column:1/-1}
+.account-details-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.account-details-actions .button{width:auto}
+#details-message{color:var(--success);font-weight:700}
+@media (max-width:560px){.account-details{grid-template-columns:1fr}}
+</style>

@@ -1,3 +1,11 @@
+/**
+ * visitor-analytics.js: anonymous visit counting for Admin → Visitors.
+ *
+ * Sends one "pageview" per page, then a small "heartbeat" every 60 seconds while the tab is
+ * visible (so the admin can see who is online and how long visits last). Nothing is sent while
+ * the tab is in the background, to save the shopper's battery and data.
+ * Loaded by store-ui.js after the page has finished loading.
+ */
 (() => {
   if (location.pathname.startsWith('/admin') || location.pathname.startsWith('/api')) return;
   const VISITOR_KEY = 'cleverToysVisitorId';
@@ -52,6 +60,12 @@
     }).catch(() => {});
   };
   send('pageview');
-  const heartbeat = window.setInterval(() => send('heartbeat'), 30000);
-  window.addEventListener('pagehide', () => { window.clearInterval(heartbeat); send('heartbeat'); }, { once: true });
+  let heartbeat = 0;
+  const startHeartbeat = () => { if (!heartbeat) heartbeat = window.setInterval(() => send('heartbeat'), 60000); };
+  const stopHeartbeat = () => { window.clearInterval(heartbeat); heartbeat = 0; };
+  startHeartbeat();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { stopHeartbeat(); send('heartbeat'); }
+    else startHeartbeat();
+  });
 })();

@@ -1,124 +1,165 @@
 ---
+/**
+ * Checkout page: /checkout
+ *
+ * Shows the delivery form and an order summary built from the cart saved in this browser.
+ * "Place Order" sends the order to /api/orders (src/pages/api/orders.ts), which recalculates
+ * prices on the server, saves the order and notifies the shop on Telegram.
+ * Signed-in customers get their saved details filled in automatically.
+ */
 import '../styles/global.css';
 import { supabaseConfig } from '../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
-<header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart" class="cart-link">Cart <span class="cart-count" id="cart-count" hidden>0</span></a><a href="/login">Sign in</a></nav></div></header>
-<main class="section"><div class="container checkout-layout"><section><div class="section-header"><h1>Checkout</h1><p>Cash on delivery is available.</p></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><form id="checkout-form" class="form-card"><label>Full name<input name="customer_name" required autocomplete="name"></label><label>Phone number<input name="customer_phone" required type="tel" autocomplete="tel"></label><label>Email <span>(optional)</span><input name="customer_email" type="email" autocomplete="email"></label><label>Governorate<input name="governorate" required autocomplete="address-level1"></label><label>City<input name="city" required autocomplete="address-level2"></label><label>Area<input name="area" autocomplete="address-level3"></label><label>Full address<textarea name="address" required rows="3" autocomplete="street-address"></textarea></label><label>Notes <span>(optional)</span><textarea name="notes" rows="2"></textarea></label><button class="button" type="submit">Place Order — Cash on Delivery</button><p id="form-message" role="status"></p></form></section><aside id="checkout-summary" class="checkout-summary"></aside></div></main>
+<head>
+  <title>Checkout | Clever Toys</title>
+</head>
+{/* Replaced by the shared store header in src/middleware.ts */}
+<header class="site-header"></header>
+<main class="section">
+  <div class="container checkout-layout">
+    <section>
+      <div class="section-header"><h1>Checkout</h1><p>Cash on delivery is available.</p></div>
+      <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+      {/* If "Place Order" is tapped before the page script has loaded (slow connection), this
+          remembers the tap instead of reloading the page; the script then places the order. */}
+      <form id="checkout-form" class="form-card" onsubmit="this.dataset.pending='1';return false">
+        <label>Full name<input name="customer_name" required autocomplete="name" maxlength="120" /></label>
+        <label>Phone number<input name="customer_phone" required type="tel" autocomplete="tel" maxlength="40" /></label>
+        <label>Email <span>(optional)</span><input name="customer_email" type="email" autocomplete="email" maxlength="254" /></label>
+        <label>Governorate<input name="governorate" required autocomplete="address-level1" maxlength="80" /></label>
+        <label>City<input name="city" required autocomplete="address-level2" maxlength="80" /></label>
+        <label>Area <span>(optional)</span><input name="area" autocomplete="address-level3" maxlength="120" /></label>
+        <label>Full address<textarea name="address" required rows="3" autocomplete="street-address" maxlength="500"></textarea></label>
+        <label>Notes <span>(optional)</span><textarea name="notes" rows="2" maxlength="1000"></textarea></label>
+        <button class="button" type="submit">Place Order — Cash on Delivery</button>
+        <p id="form-message" role="status"></p>
+      </form>
+    </section>
+    <aside id="checkout-summary" class="checkout-summary" aria-label="Order summary"></aside>
+  </div>
+</main>
+<footer class="site-footer"></footer>
+
 <script>
-import { createClient } from '@supabase/supabase-js';
-(async()=>{
-const KEY='cleverToysCart';
-const form=document.querySelector('#checkout-form');
-const summary=document.querySelector('#checkout-summary');
-const msg=document.querySelector('#form-message');
-const count=document.querySelector('#cart-count');
-const authConfig=document.querySelector('#auth-config');
-const supabaseUrl=authConfig?.dataset.url;
-const supabaseKey=authConfig?.dataset.key;
-const readCart=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]').filter(i=>i&&i.productId&&Number(i.quantity)>0);}catch{return[]}};
-const money=n=>`$${Number(n||0).toFixed(2)}`;
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const brandingSettings=window.__CLEVER_BRANDING__||{};
-const brandingCodDeliveryPrice=Math.max(0,Number(brandingSettings.codDeliveryPrice||0));
-const brandingFreeDeliveryThreshold=Math.max(0,Number(brandingSettings.freeDeliveryThreshold||0));
-let deliverySettings={codDeliveryPrice:brandingCodDeliveryPrice,freeDeliveryThreshold:brandingFreeDeliveryThreshold};
+import { getSession, getSupabase } from '../scripts/supabase-browser';
 
-const updateCartCount=()=>{const totalItems=readCart().reduce((sum,item)=>sum+Math.max(0,Number(item.quantity)||0),0);if(count){count.textContent=String(totalItems);count.hidden=totalItems===0;}};
+type CartItem = { productId: string; variantId?: string | null; variantName?: string | null; name: string; price: number; quantity: number };
 
-const loadDeliverySettings=async()=>{
-  let loaded=false;
-  try{
-    const response=await fetch('/api/store-settings',{cache:'no-store'});
-    if(response.ok){
-      const settings=await response.json();
-      const apiCodDeliveryPrice=Math.max(0,Number(settings.codDeliveryPrice||0));
-      const apiFreeDeliveryThreshold=Math.max(0,Number(settings.freeDeliveryThreshold||0));
-      deliverySettings={
-        codDeliveryPrice:apiCodDeliveryPrice>0?apiCodDeliveryPrice:brandingCodDeliveryPrice,
-        freeDeliveryThreshold:apiFreeDeliveryThreshold>0?apiFreeDeliveryThreshold:brandingFreeDeliveryThreshold
-      };
-      loaded=true;
-    }
-  }catch{}
+const CART_KEY = 'cleverToysCart';
+const CUSTOMER_KEY = 'cleverToysCustomer';
+const form = document.querySelector<HTMLFormElement>('#checkout-form')!;
+const summary = document.querySelector<HTMLElement>('#checkout-summary')!;
+const msg = document.querySelector<HTMLElement>('#form-message')!;
+const submitButton = form.querySelector<HTMLButtonElement>('button[type="submit"]')!;
 
-  if(!loaded && supabaseUrl && supabaseKey){
-    try{
-      const baseUrl=supabaseUrl.replace(/\/$/,'');
-      const response=await fetch(baseUrl+'/rest/v1/store_settings?select=cod_delivery_price,free_delivery_threshold&id=eq.default&limit=1',{
-        headers:{apikey:supabaseKey,Authorization:'Bearer '+supabaseKey},
-        cache:'no-store'
-      });
-      if(response.ok){
-        const row=(await response.json())?.[0]||{};
-        deliverySettings={
-          codDeliveryPrice:Math.max(0,Number(row.cod_delivery_price||0)),
-          freeDeliveryThreshold:Math.max(0,Number(row.free_delivery_threshold||0))
-        };
-      }
-    }catch{}
+const money = (n: number) => `$${Number(n || 0).toFixed(2)}`;
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+const readCart = (): CartItem[] => {
+  try {
+    const cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
+    return Array.isArray(cart) ? cart.filter((i) => i && i.productId && Number(i.quantity) > 0) : [];
+  } catch {
+    return [];
   }
 };
 
-const getDeliveryFee=(subtotal)=>{
-  const threshold=deliverySettings.freeDeliveryThreshold;
-  return threshold>0 && subtotal>=threshold ? 0 : deliverySettings.codDeliveryPrice;
-};
+// Delivery pricing from Admin → Branding (written into the page by the server, so it is always current).
+const branding = (window as any).__CLEVER_BRANDING__ || {};
+const codDeliveryPrice = Math.max(0, Number(branding.codDeliveryPrice || 0));
+const freeDeliveryThreshold = Math.max(0, Number(branding.freeDeliveryThreshold || 0));
+const deliveryFeeFor = (subtotal: number) => freeDeliveryThreshold > 0 && subtotal >= freeDeliveryThreshold ? 0 : codDeliveryPrice;
 
-const renderSummary=()=>{
-  const currentCart=readCart();
-  const subtotal=currentCart.reduce((s,i)=>s+Number(i.price||0)*Number(i.quantity||0),0);
-  const deliveryFee=getDeliveryFee(subtotal);
-  const total=subtotal+deliveryFee;
-  summary.innerHTML=`<h2>Order Summary</h2>${currentCart.length?currentCart.map(i=>`<div class="summary-line"><span>${esc(i.name)}${i.variantName?` · ${esc(i.variantName)}`:''} × ${Number(i.quantity)}</span><strong>${money(i.price*i.quantity)}</strong></div>`).join('')+`<hr><div class="summary-line"><span>Subtotal</span><strong>${money(subtotal)}</strong></div><div class="summary-line"><span>COD delivery</span><strong>${deliveryFee===0?'Free':money(deliveryFee)}</strong></div>${deliverySettings.freeDeliveryThreshold>0?`<p class="delivery-note">${subtotal>=deliverySettings.freeDeliveryThreshold?'🎉 Free delivery unlocked!':`Free delivery on orders of ${money(deliverySettings.freeDeliveryThreshold)} or more.`}</p>`:''}<div class="summary-line summary-total"><strong>Total</strong><strong>${money(total)}</strong></div><a href="/cart" class="summary-cart-link">Edit Cart</a>`:'<p>Your cart is empty.</p><a href="/products" class="button">Shop Toys</a>'}`;
-  return {subtotal,deliveryFee,total};
-};
-
-updateCartCount();
-await loadDeliverySettings();
-let checkoutTotals=renderSummary();
-
-let supabase;
-try{if(supabaseUrl&&supabaseKey)supabase=createClient(supabaseUrl,supabaseKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});}catch(error){console.warn('Supabase client initialization failed',error);}
-
-async function prefill(){
-  if(!supabase)return;
-  const {data:{session}}=await supabase.auth.getSession();
-  if(!session?.user)return;
-  const profile=await supabase.from('customer_profiles').select('full_name,phone,governorate,city,area,address').eq('id',session.user.id).maybeSingle();
-  const source=profile.data||{};
-  const meta=session.user.user_metadata||{};
-  const values={customer_name:source.full_name||meta.full_name||'',customer_phone:source.phone||'',customer_email:session.user.email||'',governorate:source.governorate||'',city:source.city||'',area:source.area||'',address:source.address||''};
-  for(const [name,value] of Object.entries(values)){const el=form.elements.namedItem(name);if(el&&!el.value)el.value=value;}
+/** Draws the order summary box and returns the totals shown in it. */
+function renderSummary() {
+  const cart = readCart();
+  const subtotal = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+  const deliveryFee = deliveryFeeFor(subtotal);
+  const total = subtotal + deliveryFee;
+  if (!cart.length) {
+    summary.innerHTML = '<h2>Order Summary</h2><p>Your cart is empty.</p><a href="/products" class="button">Shop Toys</a>';
+    return { cart, subtotal, deliveryFee, total };
+  }
+  const lines = cart.map((i) => `<div class="summary-line"><span>${esc(i.name)}${i.variantName ? ` · ${esc(i.variantName)}` : ''} × ${Number(i.quantity)}</span><strong>${money(i.price * i.quantity)}</strong></div>`).join('');
+  const freeNote = freeDeliveryThreshold > 0
+    ? `<p class="delivery-note">${subtotal >= freeDeliveryThreshold ? '🎉 Free delivery unlocked!' : `Free delivery on orders of ${money(freeDeliveryThreshold)} or more.`}</p>`
+    : '';
+  summary.innerHTML = `<h2>Order Summary</h2>${lines}<hr>
+    <div class="summary-line"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
+    <div class="summary-line"><span>COD delivery</span><strong>${deliveryFee === 0 ? 'Free' : money(deliveryFee)}</strong></div>
+    ${freeNote}
+    <div class="summary-line summary-total"><strong>Total</strong><strong>${money(total)}</strong></div>
+    <a href="/cart" class="summary-cart-link">Edit Cart</a>`;
+  return { cart, subtotal, deliveryFee, total };
 }
-prefill();
 
-let submitting=false;
-form.addEventListener('submit',async(e)=>{
-  e.preventDefault();
-  if(submitting)return;
-  const currentCart=readCart();
-  if(!currentCart.length){msg.textContent='Your cart is empty. Add a product before checkout.';return;}
-  const data=Object.fromEntries(new FormData(form));
-  const currentSubtotal=currentCart.reduce((s,i)=>s+Number(i.price)*Number(i.quantity),0);
-  checkoutTotals=renderSummary();
-  const customer={full_name:String(data.customer_name||'').trim(),customer_name:String(data.customer_name||'').trim(),phone:String(data.customer_phone||'').trim(),customer_phone:String(data.customer_phone||'').trim(),email:String(data.customer_email||'').trim(),customer_email:String(data.customer_email||'').trim(),governorate:String(data.governorate||'').trim(),city:String(data.city||'').trim(),area:String(data.area||'').trim(),address:String(data.address||'').trim()};
-  try{localStorage.setItem('cleverToysCustomer',JSON.stringify(customer));}catch{}
-  const order={...data,items:currentCart,subtotal:currentSubtotal,delivery_fee:checkoutTotals.deliveryFee,total:checkoutTotals.total,payment_method:'cash_on_delivery'};
-  msg.textContent='Submitting order…';
-  const submitButton=form.querySelector('button[type="submit"]');
-  submitting=true;if(submitButton)submitButton.disabled=true;
-  try{
-    // Send the signed-in customer's token so the order is linked to their account.
-    const headers={'content-type':'application/json'};
-    if(supabase){try{const {data:{session}}=await supabase.auth.getSession();if(session?.access_token)headers.authorization=`Bearer ${session.access_token}`;}catch{}}
-    const res=await fetch('/api/orders',{method:'POST',headers,body:JSON.stringify(order)});
-    const out=await res.json();
-    if(!res.ok)throw new Error(out.error||'Unable to place order');
-    localStorage.removeItem(KEY);
-    location.href=out.order_number?`/order-success?order=${encodeURIComponent(out.order_number)}`:'/order-success';
-  }catch(err){msg.textContent=err.message||'Unable to place order.';submitting=false;if(submitButton)submitButton.disabled=false;}
+/** Fills empty fields from this device's last order, then from the signed-in customer's profile. */
+async function prefill() {
+  const fill = (values: Record<string, string>) => {
+    for (const [name, value] of Object.entries(values)) {
+      const el = form.elements.namedItem(name) as HTMLInputElement | null;
+      if (el && !el.value && value) el.value = value;
+    }
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOMER_KEY) || '{}') || {};
+    fill({ customer_name: saved.customer_name || saved.full_name || '', customer_phone: saved.customer_phone || saved.phone || '', customer_email: saved.customer_email || saved.email || '', governorate: saved.governorate || '', city: saved.city || '', area: saved.area || '', address: saved.address || '' });
+  } catch {}
+  const session = await getSession();
+  if (!session?.user) return;
+  const supabase = await getSupabase();
+  const profile = supabase ? await supabase.from('customer_profiles').select('full_name,phone,governorate,city,area,address').eq('id', session.user.id).maybeSingle() : null;
+  const source: Record<string, string> = profile?.data || {};
+  fill({ customer_name: source.full_name || session.user.user_metadata?.full_name || '', customer_phone: source.phone || '', customer_email: session.user.email || '', governorate: source.governorate || '', city: source.city || '', area: source.area || '', address: source.address || '' });
+}
+
+let submitting = false;
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (submitting) return;
+  const { cart, subtotal, deliveryFee, total } = renderSummary();
+  if (!cart.length) { msg.textContent = 'Your cart is empty. Add a product before checkout.'; return; }
+  if (!form.reportValidity()) return;
+
+  const data = Object.fromEntries([...new FormData(form).entries()].map(([k, v]) => [k, String(v).trim()]));
+  // Remember the delivery details on this device for next time (also used by "Order on WhatsApp").
+  try {
+    localStorage.setItem(CUSTOMER_KEY, JSON.stringify({
+      full_name: data.customer_name, customer_name: data.customer_name,
+      phone: data.customer_phone, customer_phone: data.customer_phone,
+      email: data.customer_email, customer_email: data.customer_email,
+      governorate: data.governorate, city: data.city, area: data.area, address: data.address
+    }));
+  } catch {}
+
+  submitting = true;
+  submitButton.disabled = true;
+  msg.textContent = 'Placing your order…';
+  try {
+    // Signed-in customers send their login token so the order appears in their account.
+    const headers: Record<string, string> = { 'content-type': 'application/json' };
+    const session = await getSession();
+    if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`;
+    const order = { ...data, items: cart, subtotal, delivery_fee: deliveryFee, total, payment_method: 'cash_on_delivery' };
+    const res = await fetch('/api/orders', { method: 'POST', headers, body: JSON.stringify(order) });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(out.error || 'Unable to place order.');
+    localStorage.removeItem(CART_KEY);
+    location.href = out.order_number ? `/order-success?order=${encodeURIComponent(out.order_number)}` : '/order-success';
+  } catch (error) {
+    msg.textContent = error instanceof Error ? error.message : 'Unable to place order.';
+    submitting = false;
+    submitButton.disabled = false;
+  }
 });
-window.addEventListener('storage',()=>{updateCartCount();renderSummary();});
-})();</script>
-<style is:global>.summary-cart-link{display:inline-block;margin-top:12px;font-weight:700}.summary-total{font-size:1.08rem}.form-card{scroll-margin-top:24px}.delivery-note{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--success-soft);color:var(--success);font-size:.86rem;font-weight:700}</style>
+
+renderSummary();
+prefill();
+// Place the order now if the shopper already tapped "Place Order" while the page was loading.
+if (form.dataset.pending) {
+  delete form.dataset.pending;
+  form.requestSubmit(submitButton);
+}
+// Cart changed in another tab: refresh the summary.
+window.addEventListener('storage', (event) => { if (event.key === CART_KEY) renderSummary(); });
+</script>

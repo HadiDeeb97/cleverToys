@@ -1,3 +1,7 @@
+/**
+ * Reads the Supabase URL and public (publishable) key from the Cloudflare environment.
+ * Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in the Worker settings (or .dev.vars locally).
+ */
 import { env } from 'cloudflare:workers';
 
 type WorkerVars = Record<string, string | undefined>;

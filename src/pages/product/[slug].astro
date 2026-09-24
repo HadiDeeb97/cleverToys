@@ -1,63 +1,404 @@
 ---
+/**
+ * Product detail page: /product/<slug>
+ *
+ * Server side (this block): loads the product, its photos, options (variants) and
+ * "You may also like" suggestions from Supabase, then builds the SEO tags.
+ * Browser side (the <script> at the bottom): option picker, gallery thumbnails and Add to Cart.
+ * The "Order on WhatsApp" button is rendered here and wired up by public/branding-ui.js.
+ */
 import { supabase } from '../../lib/supabase';
 import '../../styles/global.css';
 
 const slug = Astro.params.slug;
-const { data: product, error } = await supabase.from('products').select(`id,name,slug,sku,short_description,description,price,sale_price,stock_quantity,age_min,age_max,brand,primary_image_url,seo_title,seo_description,categories:category_id(id,name,slug),product_images(id,image_url,alt_text,sort_order,is_primary),product_variants(id,name,sku,price,sale_price,stock_quantity,attributes,is_active)`).eq('slug', slug).eq('is_active', true).maybeSingle();
+
+// 1) The product itself, with its main category, extra photos, options and all category links.
+const productFields = [
+  'id,name,slug,sku,short_description,description,price,sale_price,stock_quantity,age_min,age_max,brand,primary_image_url,seo_title,seo_description',
+  'categories:category_id(id,name,slug)',
+  'product_images(id,image_url,alt_text,sort_order,is_primary)',
+  'product_variants(id,name,sku,price,sale_price,stock_quantity,attributes,is_active)',
+  'product_categories(category_id)'
+].join(',');
+type ProductImage = { id: string; image_url: string; alt_text: string | null; sort_order: number; is_primary: boolean };
+type ProductVariant = { id: string; name: string; sku: string | null; price: number | null; sale_price: number | null; stock_quantity: number; attributes: unknown; is_active: boolean };
+type Product = {
+  id: string; name: string; slug: string; sku: string | null; short_description: string | null; description: string | null;
+  price: number; sale_price: number | null; stock_quantity: number; age_min: number | null; age_max: number | null; brand: string | null;
+  primary_image_url: string | null; seo_title: string | null; seo_description: string | null;
+  categories: { id: string; name: string; slug: string } | null;
+  product_images: ProductImage[] | null; product_variants: ProductVariant[] | null; product_categories: { category_id: string }[] | null;
+};
+const { data, error } = await supabase.from('products').select(productFields).eq('slug', slug).eq('is_active', true).maybeSingle();
+const product = data as unknown as Product | null;
 if (error || !product) Astro.response.status = 404;
-const images = product ? [...(product.primary_image_url ? [{ id:'primary', image_url:product.primary_image_url, alt_text:product.name, sort_order:-1, is_primary:true }] : []), ...(product.product_images ?? [])].filter((image,index,all)=>all.findIndex(item=>item.image_url===image.image_url)===index).sort((a,b)=>a.sort_order-b.sort_order) : [];
-const variants = (product?.product_variants ?? []).filter((v) => v.is_active).map((v) => ({ ...v, displayPrice: Number(v.sale_price ?? v.price ?? product?.sale_price ?? product?.price ?? 0), originalPrice: v.sale_price != null ? Number(v.price ?? product?.price ?? 0) : null }));
+
+// Photos: the main image first, then the gallery images, without duplicates.
+const images = product
+  ? [
+      ...(product.primary_image_url ? [{ id: 'primary', image_url: product.primary_image_url, alt_text: product.name, sort_order: -1, is_primary: true }] : []),
+      ...(product.product_images ?? [])
+    ]
+      .filter((image, index, all) => all.findIndex((item) => item.image_url === image.image_url) === index)
+      .sort((a, b) => a.sort_order - b.sort_order)
+  : [];
+
+// Options (e.g. sizes or colours). Each option can have its own price and stock.
+const variants = (product?.product_variants ?? [])
+  .filter((v) => v.is_active)
+  .map((v) => ({
+    ...v,
+    displayPrice: Number(v.sale_price ?? v.price ?? product?.sale_price ?? product?.price ?? 0),
+    originalPrice: v.sale_price != null ? Number(v.price ?? product?.price ?? 0) : null
+  }));
 const baseDisplayPrice = product ? Number(product.sale_price ?? product.price) : 0;
 const baseOriginalPrice = product?.sale_price != null ? Number(product.price) : null;
 const inStock = Boolean(product && product.stock_quantity > 0);
 
-// "You may also like": active products sharing a category, featured first, topped up with other featured/new toys.
-type SimilarProduct = { id: string; name: string; slug: string; price: number; sale_price: number | null; stock_quantity: number; primary_image_url: string | null };
-const similarFields = 'id,name,slug,price,sale_price,stock_quantity,primary_image_url';
+// 2) "You may also like": active toys from the same categories (featured first), topped up with
+//    other featured/new toys. Both queries run at the same time to keep the page fast.
+type SimilarProduct = { id: string; name: string; slug: string; price: number; sale_price: number | null; stock_quantity: number; primary_image_url: string | null; is_active?: boolean; is_featured?: boolean; created_at?: string };
+const similarFields = 'id,name,slug,price,sale_price,stock_quantity,primary_image_url,is_active,is_featured,created_at';
 let similarProducts: SimilarProduct[] = [];
 if (product) {
-  const categoryLinks = await supabase.from('product_categories').select('category_id').eq('product_id', product.id);
-  const categoryIds = [...new Set([...(categoryLinks.data ?? []).map((row) => row.category_id), ...(product.categories?.id ? [product.categories.id] : [])])];
-  if (categoryIds.length) {
-    const related = await supabase.from('product_categories').select('product_id').in('category_id', categoryIds).neq('product_id', product.id).limit(60);
-    const relatedIds = [...new Set((related.data ?? []).map((row) => row.product_id))];
-    if (relatedIds.length) {
-      const result = await supabase.from('products').select(similarFields).in('id', relatedIds).eq('is_active', true).order('is_featured', { ascending: false }).order('created_at', { ascending: false }).limit(8);
-      similarProducts = (result.data ?? []) as SimilarProduct[];
-    }
-  }
-  if (similarProducts.length < 4) {
-    const exclude = [product.id, ...similarProducts.map((item) => item.id)];
-    const filler = await supabase.from('products').select(similarFields).eq('is_active', true).not('id', 'in', `(${exclude.join(',')})`).order('is_featured', { ascending: false }).order('created_at', { ascending: false }).limit(8 - similarProducts.length);
-    similarProducts = [...similarProducts, ...((filler.data ?? []) as SimilarProduct[])];
+  const categoryIds = [...new Set([...(product.product_categories ?? []).map((row: { category_id: string }) => row.category_id), ...(product.categories?.id ? [product.categories.id] : [])])];
+  const [related, filler] = await Promise.all([
+    categoryIds.length
+      ? supabase.from('product_categories').select(`product_id,products:product_id(${similarFields})`).in('category_id', categoryIds).neq('product_id', product.id).limit(60)
+      : Promise.resolve({ data: [] as any[] }),
+    supabase.from('products').select(similarFields).eq('is_active', true).neq('id', product.id).order('is_featured', { ascending: false }).order('created_at', { ascending: false }).limit(8)
+  ]);
+  const byRank = (a: SimilarProduct, b: SimilarProduct) => Number(b.is_featured) - Number(a.is_featured) || String(b.created_at).localeCompare(String(a.created_at));
+  const seen = new Set<string>([product.id]);
+  const relatedProducts = ((related.data ?? []) as any[])
+    .map((row) => row.products as SimilarProduct | null)
+    .filter((item): item is SimilarProduct => Boolean(item && item.is_active))
+    .sort(byRank);
+  for (const item of [...relatedProducts, ...((filler.data ?? []) as SimilarProduct[])]) {
+    if (similarProducts.length >= 8 || seen.has(item.id)) continue;
+    seen.add(item.id);
+    similarProducts.push(item);
   }
 }
+
+// 3) SEO: title/description, canonical link and structured data for Google.
 const pageTitle = product ? product.seo_title || `${product.name} | Clever Toys` : 'Product Not Found | Clever Toys';
 const pageDescription = product ? product.seo_description || product.short_description || `Shop ${product.name} at Clever Toys.` : 'The requested product could not be found.';
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin).href;
-const productSchema = product ? { '@context':'https://schema.org', '@type':'Product', name:product.name, description:product.short_description || product.description || undefined, sku:product.sku || undefined, brand:product.brand ? { '@type':'Brand', name:product.brand } : undefined, image:images.map((image)=>image.image_url), offers:{ '@type':'Offer', url:canonicalUrl, priceCurrency:'USD', price:baseDisplayPrice.toFixed(2), availability:inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock' } } : null;
-const breadcrumbSchema = product ? { '@context':'https://schema.org', '@type':'BreadcrumbList', itemListElement:[{ '@type':'ListItem', position:1, name:'Home', item:new URL('/', canonicalUrl).href }, ...(product.categories ? [{ '@type':'ListItem', position:2, name:product.categories.name, item:new URL(`/category/${product.categories.slug}`, canonicalUrl).href }] : []), { '@type':'ListItem', position:product.categories ? 3 : 2, name:product.name, item:canonicalUrl }] } : null;
+const productSchema = product ? {
+  '@context': 'https://schema.org',
+  '@type': 'Product',
+  name: product.name,
+  description: product.short_description || product.description || undefined,
+  sku: product.sku || undefined,
+  brand: product.brand ? { '@type': 'Brand', name: product.brand } : undefined,
+  image: images.map((image) => image.image_url),
+  offers: {
+    '@type': 'Offer',
+    url: canonicalUrl,
+    priceCurrency: 'USD',
+    price: baseDisplayPrice.toFixed(2),
+    itemCondition: 'https://schema.org/NewCondition',
+    availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'
+  }
+} : null;
+const breadcrumbSchema = product ? {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: new URL('/', canonicalUrl).href },
+    ...(product.categories ? [{ '@type': 'ListItem', position: 2, name: product.categories.name, item: new URL(`/category/${product.categories.slug}`, canonicalUrl).href }] : []),
+    { '@type': 'ListItem', position: product.categories ? 3 : 2, name: product.name, item: canonicalUrl }
+  ]
+} : null;
+// Tells the middleware which fields this product set itself, so the /product/* SEO template never overrides them.
+const seoCustom = product ? [product.seo_title && 'title', (product.seo_description || product.short_description) && 'description'].filter(Boolean).join(',') : '';
+
+const stockText = (stock: number) => stock <= 0 ? 'Out of stock' : stock <= 5 ? `Only ${stock} left, order soon!` : `${stock} available`;
+const ageText = product && (product.age_min != null || product.age_max != null)
+  ? product.age_min != null && product.age_max != null ? `${product.age_min}–${product.age_max} years` : product.age_min != null ? `${product.age_min}+ years` : `Up to ${product.age_max} years`
+  : '';
 ---
-<head><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" /><meta name="theme-color" content="#111827" /><meta name="format-detection" content="telephone=no" /><title>{pageTitle}</title><meta name="description" content={pageDescription} /><link rel="canonical" href={canonicalUrl} /><meta property="og:title" content={pageTitle} /><meta property="og:description" content={pageDescription} /><meta property="og:type" content="product" /><meta property="og:url" content={canonicalUrl} />{images[0] && <meta property="og:image" content={images[0].image_url} />}{product && <meta name="clever-seo-name" content={product.name} />}{product && <meta name="clever-seo-custom" content={[product.seo_title && 'title', (product.seo_description || product.short_description) && 'description'].filter(Boolean).join(',')} />}{breadcrumbSchema && <script type="application/ld+json" set:html={JSON.stringify(breadcrumbSchema)} />}{productSchema && <script type="application/ld+json" set:html={JSON.stringify(productSchema)} />}</head>
-<header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav" aria-label="Main navigation"><a href="/">Home</a><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart" class="cart-link" aria-label="Shopping cart">Cart <span class="cart-count" id="cart-count" hidden>0</span></a></nav></div></header>
-<main>{!product ? <section class="section"><div class="container not-found"><p class="eyebrow">404</p><h1>Product not found</h1><p>Sorry, this toy is no longer available or the link is incorrect.</p><a class="button" href="/products">Back to Shop</a></div></section> : <section class="section product-detail"><div class="container"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><a href="/products">Shop</a>{product.categories && <><span>/</span><a href={`/category/${product.categories.slug}`}>{product.categories.name}</a></>}<span>/</span><span aria-current="page">{product.name}</span></nav><div class="product-layout"><div class="gallery"><div class="gallery-main">{images[0] ? <img id="main-product-image" src={images[0].image_url} alt={images[0].alt_text || product.name} fetchpriority="high" decoding="async" width="800" height="800" /> : <div class="product-placeholder large"><span>No image yet</span></div>}</div>{images.length>1 && <div class="gallery-thumbnails" aria-label="Product images">{images.map((image,index)=><button type="button" class:list={{'thumbnail active':index===0,thumbnail:index!==0}} data-image={image.image_url} data-alt={image.alt_text || product.name} aria-label={`View image ${index+1}`}><img src={image.image_url} alt="" loading="lazy" /></button>)}</div>}</div><div class="product-details">{product.brand && <p class="eyebrow">{product.brand}</p>}<h1>{product.name}</h1>{product.short_description && <p class="lead">{product.short_description}</p>}<div class="price-row"><span id="detail-price" class="detail-price">${baseDisplayPrice.toFixed(2)}</span><span id="original-price" class="original-price" hidden>{baseOriginalPrice != null ? `$${baseOriginalPrice.toFixed(2)}` : ''}</span></div><p id="stock-label" class:list={{stock:true,'out-of-stock':!inStock}}>{!inStock ? 'Out of stock' : product.stock_quantity <= 5 ? `Only ${product.stock_quantity} left, order soon!` : `${product.stock_quantity} available`}</p>{variants.length>0 && <div class="variant-picker"><label for="variant-select">Choose an option</label><select id="variant-select"><option value="">Select an option</option>{variants.map((variant)=><option value={variant.id} data-price={variant.displayPrice} data-original={variant.originalPrice ?? ''} data-stock={variant.stock_quantity}>{variant.name}{variant.sku ? ` · ${variant.sku}` : ''}</option>)}</select></div>}{product.description && <div class="description"><h2>About this toy</h2><div set:html={product.description.replace(/\n/g,'<br />')} /></div>}{(product.age_min!=null||product.age_max!=null) && <div class="detail-meta"><strong>Recommended age:</strong><span>{product.age_min!=null&&product.age_max!=null?`${product.age_min}–${product.age_max} years`:product.age_min!=null?`${product.age_min}+ years`:`Up to ${product.age_max} years`}</span></div>}{product.sku && <div class="detail-meta"><strong>SKU:</strong><span>#{product.sku}</span></div>}<div class="purchase-box"><label for="quantity">Quantity</label><div class="purchase-row"><input id="quantity" type="number" min="1" max={Math.max(product.stock_quantity,1)} value="1" disabled={!inStock}/><button id="add-to-cart" class="button add-button" type="button" disabled={!inStock}>Add to Cart</button></div><p id="cart-message" class="cart-message" aria-live="polite"></p></div></div></div></div></section>}{similarProducts.length > 0 && <section class="section similar-section" aria-labelledby="similar-title"><div class="container"><div class="section-header section-header-row"><div><h2 id="similar-title">You may also like</h2><p>More toys picked for the same kind of play.</p></div><a href="/products" class="text-link">View all toys →</a></div><div class="product-grid similar-grid">{similarProducts.map((item) => { const price = Number(item.sale_price ?? item.price); const original = item.sale_price != null ? Number(item.price) : null; return <article class="product-card"><a href={`/product/${item.slug}`} class="similar-image-link">{item.primary_image_url ? <img class="product-image" src={item.primary_image_url} alt={item.name} loading="lazy" decoding="async" width="400" height="400" /> : <div class="product-placeholder"><span>No image yet</span></div>}{item.sale_price != null && <span class="sale-badge">Sale</span>}{item.stock_quantity <= 0 && <span class="stock-badge">Out of stock</span>}</a><div class="product-info"><h3><a href={`/product/${item.slug}`}>{item.name}</a></h3><div class="similar-price"><span class="price">${price.toFixed(2)}</span>{original != null && <span class="shop-original-price">${original.toFixed(2)}</span>}</div><a class="view-product" href={`/product/${item.slug}`}>View product →</a></div></article>; })}</div></div></section>}</main>
-<footer class="site-footer"><div class="container"><p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p></div></footer>
-{product && <script define:vars={{ productId: product.id, productName: product.name, productSlug: product.slug, basePrice: baseDisplayPrice, baseOriginalPrice: baseOriginalPrice, baseStock: product.stock_quantity, productImage: images[0]?.image_url || '', variantData: variants.map(v=>({id:v.id,name:v.name,sku:v.sku || '',price:v.displayPrice,originalPrice:v.originalPrice,stock:v.stock_quantity})) }}>
-  const KEY='cleverToysCart';
-  const mainImage=document.querySelector('#main-product-image'); const thumbnails=document.querySelectorAll('.thumbnail');
-  thumbnails.forEach((thumbnail)=>thumbnail.addEventListener('click',()=>{if(!mainImage)return;mainImage.src=thumbnail.dataset.image||'';mainImage.alt=thumbnail.dataset.alt||'';thumbnails.forEach((item)=>item.classList.remove('active'));thumbnail.classList.add('active');}));
-  const select=document.querySelector('#variant-select'); const qty=document.querySelector('#quantity'); const add=document.querySelector('#add-to-cart'); const price=document.querySelector('#detail-price'); const original=document.querySelector('#original-price'); const stock=document.querySelector('#stock-label'); const message=document.querySelector('#cart-message'); const count=document.querySelector('#cart-count');
-  const readCart=()=>{try{return JSON.parse(localStorage.getItem(KEY)||'[]');}catch{return[];}};
-  const updateCartCount=()=>{const total=readCart().reduce((sum,item)=>sum+Math.max(0,Number(item.quantity)||0),0);if(count){count.textContent=String(total);count.hidden=total===0;}};
-  const notifyCartChanged=()=>{window.dispatchEvent(new CustomEvent('clever-cart-updated'));window.dispatchEvent(new CustomEvent('cart-updated'));};
-  const getSelected=()=>variantData.find((v)=>v.id===select?.value);
-  function sync(){const v=getSelected();const activePrice=v?.price ?? basePrice;const activeOriginal=v?.originalPrice ?? baseOriginalPrice;const activeStock=v?.stock ?? baseStock;const hasVariants=variantData.length>0;const optionChosen=!hasVariants || Boolean(select?.value);const canBuy=activeStock>0 && optionChosen;if(price)price.textContent=`$${Number(activePrice).toFixed(2)}`;if(original){original.hidden=activeOriginal==null;original.textContent=activeOriginal==null?'':`$${Number(activeOriginal).toFixed(2)}`;}if(stock){stock.textContent=activeStock<=0?'Out of stock':activeStock<=5?`Only ${activeStock} left, order soon!`:`${activeStock} available`;stock.classList.toggle('out-of-stock',activeStock<=0);}if(qty){qty.max=String(Math.max(activeStock,1));qty.disabled=activeStock<=0;}if(add){add.disabled=!canBuy;add.textContent=activeStock<=0?'Out of Stock':optionChosen?'Add to Cart':'Select an option';}}
-  select?.addEventListener('change',()=>{message.textContent='';sync();});
-  sync();updateCartCount();
-  add?.addEventListener('click',()=>{const v=getSelected();if(variantData.length&&!v){message.textContent='Please select an option first.';return;}const activePrice=v?.price ?? basePrice;const maxStock=v?.stock ?? baseStock;const quantity=Number(qty?.value||1);if(!Number.isInteger(quantity)||quantity<1||quantity>maxStock){message.textContent=`Please choose a quantity from 1 to ${maxStock}.`;return;}const item={productId,variantId:v?.id||null,variantName:v?.name||null,sku:v?.sku||null,name:productName,slug:productSlug,price:Number(activePrice),image:productImage,quantity,maxStock};const cart=readCart();const existing=cart.find((cartItem)=>cartItem.productId===item.productId&&(cartItem.variantId||null)===(item.variantId||null));if(existing){existing.quantity=Math.min(Number(existing.quantity)+quantity,maxStock);existing.maxStock=maxStock;existing.price=item.price;}else cart.push(item);localStorage.setItem(KEY,JSON.stringify(cart));updateCartCount();notifyCartChanged();message.innerHTML=`<span>${quantity} item${quantity===1?'':'s'} added to cart.</span> <button type="button" class="checkout-prompt" id="proceed-checkout">Proceed to Checkout</button> <a class="checkout-prompt secondary" href="/cart">View Cart</a>`;document.querySelector('#proceed-checkout')?.addEventListener('click',()=>location.href='/checkout');});
-  window.addEventListener('storage',updateCartCount);
-</script>}
+<head>
+  <title>{pageTitle}</title>
+  <meta name="description" content={pageDescription} />
+  {product ? <link rel="canonical" href={canonicalUrl} /> : <meta name="robots" content="noindex" />}
+  <meta property="og:title" content={pageTitle} />
+  <meta property="og:description" content={pageDescription} />
+  <meta property="og:type" content="product" />
+  <meta property="og:url" content={canonicalUrl} />
+  {images[0] && <meta property="og:image" content={images[0].image_url} />}
+  {images[0] && <link rel="preload" as="image" href={images[0].image_url} fetchpriority="high" />}
+  {product && <meta name="clever-seo-name" content={product.name} />}
+  {product && <meta name="clever-seo-custom" content={seoCustom} />}
+  {breadcrumbSchema && <script type="application/ld+json" set:html={JSON.stringify(breadcrumbSchema)} />}
+  {productSchema && <script type="application/ld+json" set:html={JSON.stringify(productSchema)} />}
+</head>
+{/* Replaced by the shared store header in src/middleware.ts */}
+<header class="site-header"></header>
+<main>
+  {!product ? (
+    <section class="section">
+      <div class="container not-found">
+        <p class="eyebrow">404</p>
+        <h1>Product not found</h1>
+        <p>Sorry, this toy is no longer available or the link is incorrect.</p>
+        <a class="button" href="/products">Back to Shop</a>
+      </div>
+    </section>
+  ) : (
+    <section class="section product-detail">
+      <div class="container">
+        <nav class="breadcrumbs" aria-label="Breadcrumb">
+          <a href="/">Home</a><span>/</span><a href="/products">Shop</a>
+          {product.categories && <><span>/</span><a href={`/category/${product.categories.slug}`}>{product.categories.name}</a></>}
+          <span>/</span><span aria-current="page">{product.name}</span>
+        </nav>
+        <div class="product-layout">
+          {/* Photos */}
+          <div class="gallery">
+            <div class="gallery-main">
+              {images[0]
+                ? <img id="main-product-image" src={images[0].image_url} alt={images[0].alt_text || product.name} fetchpriority="high" decoding="async" width="800" height="800" />
+                : <div class="product-placeholder large"><span>No image yet</span></div>}
+            </div>
+            {images.length > 1 && (
+              <div class="gallery-thumbnails" aria-label="Product images">
+                {images.map((image, index) => (
+                  <button type="button" class:list={['thumbnail', { active: index === 0 }]} data-image={image.image_url} data-alt={image.alt_text || product.name} aria-label={`View image ${index + 1}`}>
+                    <img src={image.image_url} alt="" loading="lazy" decoding="async" width="76" height="76" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Name, price, options and buying */}
+          <div class="product-details">
+            {product.brand && <p class="eyebrow">{product.brand}</p>}
+            <h1>{product.name}</h1>
+            {product.short_description && <p class="lead">{product.short_description}</p>}
+            <div class="price-row">
+              <span id="detail-price" class="detail-price">${baseDisplayPrice.toFixed(2)}</span>
+              <span id="original-price" class="original-price" hidden={baseOriginalPrice == null}>{baseOriginalPrice != null ? `$${baseOriginalPrice.toFixed(2)}` : ''}</span>
+            </div>
+            <p id="stock-label" class:list={['stock', { 'out-of-stock': !inStock }]}>{stockText(product.stock_quantity)}</p>
+            {variants.length > 0 && (
+              <div class="variant-picker">
+                <label for="variant-select">Choose an option</label>
+                <select id="variant-select">
+                  <option value="">Select an option</option>
+                  {variants.map((variant) => <option value={variant.id}>{variant.name}{variant.sku ? ` · ${variant.sku}` : ''}</option>)}
+                </select>
+              </div>
+            )}
+            {product.description && (
+              <div class="description">
+                <h2>About this toy</h2>
+                {/* Shown as plain text; line breaks from the admin editor are kept by CSS (white-space: pre-line). */}
+                <div class="description-text">{product.description}</div>
+              </div>
+            )}
+            {ageText && <div class="detail-meta"><strong>Recommended age:</strong><span>{ageText}</span></div>}
+            {product.sku && <div class="detail-meta"><strong>SKU:</strong><span>#{product.sku}</span></div>}
+            <div class="purchase-box">
+              <label for="quantity">Quantity</label>
+              <div class="purchase-row">
+                <input id="quantity" type="number" inputmode="numeric" min="1" max={Math.max(product.stock_quantity, 1)} value="1" disabled={!inStock} />
+                <button id="add-to-cart" class="button add-button" type="button" disabled={!inStock}>{inStock ? (variants.length ? 'Select an option' : 'Add to Cart') : 'Out of Stock'}</button>
+              </div>
+              <p id="cart-message" class="cart-message" aria-live="polite"></p>
+              {/* Rendered on the server so it never pops in and moves the page; public/branding-ui.js makes it work. */}
+              <div class="whatsapp-order" data-buy-whatsapp>
+                <button type="button" class="button whatsapp-buy-button" disabled={!inStock}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.26-.46-2.39-1.48-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.14.3-.35.45-.52.15-.18.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.07c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.7.63.71.22 1.36.2 1.87.12.57-.09 1.76-.72 2-1.41.25-.7.25-1.29.18-1.41-.08-.13-.28-.2-.57-.35m-5.42 7.4h-.01a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88 2.64 0 5.12 1.03 6.99 2.9a9.83 9.83 0 0 1 2.89 6.99c0 5.45-4.44 9.88-9.88 9.88m8.41-18.3A11.82 11.82 0 0 0 12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.69 1.45h.01c6.55 0 11.89-5.34 11.89-11.89 0-3.18-1.24-6.16-3.48-8.41Z"/></svg>
+                  <span>Order on WhatsApp</span>
+                </button>
+                <p class="whatsapp-order-note">We'll confirm availability and delivery time in chat · Cash on delivery</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )}
+
+  {/* You may also like */}
+  {similarProducts.length > 0 && (
+    <section class="section similar-section" aria-labelledby="similar-title">
+      <div class="container">
+        <div class="section-header section-header-row">
+          <div><h2 id="similar-title">You may also like</h2><p>More toys picked for the same kind of play.</p></div>
+          <a href="/products" class="text-link">View all toys →</a>
+        </div>
+        <div class="product-grid similar-grid">
+          {similarProducts.map((item) => {
+            const price = Number(item.sale_price ?? item.price);
+            const original = item.sale_price != null ? Number(item.price) : null;
+            return (
+              <article class="product-card">
+                <a href={`/product/${item.slug}`} class="similar-image-link" tabindex="-1" aria-hidden="true">
+                  {item.primary_image_url
+                    ? <img class="product-image" src={item.primary_image_url} alt="" loading="lazy" decoding="async" width="400" height="400" />
+                    : <div class="product-placeholder"><span>No image yet</span></div>}
+                  {item.sale_price != null && <span class="sale-badge">Sale</span>}
+                  {item.stock_quantity <= 0 && <span class="stock-badge">Out of stock</span>}
+                </a>
+                <div class="product-info">
+                  <h3><a href={`/product/${item.slug}`}>{item.name}</a></h3>
+                  <div class="similar-price">
+                    <span class="price">${price.toFixed(2)}</span>
+                    {original != null && <span class="shop-original-price">${original.toFixed(2)}</span>}
+                  </div>
+                  <a class="view-product" href={`/product/${item.slug}`} tabindex="-1">View product →</a>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  )}
+</main>
+<footer class="site-footer"></footer>
+
+{product && (
+  <script is:inline define:vars={{
+    productId: product.id,
+    productName: product.name,
+    productSlug: product.slug,
+    basePrice: baseDisplayPrice,
+    baseOriginalPrice,
+    baseStock: product.stock_quantity,
+    productImage: images[0]?.image_url || '',
+    variantData: variants.map((v) => ({ id: v.id, name: v.name, sku: v.sku || '', price: v.displayPrice, originalPrice: v.originalPrice, stock: v.stock_quantity }))
+  }}>
+  // Runs straight away (inline), so the buttons work as soon as the page appears.
+  const CART_KEY = 'cleverToysCart';
+  const $ = (selector) => document.querySelector(selector);
+  const mainImage = $('#main-product-image');
+  const select = $('#variant-select');
+  const qty = $('#quantity');
+  const add = $('#add-to-cart');
+  const price = $('#detail-price');
+  const original = $('#original-price');
+  const stock = $('#stock-label');
+  const message = $('#cart-message');
+  const money = (n) => `$${Number(n).toFixed(2)}`;
+
+  // Gallery: tapping a thumbnail shows it as the main photo.
+  document.querySelectorAll('.thumbnail').forEach((thumb, _, all) => thumb.addEventListener('click', () => {
+    if (!mainImage) return;
+    mainImage.src = thumb.dataset.image || '';
+    mainImage.alt = thumb.dataset.alt || '';
+    all.forEach((item) => item.classList.toggle('active', item === thumb));
+  }));
+
+  const readCart = () => { try { const cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]'); return Array.isArray(cart) ? cart : []; } catch { return []; } };
+  const selectedVariant = () => variantData.find((v) => v.id === select?.value);
+
+  // Update price, stock and the Add to Cart button for the chosen option.
+  function sync() {
+    const v = selectedVariant();
+    const activeStock = v?.stock ?? baseStock;
+    const activeOriginal = v ? v.originalPrice : baseOriginalPrice;
+    const optionChosen = !variantData.length || Boolean(select?.value);
+    price.textContent = money(v?.price ?? basePrice);
+    original.hidden = activeOriginal == null;
+    original.textContent = activeOriginal == null ? '' : money(activeOriginal);
+    stock.textContent = activeStock <= 0 ? 'Out of stock' : activeStock <= 5 ? `Only ${activeStock} left, order soon!` : `${activeStock} available`;
+    stock.classList.toggle('out-of-stock', activeStock <= 0);
+    qty.max = String(Math.max(activeStock, 1));
+    qty.disabled = activeStock <= 0;
+    add.disabled = activeStock <= 0 || !optionChosen;
+    add.textContent = activeStock <= 0 ? 'Out of Stock' : optionChosen ? 'Add to Cart' : 'Select an option';
+  }
+  select?.addEventListener('change', () => { message.textContent = ''; sync(); });
+  sync();
+
+  // Add to Cart: save to this browser's cart (localStorage) and tell the header/floating cart to update.
+  add.addEventListener('click', () => {
+    const v = selectedVariant();
+    if (variantData.length && !v) { message.textContent = 'Please select an option first.'; return; }
+    const maxStock = v?.stock ?? baseStock;
+    const quantity = Number(qty.value || 1);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > maxStock) { message.textContent = `Please choose a quantity from 1 to ${maxStock}.`; return; }
+    const cart = readCart();
+    const existing = cart.find((item) => item.productId === productId && (item.variantId || null) === (v?.id || null));
+    if (existing) {
+      existing.quantity = Math.min(Number(existing.quantity) + quantity, maxStock);
+      existing.maxStock = maxStock;
+      existing.price = Number(v?.price ?? basePrice);
+    } else {
+      cart.push({ productId, variantId: v?.id || null, variantName: v?.name || null, sku: v?.sku || null, name: productName, slug: productSlug, price: Number(v?.price ?? basePrice), image: productImage, quantity, maxStock });
+    }
+    try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch { message.textContent = 'Your browser blocked the cart. Please allow site storage and try again.'; return; }
+    window.dispatchEvent(new CustomEvent('clever-cart-updated'));
+    message.innerHTML = `<span>${quantity} item${quantity === 1 ? '' : 's'} added to cart.</span> <a class="checkout-prompt" href="/checkout">Proceed to Checkout</a> <a class="checkout-prompt secondary" href="/cart">View Cart</a>`;
+  });
+  </script>
+)}
 <style>
-.similar-section{padding-top:24px;border-top:1px solid var(--line)}.similar-image-link{position:relative;display:block;overflow:hidden}.similar-price{display:flex;align-items:baseline;gap:8px}
-.product-detail{padding-top:clamp(18px,3vw,32px);min-width:0;overflow:hidden}.breadcrumbs{display:flex;flex-wrap:wrap;gap:clamp(5px,1.2vw,8px);margin-bottom:clamp(18px,3vw,32px);color:var(--muted);font-size:clamp(.72rem,2vw,.9rem);overflow-wrap:anywhere}.product-layout{width:100%;min-width:0;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(280px,.95fr);gap:clamp(22px,5vw,64px);align-items:start}.gallery,.product-details{min-width:0;max-width:100%}.gallery-main{width:100%;max-width:100%;overflow:hidden;border:1px solid var(--line);border-radius:clamp(12px,2vw,20px);background:var(--surface-2)}.gallery-main img,.product-placeholder.large{display:block;width:100%;max-width:100%;height:auto;aspect-ratio:1/1;object-fit:contain}.product-placeholder.large{display:grid;place-items:center}.gallery-thumbnails{display:flex;gap:10px;margin-top:12px;overflow-x:auto;max-width:100%;padding-bottom:2px}.thumbnail{flex:0 0 76px;width:76px;height:76px;padding:0;overflow:hidden;border:2px solid transparent;border-radius:10px;background:var(--surface-2);cursor:pointer}.thumbnail.active{border-color:var(--brand-primary)}.thumbnail img{display:block;width:100%;height:100%;object-fit:cover}.eyebrow{margin:0 0 10px;color:var(--muted);font-size:clamp(.72rem,1.6vw,.82rem);font-weight:800;letter-spacing:.08em;text-transform:uppercase}.product-details h1{margin:0;font-size:clamp(1.65rem,4.7vw,3.5rem);line-height:1.06;letter-spacing:-.015em;overflow-wrap:anywhere}.lead{margin:clamp(12px,2vw,18px) 0 0;color:var(--muted);font-size:clamp(.88rem,2vw,1.05rem);line-height:1.65;overflow-wrap:anywhere}.price-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 12px;margin:clamp(18px,3vw,24px) 0 8px}.detail-price{font-size:clamp(1.55rem,4vw,2rem);font-weight:900}.original-price{color:var(--subtle);font-size:clamp(.9rem,2vw,1.1rem);text-decoration:line-through}.stock{margin:0 0 20px;color:var(--success);font-weight:700;font-size:clamp(.82rem,1.8vw,.95rem)}.stock.out-of-stock{color:var(--danger)}.variant-picker{margin:0 0 24px;min-width:0}.variant-picker label{display:block;margin-bottom:8px;font-size:.9rem;font-weight:700}.variant-picker select{width:100%;max-width:100%;min-width:0;min-height:48px;padding:0 12px;border:1px solid var(--line-strong);border-radius:12px;background:#fff;font:inherit}.description{padding:clamp(18px,3vw,24px) 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);line-height:1.75;overflow-wrap:anywhere}.description h2{margin:0 0 10px;font-size:clamp(1rem,2vw,1.15rem)}.detail-meta{display:flex;flex-wrap:wrap;gap:8px;padding-top:16px;font-size:clamp(.8rem,1.8vw,.92rem);overflow-wrap:anywhere}.purchase-box{margin-top:clamp(20px,3vw,28px);padding:clamp(15px,2.5vw,20px);border:1px solid var(--line);border-radius:16px;background:var(--surface-2);min-width:0}.purchase-box label{display:block;margin-bottom:8px;font-size:.9rem;font-weight:700}.purchase-row{display:grid;grid-template-columns:minmax(82px,100px) minmax(0,1fr);gap:10px;min-width:0}.purchase-row input{width:100%;min-width:0;min-height:48px;padding:0 12px;border:1px solid var(--line-strong);border-radius:12px;background:#fff;font:inherit}.add-button{width:100%;min-width:0;border:0;cursor:pointer;font:inherit;font-weight:800}.add-button:disabled{cursor:not-allowed;opacity:.5}.cart-message{min-height:22px;margin:10px 0 0;color:var(--success);font-size:.9rem;font-weight:600;display:flex;flex-wrap:wrap;align-items:center;gap:8px;overflow-wrap:anywhere}.checkout-prompt{display:inline-flex;align-items:center;text-decoration:none;border:0;border-radius:999px;padding:7px 11px;background:var(--brand-primary);color:var(--brand-text-on-primary);font:inherit;font-weight:700;cursor:pointer}.checkout-prompt.secondary{background:var(--line);color:var(--ink)}.cart-link{display:inline-flex;align-items:center;gap:6px}.cart-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--brand-primary);color:var(--brand-text-on-primary);font-size:.72rem;font-weight:800;line-height:1}.not-found{max-width:680px;text-align:center}@media(max-width:900px){.product-layout{grid-template-columns:1fr;gap:clamp(24px,6vw,36px)}.gallery-main img,.product-placeholder.large{aspect-ratio:1/1}.product-details h1{font-size:clamp(1.55rem,7vw,2.4rem)}.product-detail .container{width:calc(100% - clamp(24px,6vw,40px));max-width:1180px}}@media(max-width:520px){.product-detail .container{width:calc(100% - 20px)}.gallery-main{border-radius:14px}.thumbnail{flex-basis:64px;width:64px;height:64px}.purchase-row{grid-template-columns:minmax(76px,92px) minmax(0,1fr)}.purchase-row input,.add-button{min-height:44px}.description{font-size:.86rem}.cart-message{font-size:.78rem}}@media(max-width:360px){.product-detail .container{width:calc(100% - 16px)}.thumbnail{flex-basis:58px;width:58px;height:58px}.purchase-row{grid-template-columns:74px minmax(0,1fr)}.checkout-prompt{padding:6px 9px;font-size:.78rem}}
+.similar-section{padding-top:24px;border-top:1px solid var(--line)}
+.similar-image-link{position:relative;display:block;overflow:hidden}
+.similar-price{display:flex;align-items:baseline;gap:8px}
+.product-detail{padding-top:clamp(18px,3vw,32px);min-width:0;overflow:hidden}
+.breadcrumbs{display:flex;flex-wrap:wrap;gap:clamp(5px,1.2vw,8px);margin-bottom:clamp(18px,3vw,32px);color:var(--muted);font-size:clamp(.72rem,2vw,.9rem);overflow-wrap:anywhere}
+.product-layout{width:100%;min-width:0;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(280px,.95fr);gap:clamp(22px,5vw,64px);align-items:start}
+.gallery,.product-details{min-width:0;max-width:100%}
+.gallery-main{width:100%;max-width:100%;overflow:hidden;border:1px solid var(--line);border-radius:clamp(12px,2vw,20px);background:var(--surface-2)}
+.gallery-main img,.product-placeholder.large{display:block;width:100%;max-width:100%;height:auto;aspect-ratio:1/1;object-fit:contain}
+.product-placeholder.large{display:grid;place-items:center}
+.gallery-thumbnails{display:flex;gap:10px;margin-top:12px;overflow-x:auto;max-width:100%;padding-bottom:2px}
+.thumbnail{flex:0 0 76px;width:76px;height:76px;padding:0;overflow:hidden;border:2px solid transparent;border-radius:10px;background:var(--surface-2);cursor:pointer}
+.thumbnail.active{border-color:var(--brand-primary)}
+.thumbnail img{display:block;width:100%;height:100%;object-fit:cover}
+.eyebrow{margin:0 0 10px;color:var(--muted);font-size:clamp(.72rem,1.6vw,.82rem);font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.product-details h1{margin:0;font-size:clamp(1.65rem,4.7vw,3.5rem);line-height:1.06;letter-spacing:-.015em;overflow-wrap:anywhere}
+.lead{margin:clamp(12px,2vw,18px) 0 0;color:var(--muted);font-size:clamp(.88rem,2vw,1.05rem);line-height:1.65;overflow-wrap:anywhere}
+.price-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:8px 12px;margin:clamp(18px,3vw,24px) 0 8px}
+.detail-price{font-size:clamp(1.55rem,4vw,2rem);font-weight:900}
+.original-price{color:var(--subtle);font-size:clamp(.9rem,2vw,1.1rem);text-decoration:line-through}
+.stock{margin:0 0 20px;color:var(--success);font-weight:700;font-size:clamp(.82rem,1.8vw,.95rem)}
+.stock.out-of-stock{color:var(--danger)}
+.variant-picker{margin:0 0 24px;min-width:0}
+.variant-picker label{display:block;margin-bottom:8px;font-size:.9rem;font-weight:700}
+.variant-picker select{width:100%;max-width:100%;min-width:0;min-height:48px;padding:0 12px;border:1px solid var(--line-strong);border-radius:12px;background:#fff;font:inherit}
+.description{padding:clamp(18px,3vw,24px) 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);line-height:1.75;overflow-wrap:anywhere}
+.description h2{margin:0 0 10px;font-size:clamp(1rem,2vw,1.15rem)}
+.detail-meta{display:flex;flex-wrap:wrap;gap:8px;padding-top:16px;font-size:clamp(.8rem,1.8vw,.92rem);overflow-wrap:anywhere}
+.purchase-box{margin-top:clamp(20px,3vw,28px);padding:clamp(15px,2.5vw,20px);border:1px solid var(--line);border-radius:16px;background:var(--surface-2);min-width:0}
+.purchase-box label{display:block;margin-bottom:8px;font-size:.9rem;font-weight:700}
+.purchase-row{display:grid;grid-template-columns:minmax(82px,100px) minmax(0,1fr);gap:10px;min-width:0}
+.purchase-row input{width:100%;min-width:0;min-height:48px;padding:0 12px;border:1px solid var(--line-strong);border-radius:12px;background:#fff;font:inherit}
+.add-button{width:100%;min-width:0;border:0;cursor:pointer;font:inherit;font-weight:800}
+.add-button:disabled{cursor:not-allowed;opacity:.5}
+.cart-message{min-height:22px;margin:10px 0 0;color:var(--success);font-size:.9rem;font-weight:600;display:flex;flex-wrap:wrap;align-items:center;gap:8px;overflow-wrap:anywhere}
+.checkout-prompt{display:inline-flex;align-items:center;text-decoration:none;border:0;border-radius:999px;padding:7px 11px;background:var(--brand-primary);color:var(--brand-text-on-primary);font:inherit;font-weight:700;cursor:pointer}
+.checkout-prompt.secondary{background:var(--line);color:var(--ink)}
+.cart-link{display:inline-flex;align-items:center;gap:6px}
+.cart-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--brand-primary);color:var(--brand-text-on-primary);font-size:.72rem;font-weight:800;line-height:1}
+.not-found{max-width:680px;text-align:center}
+.description-text{white-space:pre-line}
+@media(max-width:900px){
+  .product-layout{grid-template-columns:1fr;gap:clamp(24px,6vw,36px)}
+  .gallery-main img,.product-placeholder.large{aspect-ratio:1/1}
+  .product-details h1{font-size:clamp(1.55rem,7vw,2.4rem)}
+  .product-detail .container{width:calc(100% - clamp(24px,6vw,40px));max-width:1180px}
+}
+@media(max-width:520px){
+  .product-detail .container{width:calc(100% - 20px)}
+  .gallery-main{border-radius:14px}
+  .thumbnail{flex-basis:64px;width:64px;height:64px}
+  .purchase-row{grid-template-columns:minmax(76px,92px) minmax(0,1fr)}
+  .purchase-row input,.add-button{min-height:44px}
+  .description{font-size:.86rem}
+  .cart-message{font-size:.78rem}
+}
+@media(max-width:360px){
+  .product-detail .container{width:calc(100% - 16px)}
+  .thumbnail{flex-basis:58px;width:58px;height:58px}
+  .purchase-row{grid-template-columns:74px minmax(0,1fr)}
+  .checkout-prompt{padding:6px 9px;font-size:.78rem}
+}
 </style>
