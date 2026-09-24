@@ -1,46 +1,36 @@
-# Astro Starter Kit: Basics
+# Clever Toys
 
-```sh
-npm create astro@latest -- --template basics
-```
+Online toy store for Lebanon, built with [Astro](https://docs.astro.build) (server output) on Cloudflare Workers, with Supabase for the database, auth and image storage.
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
+## Commands
 
-## 🚀 Project Structure
+| Command           | Action                                        |
+| :---------------- | :-------------------------------------------- |
+| `npm install`     | Install dependencies                          |
+| `npm run dev`     | Start the local dev server at `localhost:4321` |
+| `npm run build`   | Build the Worker to `./dist/`                  |
+| `npm run preview` | Preview the production build locally           |
+| `npm run deploy`  | Build and deploy with Wrangler                 |
 
-Inside of your Astro project, you'll see the following folders and files:
+## Configuration
 
-```text
-/
-├── public/
-│   └── favicon.svg
-├── src
-│   ├── assets
-│   │   └── astro.svg
-│   ├── components
-│   │   └── Welcome.astro
-│   ├── layouts
-│   │   └── Layout.astro
-│   └── pages
-│       └── index.astro
-└── package.json
-```
+Set these variables in the Cloudflare Worker environment (or a local `.env` for development):
 
-To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
+- `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (the `PUBLIC_` versions also work)
+- `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (optional, for new-order notifications)
 
-## 🧞 Commands
+## Database
 
-All commands are run from the root of the project, from a terminal:
+Run the SQL files in `supabase/` from the Supabase SQL Editor. They can safely be run more than once:
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+- `production.sql`: order creation, admin policies, multi-category support
+- `branding_settings.sql`: store settings (WhatsApp, Instagram, ribbon, delivery price)
+- `seo_migration.sql`: per-page SEO overrides
+- `visitor_analytics.sql`: visitor tracking for the admin analytics page
+- `customer_orders.sql`: lets signed-in customers see their own orders on `/account`
 
-## 👀 Want to learn more?
+## Project structure
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+- `src/pages/`: storefront pages, `admin/` dashboard pages, and `api/` endpoints
+- `src/middleware.ts`: adds the shared header, branding, store settings and SEO overrides to every HTML page
+- `public/`: client scripts (`store-ui.js`, `branding-ui.js`, `visitor-analytics.js`) and CSS fixes

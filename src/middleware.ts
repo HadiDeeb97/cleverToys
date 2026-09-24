@@ -18,7 +18,8 @@ const defaultStoreSettings = {
   show_instagram: false,
   ribbon_text: '',
   show_ribbon: false,
-  cod_delivery_price: 0
+  cod_delivery_price: 0,
+  free_delivery_threshold: 0
 };
 
 export const onRequest: MiddlewareHandler = async (context, next) => {
@@ -35,7 +36,8 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   let published = { mode: 'logo', theme: null as null | { primary: string; soft: string; accent: string; id?: string; name?: string } };
   let storeSettings = { ...defaultStoreSettings };
 
-  if (themeUrl) {
+  const loadTheme = async () => {
+    if (!themeUrl) return;
     try {
       const cacheBust = `?theme=${Date.now()}`;
       const r = await fetch(`${themeUrl}${cacheBust}`, { cf: { cacheTtl: 0, cacheEverything: false } });
@@ -58,9 +60,10 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
         }
       }
     } catch {}
-  }
+  };
 
-  if (!path.startsWith('/admin') && !path.startsWith('/api') && base && publishableKey) {
+  const loadStoreSettings = async () => {
+    if (path.startsWith('/admin') || path.startsWith('/api') || !base || !publishableKey) return;
     try {
       const settingsResponse = await fetch(`${base.replace(/\/$/, '')}/rest/v1/store_settings?select=whatsapp_url,instagram_url,show_whatsapp,show_instagram,ribbon_text,show_ribbon,cod_delivery_price,free_delivery_threshold&id=eq.default&limit=1`, {
         headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
@@ -71,7 +74,41 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
         if (row) storeSettings = { ...defaultStoreSettings, ...row };
       }
     } catch {}
-  }
+  };
+
+  const loadSeo = async (): Promise<any> => {
+    if (path.startsWith('/admin') || path.startsWith('/api') || !base || !publishableKey) return null;
+    try {
+      const encodedPath = encodeURIComponent(path);
+      const encodedProduct = encodeURIComponent('/product/*');
+      const encodedCategory = encodeURIComponent('/category/*');
+      const query = `select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedPath}&limit=1`;
+      const exactResponse = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?${query}`, {
+        headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
+        cf: { cacheTtl: 0, cacheEverything: false }
+      });
+      let seo: any = exactResponse.ok ? (await exactResponse.json())?.[0] || null : null;
+      if (!seo && path.startsWith('/product/')) {
+        const r = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedProduct}&limit=1`, {
+          headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
+          cf: { cacheTtl: 0, cacheEverything: false }
+        });
+        if (r.ok) seo = (await r.json())?.[0] || null;
+      }
+      if (!seo && path.startsWith('/category/')) {
+        const r = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedCategory}&limit=1`, {
+          headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
+          cf: { cacheTtl: 0, cacheEverything: false }
+        });
+        if (r.ok) seo = (await r.json())?.[0] || null;
+      }
+      return seo;
+    } catch {
+      return null;
+    }
+  };
+
+  const [, , seo] = await Promise.all([loadTheme(), loadStoreSettings(), loadSeo()]);
 
   const whatsappUrl = safeExternalUrl(storeSettings.whatsapp_url, fallbackWhatsappUrl);
   const instagramUrl = safeExternalUrl(storeSettings.instagram_url, 'https://instagram.com/');
@@ -96,7 +133,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     codDeliveryPrice,
     freeDeliveryThreshold: Math.max(0, Number(storeSettings.free_delivery_threshold || 0))
   };
-  const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify(branding)};</script>`;
+  const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify(branding).replace(/</g, '\\u003c')};</script>`;
   const earlyTheme = published.mode === 'theme' && published.theme
     ? `<style id="clever-theme">:root{--brand-primary:${published.theme.primary};--brand-primary-hover:${published.theme.primary};--brand-soft:${published.theme.soft};--brand-text-on-primary:#fff;--theme-accent:${published.theme.accent}}</style>`
     : '';
@@ -111,49 +148,22 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     if (/<head[^>]*>/i.test(output)) output = output.replace(/<head[^>]*>/i, (match) => `${match}${viewportTags}`);
   }
 
-  if (!path.startsWith('/admin') && !path.startsWith('/api') && base && publishableKey) {
-    try {
-      const encodedPath = encodeURIComponent(path);
-      const encodedProduct = encodeURIComponent('/product/*');
-      const encodedCategory = encodeURIComponent('/category/*');
-      const query = `select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedPath}&limit=1`;
-      const exactResponse = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?${query}`, {
-        headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
-        cf: { cacheTtl: 0, cacheEverything: false }
-      });
-      let seo: any = (await exactResponse.json())?.[0] || null;
-      if (!seo && path.startsWith('/product/')) {
-        const r = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedProduct}&limit=1`, {
-          headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
-          cf: { cacheTtl: 0, cacheEverything: false }
-        });
-        seo = (await r.json())?.[0] || null;
-      }
-      if (!seo && path.startsWith('/category/')) {
-        const r = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedCategory}&limit=1`, {
-          headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
-          cf: { cacheTtl: 0, cacheEverything: false }
-        });
-        seo = (await r.json())?.[0] || null;
-      }
-      if (seo) {
-        const title = String(seo.title || '').trim();
-        const description = String(seo.description || '').trim();
-        const keywords = String(seo.keywords || '').trim();
-        const cover = String(seo.cover_image_url || '').trim();
-        output = output.replace(/<title>[\s\S]*?<\/title>/i, '');
-        output = output.replace(/<meta\s+name=[\"']description[\"'][^>]*>\s*/gi, '');
-        output = output.replace(/<meta\s+name=[\"']keywords[\"'][^>]*>\s*/gi, '');
-        output = output.replace(/<meta\s+name=[\"']twitter:title[\"'][^>]*>\s*/gi, '');
-        output = output.replace(/<meta\s+name=[\"']twitter:description[\"'][^>]*>\s*/gi, '');
-        output = output.replace(/<meta\s+name=[\"']twitter:image[\"'][^>]*>\s*/gi, '');
-        output = output.replace(/<meta\s+property=[\"']og:title[\"'][^>]*>\s*/gi, '');
-        output = output.replace(/<meta\s+property=[\"']og:description[\"'][^>]*>\s*/gi, '');
-        output = output.replace(/<meta\s+property=[\"']og:image[\"'][^>]*>\s*/gi, '');
-        const seoTags = `${title ? `<title>${escapeHtml(title)}</title><meta name="title" content="${escapeAttr(title)}" />` : ''}${description ? `<meta name="description" content="${escapeAttr(description)}" />` : ''}${keywords ? `<meta name="keywords" content="${escapeAttr(keywords)}" />` : ''}${title ? `<meta property="og:title" content="${escapeAttr(title)}" /><meta name="twitter:title" content="${escapeAttr(title)}" />` : ''}${description ? `<meta property="og:description" content="${escapeAttr(description)}" /><meta name="twitter:description" content="${escapeAttr(description)}" />` : ''}${cover ? `<meta property="og:image" content="${escapeAttr(cover)}" /><meta name="twitter:image" content="${escapeAttr(cover)}" /><meta name="twitter:card" content="summary_large_image" />` : ''}`;
-        output = output.replace('</head>', `${seoTags}</head>`);
-      }
-    } catch {}
+  if (seo) {
+    const title = String(seo.title || '').trim();
+    const description = String(seo.description || '').trim();
+    const keywords = String(seo.keywords || '').trim();
+    const cover = String(seo.cover_image_url || '').trim();
+    output = output.replace(/<title>[\s\S]*?<\/title>/i, '');
+    output = output.replace(/<meta\s+name=[\"']description[\"'][^>]*>\s*/gi, '');
+    output = output.replace(/<meta\s+name=[\"']keywords[\"'][^>]*>\s*/gi, '');
+    output = output.replace(/<meta\s+name=[\"']twitter:title[\"'][^>]*>\s*/gi, '');
+    output = output.replace(/<meta\s+name=[\"']twitter:description[\"'][^>]*>\s*/gi, '');
+    output = output.replace(/<meta\s+name=[\"']twitter:image[\"'][^>]*>\s*/gi, '');
+    output = output.replace(/<meta\s+property=[\"']og:title[\"'][^>]*>\s*/gi, '');
+    output = output.replace(/<meta\s+property=[\"']og:description[\"'][^>]*>\s*/gi, '');
+    output = output.replace(/<meta\s+property=[\"']og:image[\"'][^>]*>\s*/gi, '');
+    const seoTags = `${title ? `<title>${escapeHtml(title)}</title><meta name="title" content="${escapeAttr(title)}" />` : ''}${description ? `<meta name="description" content="${escapeAttr(description)}" />` : ''}${keywords ? `<meta name="keywords" content="${escapeAttr(keywords)}" />` : ''}${title ? `<meta property="og:title" content="${escapeAttr(title)}" /><meta name="twitter:title" content="${escapeAttr(title)}" />` : ''}${description ? `<meta property="og:description" content="${escapeAttr(description)}" /><meta name="twitter:description" content="${escapeAttr(description)}" />` : ''}${cover ? `<meta property="og:image" content="${escapeAttr(cover)}" /><meta name="twitter:image" content="${escapeAttr(cover)}" /><meta name="twitter:card" content="summary_large_image" />` : ''}`;
+    output = output.replace('</head>', `${seoTags}</head>`);
   }
 
   if (logoUrl && !path.startsWith('/admin')) {

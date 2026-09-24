@@ -108,7 +108,7 @@ BEGIN
     VALUES (new_order_id,product_row.id,item_variant_id,product_row.name,variant_name_value,item_sku,requested_qty,server_unit_price,server_unit_price*requested_qty);
   END LOOP;
 
-  RETURN jsonb_build_object('order_id',new_order_id,'order_number',new_order_number,'delivery_fee',cod_delivery_price,'total',server_total);
+  RETURN jsonb_build_object('order_id',new_order_id,'order_number',new_order_number,'subtotal',server_subtotal,'delivery_fee',cod_delivery_price,'total',server_total);
 END;
 $$;
 
