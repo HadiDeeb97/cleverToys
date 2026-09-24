@@ -119,23 +119,50 @@ const logoUrl = supabaseUrl
     <section class="form-card branding-card">
       <div class="section-heading">
         <div>
-          <p class="eyebrow">Color source</p>
-          <h2>Theme controls</h2>
-          <p>Use logo colors or publish one of the toy-store themes.</p>
+          <p class="eyebrow">Store theme</p>
+          <h2>Colors &amp; theme</h2>
+          <p>Pick a theme to preview it. The header, buttons, badges, prices, cards and backgrounds across the whole store follow it once you publish.</p>
         </div>
         <span id="theme-status" class="status-text" role="status"></span>
       </div>
-      <label class="switch-row">
-        <span><strong>Use logo colors</strong><small>ON = logo-based colors. OFF = selected theme.</small></span>
-        <input id="use-logo-colors" type="checkbox" role="switch" />
-      </label>
-      <div id="theme-grid" class="theme-grid" aria-label="Store theme choices"></div>
-      <div id="theme-preview" class="theme-preview">
-        <div class="preview-scene"><span>☁️</span><span>☀️</span><strong>⚽</strong><b>🧩</b></div>
-        <div class="preview-content"><em>NEW TOYS</em><h3>Clever Toys</h3><p>Fun toys. Happy kids. Easy shopping.</p><div><span>Shop Toys</span><small>Best sellers</small></div></div>
+      <div class="theme-layout">
+        <div class="theme-picker">
+          <div id="theme-grid" class="theme-grid" role="radiogroup" aria-label="Store theme choices"></div>
+          <div class="custom-theme">
+            <div>
+              <strong>Custom colors</strong>
+              <small>Match your logo or brand. Text colors adjust automatically so everything stays readable.</small>
+            </div>
+            <div class="custom-theme-inputs">
+              <label for="custom-primary">Main color<input id="custom-primary" type="color" value="#2563eb" /></label>
+              <label for="custom-accent">Accent color<input id="custom-accent" type="color" value="#ffc53d" /></label>
+            </div>
+            <p id="custom-note" class="custom-note" hidden></p>
+          </div>
+        </div>
+        <div class="theme-preview-wrap">
+          <p class="preview-label">Live preview</p>
+          <div id="theme-preview" class="theme-preview" aria-hidden="true">
+            <div class="tp-header"><b>Clever Toys</b><span class="tp-nav"><i></i><i></i><i></i></span><span class="tp-cart">🛒 Cart <em>2</em></span></div>
+            <div class="tp-ribbon">🚚 Free delivery on orders above $60</div>
+            <div class="tp-hero">
+              <span class="tp-eyebrow">NEW ARRIVALS</span>
+              <strong>Play. Learn. Discover.</strong>
+              <div class="tp-buttons"><span class="tp-primary">Shop Toys</span><span class="tp-secondary">Categories</span></div>
+              <span class="tp-bubble tp-bubble-1">🧸</span><span class="tp-bubble tp-bubble-2">🚀</span>
+            </div>
+            <div class="tp-products">
+              <div class="tp-card"><div class="tp-image">🧩<em>Sale</em></div><small>Rainbow Puzzle</small><b>$12.00</b></div>
+              <div class="tp-card"><div class="tp-image">🦖</div><small>Dino Explorer</small><b>$24.99</b></div>
+            </div>
+          </div>
+        </div>
       </div>
-      <p id="publish-status" class="publish-status" role="status">Select a theme to publish it for everyone.</p>
-      <button id="reset-theme" type="button" class="button secondary-button">Use logo colors</button>
+      <div class="theme-actions">
+        <button id="publish-theme" type="button" class="button" disabled>Publish theme</button>
+        <button id="revert-theme" type="button" class="button secondary-button" disabled>Back to live theme</button>
+      </div>
+      <p id="publish-status" class="publish-status" role="status">Choose a theme to preview it here.</p>
     </section>
 
     <section class="form-card branding-card">
@@ -178,8 +205,12 @@ const freeDeliveryInput = document.querySelector('#free-delivery-threshold');
 const freeDeliveryPreview = document.querySelector('#free-delivery-preview');
 const ribbonText = document.querySelector('#ribbon-text');
 const ribbonPreview = document.querySelector('#ribbon-preview');
-const logoToggle = document.querySelector('#use-logo-colors');
 const grid = document.querySelector('#theme-grid');
+const publishThemeButton = document.querySelector('#publish-theme');
+const revertThemeButton = document.querySelector('#revert-theme');
+const customPrimaryInput = document.querySelector('#custom-primary');
+const customAccentInput = document.querySelector('#custom-accent');
+const customNote = document.querySelector('#custom-note');
 const themePreview = document.querySelector('#theme-preview');
 const themeStatus = document.querySelector('#theme-status');
 const publishStatus = document.querySelector('#publish-status');
@@ -197,50 +228,162 @@ const defaults = {
   free_delivery_threshold: 0
 };
 
+// Each theme needs a main color that keeps white text readable (WCAG AA) and a light accent for badges.
 const themes = [
-  { id: 'playroom', name: 'Playroom', primary: '#7c3aed', soft: '#f3e8ff', accent: '#fbbf24', emoji: '🧸', desc: 'Purple + sunny yellow' },
-  { id: 'candy', name: 'Candy Pop', primary: '#ec4899', soft: '#fce7f3', accent: '#06b6d4', emoji: '🍭', desc: 'Pink + playful cyan' },
-  { id: 'ocean', name: 'Ocean Toys', primary: '#0284c7', soft: '#e0f2fe', accent: '#f59e0b', emoji: '🌊', desc: 'Blue + warm orange' },
-  { id: 'sunny', name: 'Sunny Day', primary: '#ea580c', soft: '#ffedd5', accent: '#eab308', emoji: '☀️', desc: 'Orange + sunshine' },
-  { id: 'mint', name: 'Minty Fun', primary: '#059669', soft: '#d1fae5', accent: '#f43f5e', emoji: '🪀', desc: 'Mint + coral' },
-  { id: 'berry', name: 'Berry Box', primary: '#be123c', soft: '#ffe4e6', accent: '#7c3aed', emoji: '🎈', desc: 'Berry + violet' }
+  { id: 'sky', name: 'Sky Blocks', primary: '#2563eb', soft: '#e8f0ff', accent: '#ffc53d', emoji: '🪁', desc: 'Bright blue + sunshine' },
+  { id: 'bubblegum', name: 'Bubblegum', primary: '#db2777', soft: '#ffe8f3', accent: '#ffd166', emoji: '🍭', desc: 'Pink + lemon' },
+  { id: 'grape', name: 'Grape Soda', primary: '#7c3aed', soft: '#f1eaff', accent: '#5eead4', emoji: '🦄', desc: 'Violet + mint' },
+  { id: 'jungle', name: 'Jungle Gym', primary: '#15803d', soft: '#e3f6e8', accent: '#ffb627', emoji: '🦖', desc: 'Leafy green + mango' },
+  { id: 'tangerine', name: 'Tangerine', primary: '#c2410c', soft: '#fff0e5', accent: '#7dd3fc', emoji: '🧡', desc: 'Orange + sky blue' },
+  { id: 'ocean', name: 'Ocean Splash', primary: '#0e7490', soft: '#e0f6f9', accent: '#ff9eb5', emoji: '🐳', desc: 'Teal + coral pink' },
+  { id: 'cherry', name: 'Cherry Pop', primary: '#dc2626', soft: '#ffeceb', accent: '#fcd34d', emoji: '🍒', desc: 'Toy red + yellow' },
+  { id: 'midnight', name: 'Midnight Stars', primary: '#312e81', soft: '#ebeafd', accent: '#f9a8d4', emoji: '🌙', desc: 'Navy + candy pink' }
 ];
-
-function readCookie(name) {
-  const parts = document.cookie.split(';');
-  for (const part of parts) {
-    const item = part.trim();
-    if (!item) continue;
-    const eq = item.indexOf('=');
-    if (eq < 0) continue;
-    if (item.slice(0, eq) === name) return decodeURIComponent(item.slice(eq + 1));
-  }
-  return '';
-}
-
-function writeCookie(name, value) {
-  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=31536000; Path=/; SameSite=Lax`;
-}
-
-function clearCookie(name) {
-  document.cookie = `${name}=; Max-Age=0; Path=/; SameSite=Lax`;
-}
+const defaultTheme = themes[0];
+let liveTheme = defaultTheme;
+let previewTheme = defaultTheme;
 
 function money(value) {
   return `$${Number(value || 0).toFixed(2)}`;
 }
 
-function applyColors(primary, soft, accent, label) {
-  document.documentElement.style.setProperty('--brand-primary', primary);
-  document.documentElement.style.setProperty('--brand-primary-hover', primary);
-  document.documentElement.style.setProperty('--brand-soft', soft);
-  document.documentElement.style.setProperty('--theme-accent', accent);
-  if (themePreview) {
-    themePreview.style.setProperty('--preview-primary', primary);
-    themePreview.style.setProperty('--preview-soft', soft);
-    themePreview.style.setProperty('--preview-accent', accent);
+function hexToRgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function rgbToHex(rgb) {
+  return `#${rgb.map((value) => Math.round(Math.min(255, Math.max(0, value))).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function mixHex(a, b, amountOfA) {
+  const x = hexToRgb(a);
+  const y = hexToRgb(b);
+  return rgbToHex(x.map((value, i) => value * amountOfA + y[i] * (1 - amountOfA)));
+}
+
+function luminance(hex) {
+  const channel = (value) => {
+    const c = value / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const [r, g, b] = hexToRgb(hex);
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function contrastWithWhite(hex) {
+  return 1.05 / (luminance(hex) + 0.05);
+}
+
+function readableText(hex) {
+  const onWhite = contrastWithWhite(hex);
+  const onInk = (luminance(hex) + 0.05) / (luminance('#1b1530') + 0.05);
+  return onWhite >= 4.5 || onWhite >= onInk ? '#ffffff' : '#1b1530';
+}
+
+function isSameTheme(a, b) {
+  return a.primary === b.primary && a.soft === b.soft && a.accent === b.accent;
+}
+
+function applyColors(theme) {
+  const vars = {
+    '--brand-primary': theme.primary,
+    '--brand-primary-hover': `color-mix(in srgb,${theme.primary} 86%,#000)`,
+    '--brand-soft': theme.soft,
+    '--theme-accent': theme.accent,
+    '--brand-text-on-primary': readableText(theme.primary),
+    '--theme-text-on-accent': readableText(theme.accent)
+  };
+  Object.entries(vars).forEach(([name, value]) => document.documentElement.style.setProperty(name, value));
+}
+
+function buildCustomTheme() {
+  let primary = String(customPrimaryInput?.value || '#2563eb').toLowerCase();
+  const accent = String(customAccentInput?.value || '#ffc53d').toLowerCase();
+  const original = primary;
+  // Darken the main color until white button text passes WCAG AA contrast.
+  for (let i = 0; i < 20 && contrastWithWhite(primary) < 4.5; i++) primary = mixHex(primary, '#000000', 0.92);
+  if (customNote) {
+    customNote.hidden = primary === original;
+    customNote.textContent = primary === original ? '' : `Main color darkened to ${primary} so white text on buttons stays readable.`;
   }
-  if (themeStatus) themeStatus.textContent = label;
+  return { id: 'custom', name: 'Custom colors', primary, soft: mixHex(primary, '#ffffff', 0.1), accent, emoji: '🎨', desc: 'Your own colors' };
+}
+
+function updateThemeUI() {
+  grid?.querySelectorAll('.theme-choice').forEach((element) => {
+    const theme = themes.find((item) => item.id === element.dataset.id);
+    const selected = Boolean(theme && isSameTheme(theme, previewTheme));
+    const live = Boolean(theme && isSameTheme(theme, liveTheme));
+    element.classList.toggle('selected', selected);
+    element.setAttribute('aria-checked', String(selected));
+    element.querySelector('.theme-live-tag')?.toggleAttribute('hidden', !live);
+  });
+  const changed = !isSameTheme(previewTheme, liveTheme);
+  if (themeStatus) themeStatus.textContent = `Live: ${liveTheme.name}`;
+  if (publishThemeButton) publishThemeButton.disabled = !adminReady || !changed;
+  if (revertThemeButton) revertThemeButton.disabled = !changed;
+  if (publishStatus && changed) publishStatus.textContent = `Previewing ${previewTheme.name}. Publish it to show it to every visitor.`;
+}
+
+function previewThemeChoice(theme) {
+  previewTheme = theme;
+  applyColors(theme);
+  updateThemeUI();
+}
+
+function renderThemes() {
+  if (!grid) return;
+  grid.innerHTML = themes.map((theme) => `
+    <button type="button" class="theme-choice" role="radio" aria-checked="false" data-id="${theme.id}" style="--c-primary:${theme.primary};--c-soft:${theme.soft};--c-accent:${theme.accent}">
+      <span class="theme-swatch"><span class="swatch-bar"></span><span class="swatch-body"><i></i><b>${theme.emoji}</b></span></span>
+      <span class="theme-meta"><strong>${theme.name}</strong><small>${theme.desc}</small></span>
+      <span class="theme-live-tag" hidden>Live</span>
+    </button>
+  `).join('');
+  grid.querySelectorAll('.theme-choice').forEach((button) => {
+    button.addEventListener('click', () => {
+      const theme = themes.find((item) => item.id === button.dataset.id);
+      if (theme) previewThemeChoice(theme);
+    });
+  });
+}
+
+async function publishTheme(theme) {
+  if (!supabase || !adminReady) return false;
+  publishStatus.textContent = 'Publishing theme for all visitors…';
+  publishThemeButton.disabled = true;
+  const payload = {
+    mode: 'theme',
+    theme: { id: theme.id, name: theme.name, primary: theme.primary, soft: theme.soft, accent: theme.accent },
+    updated_at: new Date().toISOString()
+  };
+  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  // Stored next to the logo; the bucket only accepts image content types.
+  const result = await supabase.storage.from('product-images').upload('branding/theme.json', blob, {
+    contentType: 'image/webp',
+    cacheControl: '0',
+    upsert: true
+  });
+  if (result.error) {
+    publishStatus.textContent = `Could not publish theme: ${result.error.message}`;
+    updateThemeUI();
+    return false;
+  }
+  liveTheme = theme;
+  publishStatus.textContent = `${theme.name} is now live for all visitors.`;
+  updateThemeUI();
+  return true;
+}
+
+function loadLiveTheme() {
+  const published = window.__CLEVER_BRANDING__?.publishedTheme;
+  if (!published?.primary) return defaultTheme;
+  const match = themes.find((theme) => theme.primary.toLowerCase() === String(published.primary).toLowerCase() && theme.accent.toLowerCase() === String(published.accent).toLowerCase());
+  if (match) return match;
+  if (customPrimaryInput) customPrimaryInput.value = published.primary;
+  if (customAccentInput) customAccentInput.value = published.accent;
+  return { id: 'custom', name: published.name || 'Custom colors', primary: published.primary, soft: published.soft, accent: published.accent };
 }
 
 function updateRibbonPreview() {
@@ -272,87 +415,6 @@ function normalizeInstagram(value) {
   if (!raw) return '';
   if (raw.startsWith('https://') || raw.startsWith('http://')) return raw;
   return `https://instagram.com/${raw.replace(/^@/, '')}`;
-}
-
-async function publishConfig(payload, successText, errorPrefix) {
-  if (!supabase || !adminReady) return false;
-  publishStatus.textContent = 'Publishing store colors for all visitors…';
-  const blob = new Blob([JSON.stringify(payload)], { type: 'image/webp' });
-  const result = await supabase.storage.from('product-images').upload('branding/theme.json', blob, {
-    contentType: 'image/webp',
-    cacheControl: '0',
-    upsert: true
-  });
-  if (result.error) {
-    publishStatus.textContent = `${errorPrefix}: ${result.error.message}`;
-    return false;
-  }
-  publishStatus.textContent = successText;
-  return true;
-}
-
-async function publishTheme(theme) {
-  return publishConfig(
-    {
-      mode: 'theme',
-      theme: { id: theme.id, name: theme.name, primary: theme.primary, soft: theme.soft, accent: theme.accent },
-      updated_at: new Date().toISOString()
-    },
-    `${theme.name} is now live for all visitors.`,
-    'Could not publish theme'
-  );
-}
-
-async function publishLogoMode() {
-  return publishConfig(
-    { mode: 'logo', theme: null, updated_at: new Date().toISOString() },
-    'Logo colors are now live for all visitors.',
-    'Could not publish color mode'
-  );
-}
-
-function selectTheme(theme, publish) {
-  logoToggle.checked = false;
-  writeCookie('cleverThemeMode', 'theme');
-  writeCookie('cleverTheme', theme.primary);
-  writeCookie('cleverUseLogoColors', 'false');
-  applyColors(theme.primary, theme.soft, theme.accent, `${theme.name} active`);
-  grid?.querySelectorAll('.theme-choice').forEach((element) => {
-    element.classList.toggle('selected', element.dataset.id === theme.id);
-  });
-  if (publish && adminReady) publishTheme(theme);
-}
-
-function renderThemes() {
-  if (!grid) return;
-  grid.innerHTML = themes.map((theme) => `
-    <button type="button" class="theme-choice" data-id="${theme.id}" aria-label="Use ${theme.name} theme">
-      <span class="theme-colors" style="background:${theme.soft}"><i style="background:${theme.primary}"></i><i style="background:${theme.accent}"></i><b>${theme.emoji}</b></span>
-      <strong>${theme.name}</strong>
-      <small>${theme.desc}</small>
-    </button>
-  `).join('');
-  grid.querySelectorAll('.theme-choice').forEach((button) => {
-    button.addEventListener('click', () => {
-      const theme = themes.find((item) => item.id === button.dataset.id);
-      if (theme) selectTheme(theme, true);
-    });
-  });
-}
-
-async function setLogoMode(enabled, publish) {
-  logoToggle.checked = enabled;
-  writeCookie('cleverUseLogoColors', enabled ? 'true' : 'false');
-  if (enabled) {
-    clearCookie('cleverThemeMode');
-    grid?.querySelectorAll('.theme-choice').forEach((element) => element.classList.remove('selected'));
-    applyColors('#111827', '#f3f4f6', '#fbbf24', 'Logo colors active');
-    if (publish && adminReady) await publishLogoMode();
-    return;
-  }
-  const saved = readCookie('cleverTheme').toLowerCase();
-  const theme = themes.find((item) => item.primary.toLowerCase() === saved) || themes[0];
-  selectTheme(theme, publish);
 }
 
 async function loadSettings() {
@@ -422,6 +484,7 @@ async function initAuth() {
     authStatus.textContent = 'Admin access verified';
     saveSettingsButton.disabled = false;
     saveLogoButton.disabled = false;
+    updateThemeUI();
     await loadSettings();
   } catch (error) {
     authStatus.textContent = error?.message || 'Unable to verify admin access.';
@@ -429,11 +492,16 @@ async function initAuth() {
 }
 
 renderThemes();
-const savedLogo = readCookie('cleverUseLogoColors');
-const savedTheme = readCookie('cleverTheme').toLowerCase();
-const initialTheme = themes.find((theme) => theme.primary.toLowerCase() === savedTheme) || themes[0];
-if (savedLogo === 'true') setLogoMode(true, false);
-else selectTheme(initialTheme, false);
+liveTheme = loadLiveTheme();
+previewThemeChoice(liveTheme);
+publishStatus.textContent = 'Choose a theme to preview it here.';
+customPrimaryInput?.addEventListener('input', () => previewThemeChoice(buildCustomTheme()));
+customAccentInput?.addEventListener('input', () => previewThemeChoice(buildCustomTheme()));
+publishThemeButton?.addEventListener('click', () => publishTheme(previewTheme));
+revertThemeButton?.addEventListener('click', () => {
+  previewThemeChoice(liveTheme);
+  publishStatus.textContent = 'Showing the live theme.';
+});
 
 updateRibbonPreview();
 updateCodPreview();
@@ -441,8 +509,6 @@ ribbonText?.addEventListener('input', updateRibbonPreview);
 codInput?.addEventListener('input', updateCodPreview);
 freeDeliveryInput?.addEventListener('input', updateFreeDeliveryPreview);
 updateFreeDeliveryPreview();
-logoToggle?.addEventListener('change', () => setLogoMode(logoToggle.checked, true));
-document.querySelector('#reset-theme')?.addEventListener('click', () => setLogoMode(true, true));
 saveSettingsButton?.addEventListener('click', async () => {
   try {
     await saveSettings();
@@ -501,69 +567,99 @@ initAuth();
 .branding-page{max-width:980px;display:grid;gap:20px}
 .branding-page .admin-head{margin-bottom:4px}
 .branding-page .admin-head h1{margin:0 0 7px}
-.branding-page .admin-head p{margin:0;color:#64748b}
+.branding-page .admin-head p{margin:0;color:var(--muted)}
 .branding-card{gap:18px}
 .section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}
 .section-heading h2{margin:0 0 5px}
-.section-heading p:last-child{margin:0;color:#64748b}
+.section-heading p:last-child{margin:0;color:var(--muted)}
 .status-text{font-size:.84rem;font-weight:800;color:var(--brand-primary);white-space:nowrap}
 .settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-.setting-box{display:grid;gap:10px;padding:16px;border:1px solid #e2e8f0;border-radius:16px;background:#f8fafc}
-.setting-box>input,.branding-card textarea,.branding-card input[type=url],.branding-card input[type=number],.branding-card input[type=file]{width:100%;box-sizing:border-box;min-height:46px;border:1px solid #cbd5e1;border-radius:11px;background:#fff;padding:10px 12px;font:inherit}
+.setting-box{display:grid;gap:10px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--surface-2)}
+.setting-box>input,.branding-card textarea,.branding-card input[type=url],.branding-card input[type=number],.branding-card input[type=file]{width:100%;box-sizing:border-box;min-height:46px;border:1px solid var(--line-strong);border-radius:11px;background:#fff;padding:10px 12px;font:inherit}
 .branding-card textarea{resize:vertical;min-height:88px}
-.setting-box small{color:#64748b}
+.setting-box small{color:var(--muted)}
 .field-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}
 .field-heading label{font-weight:800}
-.sync-pill{padding:4px 8px;border-radius:999px;background:#dcfce7;color:#166534;font-size:.72rem;font-weight:800}
-.switch-row{display:flex!important;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid #e2e8f0;border-radius:14px;background:#fff}
+.sync-pill{padding:4px 8px;border-radius:999px;background:var(--success-soft);color:var(--success);font-size:.72rem;font-weight:800}
+.switch-row{display:flex!important;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff}
 .switch-row.compact{margin-top:2px}
 .switch-row span{display:grid;gap:4px}
-.switch-row small{color:#64748b}
-.switch-row input{appearance:none;width:50px;height:28px;border-radius:999px;background:#cbd5e1;position:relative;cursor:pointer;transition:.2s;flex:0 0 auto}
+.switch-row small{color:var(--muted)}
+.switch-row input{appearance:none;width:50px;height:28px;border-radius:999px;background:var(--line-strong);position:relative;cursor:pointer;transition:.2s;flex:0 0 auto}
 .switch-row input::after{content:'';position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.18);transition:.2s}
 .switch-row input:checked{background:var(--brand-primary)}
 .switch-row input:checked::after{transform:translateX(22px)}
-.preview-ribbon-wrap{padding:12px;background:#f8fafc;border-radius:14px}
+.preview-ribbon-wrap{padding:12px;background:var(--surface-2);border-radius:14px}
 .ribbon-preview{min-height:42px;display:grid;place-items:center;padding:10px 14px;border-radius:10px;background:var(--brand-primary,#111827);color:#fff;font-weight:800;text-align:center}
 .ribbon-preview.muted{opacity:.55}
 .cod-field{display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:14px;align-items:end}
-.price-hint{min-height:46px;display:flex;align-items:center;justify-content:center;gap:8px;flex-direction:column;padding:8px 10px;border-radius:12px;background:var(--brand-soft,#f3f4f6)}
+.price-hint{min-height:46px;display:flex;align-items:center;justify-content:center;gap:8px;flex-direction:column;padding:8px 10px;border-radius:12px;background:var(--brand-soft,var(--surface-2))}
 .price-hint strong{font-size:1.25rem;color:var(--brand-primary,#111827)}
-.price-hint span{font-size:.74rem;color:#64748b;text-align:center}
+.price-hint span{font-size:.74rem;color:var(--muted);text-align:center}
 .feature-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.feature-list>div{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc}
-.feature-list>div>span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#dcfce7;color:#166534;font-weight:900}
-.feature-list p{margin:2px 0 0;color:#475569;font-size:.9rem}
-.theme-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
-.theme-choice{appearance:none;text-align:left;border:1px solid #e2e8f0;border-radius:16px;background:#fff;padding:0;overflow:hidden;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
-.theme-choice:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(15,23,42,.08)}
-.theme-choice.selected{border-color:var(--brand-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand-primary) 15%,transparent)}
-.theme-colors{height:72px;display:flex;align-items:center;padding:14px;gap:7px}
-.theme-colors i{width:20px;height:20px;border-radius:50%;box-shadow:0 0 0 2px #fff}
-.theme-colors b{margin-left:auto;font-size:28px}
-.theme-choice strong,.theme-choice small{display:block;padding-left:14px;padding-right:14px}
-.theme-choice strong{padding-top:12px}
-.theme-choice small{padding-top:3px;padding-bottom:14px;color:#64748b}
-.theme-preview{overflow:hidden;border:1px solid #e2e8f0;border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}
-.preview-scene{height:115px;background:var(--preview-soft,#f3e8ff);position:relative;overflow:hidden}
-.preview-scene span:first-child{position:absolute;left:15%;top:24px;font-size:34px}
-.preview-scene span:nth-child(2){position:absolute;right:14%;top:15px;font-size:36px}
-.preview-scene strong{position:absolute;left:52%;bottom:-2px;font-size:38px}
-.preview-scene b{position:absolute;right:28%;bottom:0;font-size:34px}
-.preview-content{padding:22px}
-.preview-content em{display:inline-flex;padding:5px 9px;border-radius:999px;background:var(--preview-accent,#fbbf24);color:#111827;font-size:.72rem;font-style:normal;font-weight:900;letter-spacing:.08em}
-.preview-content h3{margin:12px 0 5px}
-.preview-content p{margin:0 0 15px;color:#64748b}
-.preview-content>div{display:flex;gap:8px;align-items:center}
-.preview-content>div span,.preview-content>div small{display:inline-flex;padding:9px 12px;border-radius:10px;font-size:.82rem;font-weight:800}
-.preview-content>div span{background:var(--preview-primary,#7c3aed);color:#fff}
-.preview-content>div small{background:var(--preview-soft,#f3e8ff);color:#475569}
-.publish-status{margin:0;padding:10px 12px;border-radius:10px;background:var(--brand-soft);color:#475569;font-size:.9rem}
-.logo-preview{min-height:180px;display:grid;place-items:center;padding:26px;border:1px dashed #cbd5e1;border-radius:16px;background:linear-gradient(135deg,#f8fafc,#fff)}
+.feature-list>div{display:flex;align-items:flex-start;gap:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.feature-list>div>span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--success-soft);color:var(--success);font-weight:900}
+.feature-list p{margin:2px 0 0;color:var(--muted);font-size:.9rem}
+.theme-layout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:20px;align-items:start}
+.theme-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.custom-theme{display:grid;gap:12px;margin-top:12px;padding:14px;border:2px dashed var(--line-strong);border-radius:18px;background:var(--surface-2)}
+.custom-theme>div:first-child{display:grid;gap:3px}
+.custom-theme small{color:var(--muted)}
+.custom-theme-inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.custom-theme-inputs label{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 8px 8px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);font-size:.88rem}
+.custom-theme-inputs input[type=color]{width:44px;height:36px;min-height:0;padding:2px;border:0;border-radius:10px;background:none;cursor:pointer}
+.custom-note{margin:0;padding:8px 12px;border-radius:10px;background:var(--accent-soft);font-size:.85rem;font-weight:700}
+.theme-preview-wrap{position:sticky;top:calc(var(--header-h) + 16px)}
+.preview-label{margin:0 0 8px;color:var(--muted);font-size:.78rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.theme-preview{overflow:hidden;border:1.5px solid var(--line);border-radius:20px;background:var(--bg);box-shadow:var(--shadow)}
+.tp-header{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
+.tp-header b{font-family:var(--font-display);color:var(--primary-strong);font-size:.95rem}
+.tp-nav{display:flex;gap:5px;margin-right:auto}
+.tp-nav i{display:block;width:26px;height:8px;border-radius:99px;background:var(--surface-2)}
+.tp-nav i:first-child{background:var(--brand-soft)}
+.tp-cart{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:99px;background:var(--brand-primary);color:var(--brand-text-on-primary);font-size:.72rem;font-weight:800}
+.tp-cart em{padding:1px 6px;border-radius:99px;background:var(--theme-accent);color:var(--theme-text-on-accent);font-style:normal;font-weight:900}
+.tp-ribbon{padding:6px;background:linear-gradient(90deg,var(--brand-primary),color-mix(in srgb,var(--brand-primary) 70%,var(--theme-accent)));color:var(--brand-text-on-primary);font-size:.7rem;font-weight:800;text-align:center}
+.tp-hero{position:relative;display:grid;gap:8px;padding:20px 16px;background:var(--page-hero-bg);overflow:hidden}
+.tp-eyebrow{justify-self:start;padding:3px 8px;border-radius:99px;background:var(--accent-soft);color:var(--primary-strong);font-size:.62rem;font-weight:900;letter-spacing:.06em}
+.tp-hero strong{max-width:60%;font-family:var(--font-display);font-size:1.35rem;line-height:1.05;color:var(--ink)}
+.tp-buttons{display:flex;gap:6px}
+.tp-primary,.tp-secondary{padding:6px 12px;border-radius:99px;font-size:.72rem;font-weight:800}
+.tp-primary{background:var(--brand-primary);color:var(--brand-text-on-primary);box-shadow:0 2px 0 var(--primary-strong)}
+.tp-secondary{background:var(--surface);color:var(--primary-strong);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+.tp-bubble{position:absolute;display:grid;place-items:center;border-radius:50%;box-shadow:var(--shadow-sm)}
+.tp-bubble-1{right:40px;top:18px;width:58px;height:58px;background:var(--brand-primary);font-size:30px}
+.tp-bubble-2{right:10px;bottom:10px;width:40px;height:40px;background:var(--theme-accent);font-size:20px}
+.tp-products{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px}
+.tp-card{overflow:hidden;border:1.5px solid var(--line);border-radius:14px;background:var(--surface)}
+.tp-image{position:relative;display:grid;place-items:center;height:64px;background:var(--surface-2);font-size:30px}
+.tp-image em{position:absolute;left:6px;top:6px;padding:1px 7px;border-radius:99px;background:var(--theme-accent);color:var(--theme-text-on-accent);font-size:.6rem;font-style:normal;font-weight:900}
+.tp-card small{display:block;padding:7px 9px 0;font-size:.72rem;font-weight:800}
+.tp-card b{display:block;padding:0 9px 8px;font-family:var(--font-display);color:var(--primary-strong);font-size:.9rem}
+.theme-actions{display:flex;gap:10px;flex-wrap:wrap}
+.publish-status{margin:0;padding:10px 14px;border-radius:12px;background:var(--surface-2);color:var(--muted);font-size:.9rem;font-weight:700}
+.logo-preview{min-height:180px;display:grid;place-items:center;padding:26px;border:1px dashed var(--line-strong);border-radius:16px;background:linear-gradient(135deg,var(--surface-2),#fff)}
 .logo-preview img{max-width:min(100%,420px);max-height:160px;object-fit:contain}
 .settings-actions{display:flex;gap:14px;align-items:center;justify-content:flex-start;padding-bottom:30px}
-.settings-actions p,.branding-card>p{margin:0;color:#64748b}
+.settings-actions p,.branding-card>p{margin:0;color:var(--muted)}
 .settings-actions .button{min-width:190px}
-@media(max-width:760px){.settings-grid,.feature-list{grid-template-columns:1fr}.cod-field{grid-template-columns:1fr}.section-heading{flex-direction:column}.status-text{white-space:normal}.theme-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.settings-actions{display:grid}.settings-actions .button{width:100%}}
-@media(max-width:520px){.theme-grid{grid-template-columns:1fr}.switch-row{align-items:flex-start}.switch-row input{margin-top:2px}}
+@media(max-width:900px){.theme-layout{grid-template-columns:1fr}.theme-preview-wrap{position:static;order:-1}}@media(max-width:760px){.settings-grid,.feature-list{grid-template-columns:1fr}.theme-actions .button{width:100%}.cod-field{grid-template-columns:1fr}.section-heading{flex-direction:column}.status-text{white-space:normal}.theme-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.settings-actions{display:grid}.settings-actions .button{width:100%}}
+@media(max-width:520px){.theme-grid{grid-template-columns:1fr}.custom-theme-inputs{grid-template-columns:1fr}.switch-row{align-items:flex-start}.switch-row input{margin-top:2px}}
+</style>
+
+<style is:global>
+/* Theme cards are rendered from script, so these rules cannot be scoped. */
+.theme-choice{position:relative;display:flex;align-items:center;gap:12px;width:100%;padding:10px;border:2px solid var(--line);border-radius:18px;background:var(--surface);text-align:left;cursor:pointer;transition:transform .18s,box-shadow .18s,border-color .18s}
+.theme-choice:hover{transform:translateY(-2px);box-shadow:var(--shadow-sm)}
+.theme-choice.selected{border-color:var(--c-primary);box-shadow:0 0 0 4px color-mix(in srgb,var(--c-primary) 18%,transparent)}
+.theme-swatch{flex:0 0 64px;height:64px;overflow:hidden;border-radius:14px;background:var(--c-soft);box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
+.swatch-bar{display:block;height:16px;background:var(--c-primary)}
+.swatch-body{position:relative;display:block;height:48px}
+.swatch-body i{position:absolute;left:8px;bottom:9px;width:22px;height:9px;border-radius:99px;background:var(--c-accent)}
+.swatch-body b{position:absolute;right:6px;bottom:4px;font-size:24px;line-height:1}
+.theme-meta{display:grid;gap:2px;min-width:0}
+.theme-meta strong{font-size:.95rem}
+.theme-meta small{color:var(--muted);font-size:.8rem}
+.theme-live-tag{position:absolute;top:8px;right:8px;padding:2px 8px;border-radius:99px;background:var(--success-soft);color:var(--success);font-size:.68rem;font-weight:900;letter-spacing:.04em;text-transform:uppercase}
+.theme-live-tag[hidden]{display:none}
 </style>
