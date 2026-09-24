@@ -358,8 +358,9 @@ async function publishTheme(theme) {
     theme: { id: theme.id, name: theme.name, primary: theme.primary, soft: theme.soft, accent: theme.accent },
     updated_at: new Date().toISOString()
   };
-  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-  // Stored next to the logo; the bucket only accepts image content types.
+  // The product-images bucket only accepts image types, and supabase-js sends a Blob's own
+  // type (not the contentType option), so the JSON must be labelled as an image.
+  const blob = new Blob([JSON.stringify(payload)], { type: 'image/webp' });
   const result = await supabase.storage.from('product-images').upload('branding/theme.json', blob, {
     contentType: 'image/webp',
     cacheControl: '0',
