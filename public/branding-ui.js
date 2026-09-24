@@ -1,10 +1,7 @@
 (() => {
   const fallbackWhatsappUrl = 'https://wa.me/96171220251?text=Hello%20Clever%20Toys%21%20I%20have%20a%20question%20about%20your%20toys.';
   const customerKey = 'cleverToysCustomer';
-  const DEFAULT_GREETING = 'Hello Clever Toys! I have a question about your toys.';
-  // Older store settings saved this greeting; replace it with the corrected default.
-  const isOldGreeting = (text) => /^hello,?\s*i'?m interested with your product\.?$/i.test(String(text || '').trim());
-  const whatsappIcon = '<svg viewBox="0 0 32 32" aria-hidden="true" focusable="false"><path fill="currentColor" d="M16 3.2C9.1 3.2 3.5 8.8 3.5 15.7c0 2.2.6 4.4 1.8 6.3L3.2 28.8l6.9-2.1c1.8 1 3.8 1.5 5.9 1.5 6.9 0 12.5-5.6 12.5-12.5S22.9 3.2 16 3.2Zm0 22.8c-1.9 0-3.8-.5-5.4-1.5l-.4-.2-4.1 1.2 1.2-4-.3-.4c-1-1.6-1.5-3.5-1.5-5.4C5.5 9.9 10.2 5.2 16 5.2s10.5 4.7 10.5 10.5S21.8 26 16 26Zm5.8-7.8c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.7-1.7-2-.2-.3 0-.5.1-.7l.4-.5.3-.5c.1-.2 0-.4 0-.6-.1-.2-.7-1.7-.9-2.3-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1 2.9 1.1 3.1c.1.2 2 3.1 4.9 4.3.7.3 1.2.5 1.7.6.7.2 1.3.2 1.8.1.6-.1 1.8-.7 2-1.4.3-.7.3-1.3.2-1.4-.1-.1-.3-.2-.6-.4Z"/></svg>';
+  const whatsappIcon = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>';
 
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>\"']/g, char => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -40,21 +37,6 @@
     }
   };
 
-  const withGreeting = (target, greeting = DEFAULT_GREETING) => {
-    try {
-      const url = new URL(target || fallbackWhatsappUrl);
-      const current = url.searchParams.get('text');
-      // Keep a custom greeting the admin wrote; replace missing, outdated or plain default ones.
-      if (!current || isOldGreeting(current) || current === DEFAULT_GREETING) url.searchParams.set('text', greeting);
-      return url.toString();
-    } catch {
-      return target;
-    }
-  };
-  const pageGreeting = () => {
-    const title = isProductDetailPage() ? document.querySelector('.product-details h1')?.textContent?.trim() : '';
-    return title ? `Hello Clever Toys! I have a question about the ${title}.` : DEFAULT_GREETING;
-  };
 
   const getBranding = () => ({
     ...(window.__CLEVER_BRANDING__ || {}),
@@ -86,12 +68,12 @@
         container.prepend(socials);
       }
 
-      const whatsappIcon = '<svg class="clever-header-social-icon" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13.25" fill="#25D366"/><path d="M11.5 9.8c-.35 0-.72.08-1.02.45-.4.45-1.3 1.27-1.3 3.1 0 1.82 1.33 3.57 1.52 3.81.19.25 2.55 3.99 6.21 5.42 3.07 1.2 3.69.96 4.35.9.66-.06 2.12-.87 2.42-1.71.3-.84.3-1.56.21-1.71-.09-.15-.35-.25-.74-.45-.39-.2-2.3-1.14-2.66-1.27-.36-.14-.63-.2-.89.2-.26.4-1.02 1.27-1.25 1.53-.23.26-.46.3-.85.1-.39-.2-1.65-.61-3.15-1.95-1.16-1.03-1.94-2.3-2.17-2.69-.23-.4-.02-.61.18-.81.18-.18.39-.46.58-.69.2-.23.26-.4.39-.65.13-.26.06-.49-.03-.69-.1-.2-.89-2.12-1.22-2.9-.32-.75-.66-.65-.89-.65h-.76Z" fill="#fff"/></svg>';
+      const whatsappIcon = '<svg class="clever-header-social-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="#25D366" d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></svg>';
       const instagramIcon = '<svg class="clever-header-social-icon" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="clever-instagram-gradient" x1="5" y1="27" x2="27" y2="5" gradientUnits="userSpaceOnUse"><stop stop-color="#FFDC80"/><stop offset=".35" stop-color="#F77737"/><stop offset=".67" stop-color="#E1306C"/><stop offset="1" stop-color="#833AB4"/></linearGradient></defs><rect x="5.25" y="5.25" width="21.5" height="21.5" rx="6" fill="none" stroke="url(#clever-instagram-gradient)" stroke-width="2.4"/><circle cx="16" cy="16" r="5" fill="none" stroke="url(#clever-instagram-gradient)" stroke-width="2.4"/><circle cx="22.4" cy="9.7" r="1.55" fill="#E1306C"/></svg>';
 
       const links = [];
       if (branding.showWhatsapp && branding.whatsappUrl) {
-        links.push('<a class="clever-header-social clever-header-whatsapp" href="' + escapeHtml(withGreeting(branding.whatsappUrl, pageGreeting())) + '" target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="Chat with Clever Toys on WhatsApp">' + whatsappIcon + '</a>');
+        links.push('<a class="clever-header-social clever-header-whatsapp" href="' + escapeHtml(branding.whatsappUrl) + '" target="_blank" rel="noopener noreferrer" title="WhatsApp" aria-label="Chat with Clever Toys on WhatsApp">' + whatsappIcon + '</a>');
       }
       if (branding.showInstagram && branding.instagramUrl) {
         links.push('<a class="clever-header-social clever-header-instagram" href="' + escapeHtml(branding.instagramUrl) + '" target="_blank" rel="noopener noreferrer" title="Instagram" aria-label="Clever Toys on Instagram">' + instagramIcon + '</a>');
@@ -112,7 +94,82 @@
   const patchFloatingWhatsapp = () => {
     const branding = getBranding();
     const floating = document.getElementById('clever-floating-whatsapp');
-    if (floating && branding.whatsappUrl) floating.href = withGreeting(branding.whatsappUrl, pageGreeting());
+    if (floating && branding.whatsappUrl) floating.href = branding.whatsappUrl;
+  };
+
+  const saveCustomer = (details) => {
+    try {
+      const stored = readStoredCustomer();
+      localStorage.setItem(customerKey, JSON.stringify({
+        ...stored,
+        full_name: details.full_name, customer_name: details.full_name,
+        phone: details.phone, customer_phone: details.phone,
+        governorate: details.governorate, city: details.city, area: details.area, address: details.address
+      }));
+    } catch {}
+  };
+
+  // Delivery details form shown before "Order on WhatsApp", prefilled from the last checkout or order.
+  const openDetailsDialog = (order, onSend) => {
+    let dialog = document.getElementById('wa-order-dialog');
+    if (!dialog) {
+      dialog = document.createElement('dialog');
+      dialog.id = 'wa-order-dialog';
+      dialog.className = 'wa-dialog';
+      dialog.setAttribute('aria-labelledby', 'wa-dialog-title');
+      dialog.innerHTML = `<form method="dialog" class="wa-dialog-form" novalidate>
+        <div class="wa-dialog-head"><div><h2 id="wa-dialog-title">Your delivery details</h2><p class="wa-dialog-summary"></p></div><button type="button" class="wa-dialog-close" aria-label="Close">×</button></div>
+        <div class="wa-dialog-fields">
+          <label>Full name<input name="full_name" required autocomplete="name" maxlength="120"></label>
+          <label>Phone number<input name="phone" required type="tel" autocomplete="tel" maxlength="40" placeholder="+961 …"></label>
+          <label>Governorate<input name="governorate" required autocomplete="address-level1" maxlength="80"></label>
+          <label>City<input name="city" required autocomplete="address-level2" maxlength="80"></label>
+          <label>Area <span>(optional)</span><input name="area" autocomplete="address-level3" maxlength="120"></label>
+          <label class="wide">Full address<textarea name="address" required rows="2" autocomplete="street-address" maxlength="500" placeholder="Street, building, floor"></textarea></label>
+          <label class="wide">Notes <span>(optional)</span><textarea name="notes" rows="2" maxlength="500" placeholder="Best time to call, gift wrapping…"></textarea></label>
+          <label class="wa-remember wide"><input type="checkbox" name="remember" checked> Remember my details on this device</label>
+        </div>
+        <p class="wa-dialog-error" role="alert" hidden>Please fill in the highlighted fields.</p>
+        <div class="wa-dialog-actions"><button type="button" class="button secondary-button wa-dialog-cancel">Cancel</button><button type="submit" class="button whatsapp-buy-button">${whatsappIcon}<span>Send order on WhatsApp</span></button></div>
+      </form>`;
+      document.body.appendChild(dialog);
+      dialog.querySelector('.wa-dialog-close').addEventListener('click', () => dialog.close());
+      dialog.querySelector('.wa-dialog-cancel').addEventListener('click', () => dialog.close());
+      dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+      dialog.addEventListener('input', (event) => {
+        if (event.target.hasAttribute?.('aria-invalid')) event.target.removeAttribute('aria-invalid');
+        if (!dialog.querySelector('[aria-invalid=true]')) dialog.querySelector('.wa-dialog-error').hidden = true;
+      });
+    }
+    const form = dialog.querySelector('form');
+    const stored = readStoredCustomer();
+    const prefill = {
+      full_name: stored.full_name || stored.customer_name || '',
+      phone: stored.phone || stored.customer_phone || '',
+      governorate: stored.governorate || '', city: stored.city || '', area: stored.area || '', address: stored.address || ''
+    };
+    for (const [name, value] of Object.entries(prefill)) { const field = form.elements.namedItem(name); if (field && !field.value) field.value = value; }
+    dialog.querySelector('.wa-dialog-summary').textContent = `${order.productName}${order.optionName ? ` · ${order.optionName}` : ''} × ${order.qty} — Total ${money(order.total)} (cash on delivery)`;
+    const error = dialog.querySelector('.wa-dialog-error');
+    error.hidden = true;
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      const data = Object.fromEntries([...new FormData(form).entries()].map(([k, v]) => [k, String(v).trim()]));
+      const missing = [...form.querySelectorAll('[required]')].filter((field) => !String(field.value).trim() || (field.name === 'phone' && String(field.value).replace(/\D/g, '').length < 7));
+      form.querySelectorAll('[aria-invalid]').forEach((field) => field.removeAttribute('aria-invalid'));
+      if (missing.length) {
+        missing.forEach((field) => field.setAttribute('aria-invalid', 'true'));
+        error.hidden = false;
+        missing[0].focus();
+        return;
+      }
+      if (form.elements.namedItem('remember').checked) saveCustomer(data);
+      dialog.close();
+      onSend(order, data);
+    };
+    dialog.showModal();
+    const firstEmpty = [...form.querySelectorAll('[required]')].find((field) => !field.value.trim());
+    (firstEmpty || form.querySelector('[type=submit]')).focus();
   };
 
   const addWhatsappProductButton = async () => {
@@ -159,10 +216,9 @@
     quantity.addEventListener('input', syncDisabled);
     syncDisabled();
 
-    button.addEventListener('click', () => {
-      if (addButton.disabled) return;
-      const hasOptions = variantSelect instanceof HTMLSelectElement && variantSelect.options.length > 1;
-      if (hasOptions && !variantSelect.value) return;
+    // Collect the order first, then ask for delivery details before opening WhatsApp,
+    // so the message is complete even for shoppers who are not signed in.
+    const collectOrder = () => {
       const qty = Math.max(1, Math.floor(Number(quantity.value || 1)));
       const selected = variantSelect instanceof HTMLSelectElement && variantSelect.value
         ? variantSelect.options[variantSelect.selectedIndex]
@@ -172,39 +228,40 @@
       const unitPrice = Number(String(priceEl.textContent || '').replace(/[^0-9.]/g, '')) || 0;
       const subtotal = unitPrice * qty;
       const delivery = getDeliveryFee(subtotal, branding);
-      const total = subtotal + delivery;
-      const customer = readStoredCustomer();
-      const name = customer.full_name || customer.customer_name || '';
-      const phone = customer.phone || customer.customer_phone || '';
-      const area = [customer.governorate, customer.city, customer.area].filter(Boolean).join(', ');
-      const productName = productTitle.textContent?.trim() || 'Toy';
-      const productUrl = `${location.origin}${location.pathname}`;
+      return { qty, optionName, unitPrice, subtotal, delivery, total: subtotal + delivery, productName: productTitle.textContent?.trim() || 'Toy', productUrl: `${location.origin}${location.pathname}` };
+    };
 
-      // WhatsApp renders *text* as bold. Blank delivery fields invite the customer to fill them in.
-      const lines = [
-        'Hello Clever Toys 👋',
-        'I would like to place an order:',
-        '',
-        `*${productName}*`,
-        optionName ? `Option: ${optionName}` : null,
-        `Quantity: ${qty} × ${money(unitPrice)}`,
-        `Link: ${productUrl}`,
-        '',
-        '*Order summary*',
-        `Subtotal: ${money(subtotal)}`,
-        `Delivery: ${delivery === 0 ? 'Free' : money(delivery)}`,
-        `*Total: ${money(total)}* (cash on delivery)`,
-        '',
-        '*Delivery details*',
-        `Name: ${name}`,
-        `Phone: ${phone}`,
-        `Area: ${area}`,
-        `Address: ${customer.address || ''}`,
-        '',
-        'Please confirm availability and the expected delivery time. Thank you!'
-      ].filter((value) => value !== null).join('\n');
+    const buildMessage = (order, details) => [
+      'Hello Clever Toys 👋',
+      'I would like to place an order:',
+      '',
+      `*${order.productName}*`,
+      order.optionName ? `Option: ${order.optionName}` : null,
+      `Quantity: ${order.qty} × ${money(order.unitPrice)}`,
+      `Link: ${order.productUrl}`,
+      '',
+      '*Order summary*',
+      `Subtotal: ${money(order.subtotal)}`,
+      `Delivery: ${order.delivery === 0 ? 'Free' : money(order.delivery)}`,
+      `*Total: ${money(order.total)}* (cash on delivery)`,
+      '',
+      '*Delivery details*',
+      `Name: ${details.full_name}`,
+      `Phone: ${details.phone}`,
+      `Area: ${[details.governorate, details.city, details.area].filter(Boolean).join(', ')}`,
+      `Address: ${details.address}`,
+      details.notes ? `Notes: ${details.notes}` : null,
+      '',
+      'Please confirm availability and the expected delivery time. Thank you!'
+    ].filter((value) => value !== null).join('\n');
 
-      window.open(buildWhatsappUrl(branding.whatsappUrl || fallbackWhatsappUrl, lines), '_blank', 'noopener,noreferrer');
+    button.addEventListener('click', () => {
+      if (addButton.disabled) return;
+      const hasOptions = variantSelect instanceof HTMLSelectElement && variantSelect.options.length > 1;
+      if (hasOptions && !variantSelect.value) return;
+      openDetailsDialog(collectOrder(), (order, details) => {
+        window.open(buildWhatsappUrl(branding.whatsappUrl || fallbackWhatsappUrl, buildMessage(order, details)), '_blank', 'noopener,noreferrer');
+      });
     });
   };
 

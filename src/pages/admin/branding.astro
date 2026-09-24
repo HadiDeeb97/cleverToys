@@ -48,7 +48,9 @@ const logoUrl = supabaseUrl
         <div class="setting-box">
           <div class="field-heading"><label for="whatsapp-url">WhatsApp link</label><span class="sync-pill">Synced</span></div>
           <input id="whatsapp-url" type="url" placeholder="https://wa.me/961..." autocomplete="url" />
-          <small>Paste a wa.me URL or a phone number with country code.</small>
+          <small>Paste a wa.me link or a phone number with country code. Add <code>?text=</code> to set the greeting.</small>
+          <small class="wa-usage">Used by the floating WhatsApp button, the header WhatsApp icon, and product "Order on WhatsApp" orders (which send to this number with the full order).</small>
+          <a id="test-whatsapp" class="small-button" href="#" target="_blank" rel="noopener">Test link ↗</a>
           <label class="switch-row compact">
             <span><strong>Show WhatsApp in top bar</strong><small>The floating WhatsApp button remains linked too.</small></span>
             <input id="show-whatsapp" type="checkbox" role="switch" />
@@ -461,12 +463,23 @@ function normalizeInstagram(value) {
   return `https://instagram.com/${raw.replace(/^@/, '')}`;
 }
 
+// Keep the "Test link" button pointing at exactly what customers will open.
+function syncWhatsappTest() {
+  const link = document.querySelector('#test-whatsapp');
+  const value = normalizeWhatsapp(document.querySelector('#whatsapp-url')?.value);
+  if (!link) return;
+  link.href = value || '#';
+  link.toggleAttribute('aria-disabled', !value);
+}
+document.querySelector('#whatsapp-url')?.addEventListener('input', syncWhatsappTest);
+
 async function loadSettings() {
   const result = await supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle();
   if (result.error) throw new Error(`Store settings table is not ready. ${result.error.message}`);
   const settings = { ...defaults, ...(result.data || {}) };
 
   document.querySelector('#whatsapp-url').value = settings.whatsapp_url || '';
+  syncWhatsappTest();
   document.querySelector('#instagram-url').value = settings.instagram_url || '';
   document.querySelector('#show-whatsapp').checked = Boolean(settings.show_whatsapp);
   document.querySelector('#show-instagram').checked = Boolean(settings.show_instagram);
@@ -630,6 +643,9 @@ initAuth();
 .setting-box>input,.branding-card textarea,.branding-card input[type=url],.branding-card input[type=number],.branding-card input[type=file]{width:100%;box-sizing:border-box;min-height:46px;border:1px solid var(--line-strong);border-radius:11px;background:#fff;padding:10px 12px;font:inherit}
 .branding-card textarea{resize:vertical;min-height:88px}
 .setting-box small{color:var(--muted)}
+.wa-usage{padding:8px 10px;border-radius:10px;background:var(--surface-2)}
+#test-whatsapp{justify-self:start}
+#test-whatsapp[aria-disabled]{opacity:.5;pointer-events:none}
 .field-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}
 .field-heading label{font-weight:800}
 .sync-pill{padding:4px 8px;border-radius:999px;background:var(--success-soft);color:var(--success);font-size:.72rem;font-weight:800}

@@ -283,6 +283,28 @@ td small{color:var(--muted)}
 .whatsapp-buy-button svg{width:22px;height:22px;flex:0 0 auto}
 .whatsapp-order-note{margin:0;color:var(--muted);font-size:.82rem;font-weight:600;text-align:center}
 
+.wa-dialog{width:min(560px,calc(100% - 24px));max-height:calc(100vh - 32px);padding:0;border:0;border-radius:var(--radius-lg);background:var(--surface);color:var(--ink);box-shadow:var(--shadow-lg)}
+.wa-dialog::backdrop{background:rgba(15,12,30,.55);backdrop-filter:blur(3px)}
+.wa-dialog[open]{animation:ct-rise .25s ease both}
+.wa-dialog-form{display:grid;gap:16px;padding:22px}
+.wa-dialog-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.wa-dialog-head h2{margin:0 0 4px;font-size:1.35rem}
+.wa-dialog-summary{margin:0;color:var(--muted);font-size:.9rem;font-weight:700}
+.wa-dialog-close{display:grid;place-items:center;width:38px;height:38px;flex:0 0 auto;border:1.5px solid var(--line);border-radius:50%;background:var(--surface);font-size:1.3rem;cursor:pointer}
+.wa-dialog-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.wa-dialog-fields label{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-size:.88rem;font-weight:800}
+.wa-dialog-fields label>input:not([type=checkbox]),.wa-dialog-fields label>textarea{flex:1 1 100%}
+.wa-dialog-fields label span{color:var(--subtle);font-weight:600}
+.wa-dialog-fields .wide{grid-column:1/-1}
+.wa-dialog-fields input:not([type=checkbox]),.wa-dialog-fields textarea{width:100%;min-height:46px;padding:10px 14px;border:1.5px solid var(--line-strong);border-radius:12px;background:var(--surface);font-size:16px;font-weight:600;resize:vertical}
+.wa-dialog-fields input:focus,.wa-dialog-fields textarea:focus{outline:none;border-color:#25d366;box-shadow:0 0 0 4px rgba(37,211,102,.18)}
+.wa-dialog-fields [aria-invalid=true]{border-color:var(--danger);background:var(--danger-soft)}
+.wa-dialog .wa-remember{display:flex!important;flex-wrap:nowrap;align-items:center;gap:8px;font-weight:700;color:var(--muted)}
+.wa-dialog-error{margin:0;color:var(--danger);font-weight:800}
+.wa-dialog-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.wa-dialog-actions .whatsapp-buy-button{width:auto}
+@media(max-width:560px){.wa-dialog-fields{grid-template-columns:1fr}.wa-dialog-actions .button{flex:1 1 100%}}
+
 /* Admin shell (html[data-area=admin] is set by the middleware) */
 html[data-area=admin]{--admin-sidebar:252px;--admin-bg:color-mix(in srgb,var(--brand-soft) 22%,#f6f7fb);background:var(--admin-bg)}
 html[data-area=admin] body{display:grid;grid-template-columns:var(--admin-sidebar) minmax(0,1fr);align-items:start;min-height:100vh;background:var(--admin-bg)}
