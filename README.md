@@ -28,6 +28,7 @@ Run the SQL files in `supabase/` from the Supabase SQL Editor. They can safely b
 - `seo_migration.sql`: per-page SEO overrides
 - `visitor_analytics.sql`: visitor tracking for the admin analytics page
 - `customer_orders.sql`: lets signed-in customers see their own orders on `/account`
+- `theme_settings.sql`: stores the published theme so Admin → Branding can publish it
 
 ## Project structure
 

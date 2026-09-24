@@ -52,45 +52,51 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const publishableKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
   const logoUrl = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/logo.webp` : '';
   const themeUrl = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/theme.json` : '';
-  let published = { mode: 'logo', theme: null as null | { primary: string; soft: string; accent: string; id?: string; name?: string } };
-  let storeSettings = { ...defaultStoreSettings };
+  type PublishedTheme = { mode: string; theme: null | { primary: string; soft: string; accent: string; id?: string; name?: string } };
+  // Accepts the published theme payload ({ mode, theme: { primary, soft, accent } }) from either source.
+  const parseTheme = (d: any): PublishedTheme | null => {
+    if (d?.mode === 'theme' && safeHex(d?.theme?.primary) && safeHex(d?.theme?.soft) && safeHex(d?.theme?.accent)) {
+      return {
+        mode: 'theme',
+        theme: {
+          primary: safeHex(d.theme.primary)!,
+          soft: safeHex(d.theme.soft)!,
+          accent: safeHex(d.theme.accent)!,
+          id: typeof d.theme.id === 'string' ? d.theme.id : undefined,
+          name: typeof d.theme.name === 'string' ? d.theme.name : undefined
+        }
+      };
+    }
+    return d?.mode === 'logo' ? { mode: 'logo', theme: null } : null;
+  };
+  let published: PublishedTheme = { mode: 'logo', theme: null };
+  let fileTheme: PublishedTheme | null = null;
+  let settingsTheme: PublishedTheme | null = null;
+  let storeSettings: Record<string, any> = { ...defaultStoreSettings };
 
+  // Older setups published the theme as a JSON file in storage; it is only used when store_settings has no theme.
   const loadTheme = async () => {
     if (!themeUrl) return;
     try {
-      const cacheBust = `?theme=${Date.now()}`;
-      const r = await fetch(`${themeUrl}${cacheBust}`, { cf: { cacheTtl: 0, cacheEverything: false } });
-      if (r.ok) {
-        const raw = await r.text();
-        const d = JSON.parse(raw) as any;
-        if (d?.mode === 'theme' && safeHex(d?.theme?.primary) && safeHex(d?.theme?.soft) && safeHex(d?.theme?.accent)) {
-          published = {
-            mode: 'theme',
-            theme: {
-              primary: safeHex(d.theme.primary)!,
-              soft: safeHex(d.theme.soft)!,
-              accent: safeHex(d.theme.accent)!,
-              id: typeof d.theme.id === 'string' ? d.theme.id : undefined,
-              name: typeof d.theme.name === 'string' ? d.theme.name : undefined
-            }
-          };
-        } else if (d?.mode === 'logo') {
-          published = { mode: 'logo', theme: null };
-        }
-      }
+      const r = await fetch(`${themeUrl}?theme=${Date.now()}`, { cf: { cacheTtl: 0, cacheEverything: false } });
+      if (r.ok) fileTheme = parseTheme(JSON.parse(await r.text()));
     } catch {}
   };
 
   const loadStoreSettings = async () => {
-    if (path.startsWith('/admin') || path.startsWith('/api') || !base || !publishableKey) return;
+    if (path.startsWith('/api') || !base || !publishableKey) return;
     try {
-      const settingsResponse = await fetch(`${base.replace(/\/$/, '')}/rest/v1/store_settings?select=whatsapp_url,instagram_url,show_whatsapp,show_instagram,ribbon_text,show_ribbon,cod_delivery_price,free_delivery_threshold&id=eq.default&limit=1`, {
+      // select=* so a missing optional column (e.g. before a migration) does not break the whole query.
+      const settingsResponse = await fetch(`${base.replace(/\/$/, '')}/rest/v1/store_settings?select=*&id=eq.default&limit=1`, {
         headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
         cf: { cacheTtl: 0, cacheEverything: false }
       });
       if (settingsResponse.ok) {
         const row = (await settingsResponse.json())?.[0];
-        if (row) storeSettings = { ...defaultStoreSettings, ...row };
+        if (row) {
+          storeSettings = { ...defaultStoreSettings, ...row };
+          settingsTheme = parseTheme(row.theme);
+        }
       }
     } catch {}
   };
@@ -128,6 +134,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   };
 
   const [, , seo] = await Promise.all([loadTheme(), loadStoreSettings(), loadSeo()]);
+  published = settingsTheme || fileTheme || published;
 
   const whatsappUrl = safeExternalUrl(storeSettings.whatsapp_url, fallbackWhatsappUrl);
   const instagramUrl = safeExternalUrl(storeSettings.instagram_url, 'https://instagram.com/');
@@ -155,7 +162,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify(branding).replace(/</g, '\\u003c')};</script>`;
   const earlyTheme = published.mode === 'theme' && published.theme ? `<style id="clever-theme">:root{${themeVariables(published.theme)}}</style>` : '';
   const fontLinks = '<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" />';
-  const storeScript = '<script src="/store-ui.js?v=20260924-1" defer></script><script src="/branding-ui.js?v=20260924-1" defer></script>';
+  const storeScript = '<script src="/store-ui.js?v=20260924-2" defer></script><script src="/branding-ui.js?v=20260924-1" defer></script>';
   const adminBrandingLink = path.startsWith('/admin') && !path.startsWith('/admin/branding') ? '<a href="/admin/branding">Branding</a>' : '';
   const adminSeoLink = path.startsWith('/admin') && !path.startsWith('/admin/seo') ? '<a href="/admin/seo">SEO</a>' : '';
   let output = html;

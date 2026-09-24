@@ -323,13 +323,13 @@ function updateThemeUI() {
   if (themeStatus) themeStatus.textContent = `Live: ${liveTheme.name}`;
   if (publishThemeButton) publishThemeButton.disabled = !adminReady || !changed;
   if (revertThemeButton) revertThemeButton.disabled = !changed;
-  if (publishStatus && changed) publishStatus.textContent = `Previewing ${previewTheme.name}. Publish it to show it to every visitor.`;
 }
 
 function previewThemeChoice(theme) {
   previewTheme = theme;
   applyColors(theme);
   updateThemeUI();
+  if (publishStatus && !isSameTheme(previewTheme, liveTheme)) publishStatus.textContent = `Previewing ${previewTheme.name}. Publish it to show it to every visitor.`;
 }
 
 function renderThemes() {
@@ -349,6 +349,22 @@ function renderThemes() {
   });
 }
 
+// Older databases may not have store_settings.theme yet (see supabase/theme_settings.sql).
+function isMissingThemeColumn(error) {
+  return /theme/i.test(String(error?.message || '')) && /column|schema cache/i.test(String(error?.message || ''));
+}
+
+async function publishThemeFile(payload) {
+  // The product-images bucket only accepts image types, and supabase-js sends a Blob's own
+  // type (not the contentType option), so the JSON must be labelled as an image.
+  const blob = new Blob([JSON.stringify(payload)], { type: 'image/webp' });
+  return supabase.storage.from('product-images').upload('branding/theme.json', blob, {
+    contentType: 'image/webp',
+    cacheControl: '0',
+    upsert: true
+  });
+}
+
 async function publishTheme(theme) {
   if (!supabase || !adminReady) return false;
   publishStatus.textContent = 'Publishing theme for all visitors…';
@@ -358,22 +374,21 @@ async function publishTheme(theme) {
     theme: { id: theme.id, name: theme.name, primary: theme.primary, soft: theme.soft, accent: theme.accent },
     updated_at: new Date().toISOString()
   };
-  // The product-images bucket only accepts image types, and supabase-js sends a Blob's own
-  // type (not the contentType option), so the JSON must be labelled as an image.
-  const blob = new Blob([JSON.stringify(payload)], { type: 'image/webp' });
-  const result = await supabase.storage.from('product-images').upload('branding/theme.json', blob, {
-    contentType: 'image/webp',
-    cacheControl: '0',
-    upsert: true
-  });
+  // The theme lives in store_settings, which the storefront reads on every page load.
+  let result = await supabase.from('store_settings').upsert({ id: 'default', theme: payload, updated_at: payload.updated_at }, { onConflict: 'id' }).select('id').single();
+  let note = '';
+  if (result.error && isMissingThemeColumn(result.error)) {
+    result = await publishThemeFile(payload);
+    note = ' Run supabase/theme_settings.sql in Supabase to make theme publishing more reliable.';
+  }
   if (result.error) {
     publishStatus.textContent = `Could not publish theme: ${result.error.message}`;
     updateThemeUI();
     return false;
   }
   liveTheme = theme;
-  publishStatus.textContent = `${theme.name} is now live for all visitors.`;
   updateThemeUI();
+  publishStatus.textContent = `${theme.name} is now live for all visitors. Refresh the store to see it.${note}`;
   return true;
 }
 
