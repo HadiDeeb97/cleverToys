@@ -51,20 +51,19 @@
       const headerInner = header.querySelector('.header-inner');
       if (!headerInner) return;
 
-      let nav = headerInner.querySelector('.main-nav');
-      if (!nav) {
-        nav = document.createElement('nav');
-        nav.className = 'main-nav';
-        nav.setAttribute('aria-label', 'Main navigation');
-        headerInner.appendChild(nav);
+      let container = headerInner.querySelector('.header-actions') || headerInner.querySelector('.main-nav');
+      if (!container) {
+        container = document.createElement('div');
+        container.className = 'header-actions';
+        headerInner.appendChild(container);
       }
 
-      let socials = nav.querySelector('.clever-header-socials');
+      let socials = headerInner.querySelector('.clever-header-socials');
       if (!socials) {
         socials = document.createElement('span');
         socials.className = 'clever-header-socials';
         socials.setAttribute('aria-label', 'Social links');
-        nav.appendChild(socials);
+        container.prepend(socials);
       }
 
       const whatsappIcon = '<svg class="clever-header-social-icon" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13.25" fill="#25D366"/><path d="M11.5 9.8c-.35 0-.72.08-1.02.45-.4.45-1.3 1.27-1.3 3.1 0 1.82 1.33 3.57 1.52 3.81.19.25 2.55 3.99 6.21 5.42 3.07 1.2 3.69.96 4.35.9.66-.06 2.12-.87 2.42-1.71.3-.84.3-1.56.21-1.71-.09-.15-.35-.25-.74-.45-.39-.2-2.3-1.14-2.66-1.27-.36-.14-.63-.2-.89.2-.26.4-1.02 1.27-1.25 1.53-.23.26-.46.3-.85.1-.39-.2-1.65-.61-3.15-1.95-1.16-1.03-1.94-2.3-2.17-2.69-.23-.4-.02-.61.18-.81.18-.18.39-.46.58-.69.2-.23.26-.4.39-.65.13-.26.06-.49-.03-.69-.1-.2-.89-2.12-1.22-2.9-.32-.75-.66-.65-.89-.65h-.76Z" fill="#fff"/></svg>';
@@ -82,14 +81,6 @@
     });
 
     document.querySelector('.clever-topbar')?.remove();
-
-    let styles = document.getElementById('clever-header-social-styles');
-    if (!styles) {
-      styles = document.createElement('style');
-      styles.id = 'clever-header-social-styles';
-      styles.textContent = '.clever-header-socials{display:inline-flex;align-items:center;gap:6px;margin-left:2px}.clever-header-social{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:999px;text-decoration:none;line-height:1;transition:transform .16s ease,background .16s ease;flex:0 0 auto}.clever-header-social:hover{transform:translateY(-1px)}.clever-header-social-icon{display:block;width:20px;height:20px}.clever-header-whatsapp:hover{background:rgba(37,211,102,.08)}.clever-header-instagram:hover{background:rgba(225,48,108,.08)}@media(max-width:640px){.clever-header-social{width:32px;height:32px}.clever-header-social-icon{width:19px;height:19px}.clever-header-socials{gap:4px}}';
-      document.head.appendChild(styles);
-    }
   };
 
   const moveRibbonBelowHeader = () => {

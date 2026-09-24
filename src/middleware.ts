@@ -10,6 +10,25 @@ const escapeAttr = (value: string) => value.replace(/&/g, '&amp;').replace(/\"/g
 const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;');
 const safeExternalUrl = (value: unknown, fallback: string) => /^https?:\/\//i.test(String(value ?? '').trim()) ? String(value).trim() : fallback;
 
+// Pick whichever text color (white or dark ink) reads better on a theme color.
+const readableText = (hex: string) => {
+  const channel = (value: number) => {
+    const c = value / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = (value: string) => {
+    const n = parseInt(value.slice(1), 16);
+    return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255);
+  };
+  const color = luminance(hex);
+  const onWhite = 1.05 / (color + 0.05);
+  const onInk = (color + 0.05) / (luminance('#1b1530') + 0.05);
+  return onWhite >= 4.5 || onWhite >= onInk ? '#ffffff' : '#1b1530';
+};
+
+const themeVariables = (theme: { primary: string; soft: string; accent: string }) =>
+  `--brand-primary:${theme.primary};--brand-primary-hover:color-mix(in srgb,${theme.primary} 86%,#000);--brand-soft:${theme.soft};--theme-accent:${theme.accent};--brand-text-on-primary:${readableText(theme.primary)};--theme-text-on-accent:${readableText(theme.accent)}`;
+
 const fallbackWhatsappUrl = 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product';
 const defaultStoreSettings = {
   whatsapp_url: fallbackWhatsappUrl,
@@ -134,19 +153,29 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     freeDeliveryThreshold: Math.max(0, Number(storeSettings.free_delivery_threshold || 0))
   };
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify(branding).replace(/</g, '\\u003c')};</script>`;
-  const earlyTheme = published.mode === 'theme' && published.theme
-    ? `<style id="clever-theme">:root{--brand-primary:${published.theme.primary};--brand-primary-hover:${published.theme.primary};--brand-soft:${published.theme.soft};--brand-text-on-primary:#fff;--theme-accent:${published.theme.accent}}</style>`
-    : '';
-  const requiredFieldStyle = `<style id="clever-required-fields">.form-card label:has(input:required),.form-card label:has(textarea:required),.form-card label:has(select:required){position:relative;padding-left:13px!important}.form-card label:has(input:required)::after,.form-card label:has(textarea:required)::after,.form-card label:has(select:required)::after{content:'*';position:absolute;left:0;top:0;margin:0;color:#e11d48;font-weight:900;font-size:1em;line-height:1.25;pointer-events:none}.form-card label:has(input:required) input,.form-card label:has(textarea:required) textarea,.form-card label:has(select:required) select{margin-top:0}@media(max-width:640px){.form-card label:has(input:required),.form-card label:has(textarea:required),.form-card label:has(select:required){padding-left:12px!important}}</style>`;
-  const storeScript = '<script src="/store-ui.js?v=20260922-2" defer></script><script src="/branding-ui.js?v=20260922-3" defer></script>';
+  const earlyTheme = published.mode === 'theme' && published.theme ? `<style id="clever-theme">:root{${themeVariables(published.theme)}}</style>` : '';
+  const fontLinks = '<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" />';
+  const storeScript = '<script src="/store-ui.js?v=20260924-1" defer></script><script src="/branding-ui.js?v=20260924-1" defer></script>';
   const adminBrandingLink = path.startsWith('/admin') && !path.startsWith('/admin/branding') ? '<a href="/admin/branding">Branding</a>' : '';
   const adminSeoLink = path.startsWith('/admin') && !path.startsWith('/admin/seo') ? '<a href="/admin/seo">SEO</a>' : '';
   let output = html;
 
-  if (!/<meta\s+name=[\"']viewport[\"'][^>]*>/i.test(output)) {
-    const viewportTags = '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" /><meta name="theme-color" content="#111827" /><meta name="format-detection" content="telephone=no" />';
-    if (/<head[^>]*>/i.test(output)) output = output.replace(/<head[^>]*>/i, (match) => `${match}${viewportTags}`);
+  // Several page templates have no <head> or <body>. Give every page a real <head> so the theme,
+  // fonts, scripts and meta tags below are always injected.
+  if (!/<head[\s>]/i.test(output)) {
+    output = /<!doctype html>/i.test(output) ? output.replace(/<!doctype html>/i, (match) => `${match}<head></head>`) : `<head></head>${output}`;
   }
+  if (!/<meta\s+charset/i.test(output)) output = output.replace(/<head[^>]*>/i, (match) => `${match}<meta charset="utf-8" />`);
+  if (!/<title>/i.test(output)) output = output.replace('</head>', '<title>Clever Toys Lebanon</title></head>');
+  const appendToBody = (markup: string) => {
+    output = output.includes('</body>') ? output.replace('</body>', `${markup}</body>`) : `${output}${markup}`;
+  };
+
+  if (!/<meta\s+name=[\"']viewport[\"'][^>]*>/i.test(output)) {
+    const viewportTags = `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" /><meta name="theme-color" content="${published.theme?.primary || '#2563eb'}" /><meta name="format-detection" content="telephone=no" />`;
+    output = output.replace(/<head[^>]*>/i, (match) => `${match}${viewportTags}`);
+  }
+  output = output.replace(/<meta\s+name=["']theme-color["'][^>]*>/i, `<meta name="theme-color" content="${published.theme?.primary || '#2563eb'}" />`);
 
   if (seo) {
     const title = String(seo.title || '').trim();
@@ -166,14 +195,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     output = output.replace('</head>', `${seoTags}</head>`);
   }
 
-  if (logoUrl && !path.startsWith('/admin')) {
-    const logoMarkup = `<img class="site-logo-image" src="${escapeAttr(logoUrl)}" alt="Clever Toys" decoding="async"><span class="logo-text">Clever Toys</span>`;
-    output = output.replace(/<a([^>]*class=[\"']logo[\"'][^>]*)>[\s\S]*?<\/a>/gi, `<a$1>${logoMarkup}</a>`);
-  }
-
-  if (!output.includes('/store-ui.js')) output = output.replace('</head>', `${earlyTheme}${storeConfig}${requiredFieldStyle}${storeScript}</head>`);
-  else if (!output.includes('clever-required-fields')) output = output.replace('</head>', `${earlyTheme}${storeConfig}${requiredFieldStyle}</head>`);
-  else if (!output.includes('branding-ui.js')) output = output.replace('</head>', `${storeConfig}${storeScript}</head>`);
+  if (!output.includes('/store-ui.js')) output = output.replace('</head>', `${fontLinks}${earlyTheme}${storeConfig}${storeScript}</head>`);
 
   if (!path.startsWith('/admin')) {
     const headerSocials = (showWhatsapp || showInstagram)
@@ -184,36 +206,32 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       ? `<div class="clever-ribbon" role="status"><div class="container">${escapeHtml(ribbonText)}</div></div>`
       : '';
 
-    // Normalize the public storefront header on every page so individual page templates
-    // cannot produce different layouts, missing links, or overlapping mobile navigation.
-    if (!path.startsWith('/admin')) {
-      const active = (href: string) => path === href || (href !== '/' && path.startsWith(href + '/'));
-      const navLink = (href: string, label: string) => `<a href="${href}"${active(href) ? ' aria-current="page"' : ''}>${label}</a>`;
-      const standardLogoMarkup = logoUrl
-        ? `<img class="site-logo-image" src="${escapeAttr(logoUrl)}" alt="Clever Toys" decoding="async" onerror="this.hidden=true"><span class="logo-text">Clever Toys</span>`
-        : '<span class="logo-text">Clever Toys</span>';
-      const standardHeader = `<header class="site-header" data-clever-standard-header><div class="container header-inner"><a href="/" class="logo" aria-label="Clever Toys home">${standardLogoMarkup}</a><nav class="main-nav" aria-label="Main navigation">${navLink('/', 'Home')}${navLink('/products', 'Shop')}${navLink('/categories', 'Categories')}${navLink('/account', 'Account')}<a href="/cart" class="cart-link" aria-label="Shopping cart">Cart <span class="cart-count-badge" aria-hidden="true" hidden>0</span></a></nav></div></header>`;
-      const headerPattern = /<header([^>]*class=["'][^"']*site-header[^"']*["'][^>]*)>[\s\S]*?<\/header>/i;
-      if (headerPattern.test(output)) {
-        output = output.replace(headerPattern, standardHeader);
-      } else {
-        output = output.replace(/<body([^>]*)>/i, (match) => `${match}${standardHeader}`);
-      }
-    }
+    // Normalize the public storefront header and footer on every page so individual page
+    // templates cannot produce different layouts, missing links, or overlapping mobile navigation.
+    const active = (href: string) => path === href || (href !== '/' && path.startsWith(href + '/'));
+    const currentAttr = (href: string) => active(href) ? ' aria-current="page"' : '';
+    const navLink = (href: string, label: string) => `<a href="${href}"${currentAttr(href)}>${label}</a>`;
+    const searchIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>';
+    const accountIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>';
+    const searchValue = path === '/products' ? escapeAttr(context.url.searchParams.get('q') || '') : '';
+    const standardLogoMarkup = logoUrl
+      ? `<img class="site-logo-image" src="${escapeAttr(logoUrl)}" alt="Clever Toys" decoding="async" onerror="this.hidden=true"><span class="logo-text">Clever Toys</span>`
+      : '<span class="logo-text">Clever Toys</span>';
+    const standardHeader = `<header class="site-header" data-clever-standard-header><div class="container header-inner"><a href="/" class="logo" aria-label="Clever Toys home">${standardLogoMarkup}</a><nav class="main-nav" aria-label="Main navigation">${navLink('/', 'Home')}${navLink('/products', 'Shop')}${navLink('/categories', 'Categories')}${navLink('/about', 'About')}${navLink('/contact', 'Contact')}</nav><form class="header-search" action="/products" method="get" role="search">${searchIcon}<label class="sr-only" for="header-search-input">Search toys</label><input id="header-search-input" name="q" type="search" value="${searchValue}" placeholder="Search toys…" autocomplete="off" /></form><div class="header-actions">${headerSocials}<a href="/products#product-search" class="header-icon-link header-search-link" aria-label="Search toys">${searchIcon}</a><a href="/account" class="header-icon-link header-account-link" aria-label="My account"${currentAttr('/account')}>${accountIcon}</a><a href="/cart" class="cart-link" aria-label="Shopping cart"><span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Cart</span><span class="cart-count-badge" aria-hidden="true" hidden>0</span></a></div></div></header>${ribbon}`;
+    const headerPattern = /<header([^>]*class=["'][^"']*site-header[^"']*["'][^>]*)>[\s\S]*?<\/header>/i;
+    if (headerPattern.test(output)) output = output.replace(headerPattern, () => standardHeader);
+    else if (/<body[^>]*>/i.test(output)) output = output.replace(/<body[^>]*>/i, (match) => `${match}${standardHeader}`);
+    else output = output.replace('</head>', () => `</head>${standardHeader}`);
 
-    if (headerSocials) {
-      output = output.replace(/(<nav[^>]*class=[\"'][^\"']*main-nav[^\"']*[\"'][^>]*>)([\s\S]*?)(<\/nav>)/gi, (match, open, body, close) => {
-        const cleanedBody = body.replace(/<span[^>]*class=[\"'][^\"']*clever-header-socials[^\"']*[\"'][^>]*>[\s\S]*?<\/span>/gi, '');
-        return `${open}${cleanedBody}${headerSocials}${close}`;
-      });
-    }
+    const year = new Date().getFullYear();
+    const standardFooter = `<footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><strong>Clever Toys</strong><p>Fun, educational and exciting toys for every stage of childhood, with cash on delivery across Lebanon.</p></div><div class="footer-col"><h2>Shop</h2><ul><li><a href="/products">All toys</a></li><li><a href="/categories">Categories</a></li><li><a href="/cart">Your cart</a></li></ul></div><div class="footer-col"><h2>Help</h2><ul><li><a href="/contact">Contact us</a></li><li><a href="/shipping-returns">Shipping &amp; returns</a></li><li><a href="/account">My account</a></li></ul></div><div class="footer-col"><h2>Company</h2><ul><li><a href="/about">About us</a></li><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms</a></li></ul></div></div><div class="footer-bottom"><p>© ${year} Clever Toys. All rights reserved.</p><p>Made for curious minds 🧸</p></div></div></footer>`;
+    const footerPattern = /<footer([^>]*class=["'][^"']*site-footer[^"']*["'][^>]*)>[\s\S]*?<\/footer>/i;
+    const lastMain = output.lastIndexOf('</main>');
+    if (footerPattern.test(output)) output = output.replace(footerPattern, () => standardFooter);
+    else if (lastMain >= 0) output = `${output.slice(0, lastMain + 7)}${standardFooter}${output.slice(lastMain + 7)}`;
 
-    output = output.replace(/<header([^>]*class=[\"'][^\"']*site-header[^\"']*[\"'][^>]*)>[\s\S]*?<\/header>/i, (header) => ribbon ? `${header}${ribbon}` : header);
-    output = output.replace('</head>', `<style id="clever-branding-bar-styles">.clever-header-socials{display:inline-flex;align-items:center;gap:6px;margin-left:2px}.clever-header-social{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:999px;text-decoration:none;line-height:1;transition:transform .16s ease,background .16s ease;flex:0 0 auto}.clever-header-social:hover{transform:translateY(-1px)}.clever-header-social-icon{display:block;width:20px;height:20px}.clever-header-whatsapp:hover{background:rgba(37,211,102,.08)}.clever-header-instagram:hover{background:rgba(225,48,108,.08)}@media(max-width:640px){.clever-header-social{width:32px;height:32px}.clever-header-social-icon{width:19px;height:19px}.clever-header-socials{gap:4px}}.clever-ribbon{background:var(--brand-primary,#111827);color:#fff;text-align:center;font-size:.82rem;font-weight:800}.clever-ribbon .container{min-height:38px;display:grid;place-items:center;padding-top:7px;padding-bottom:7px}@media(max-width:640px){.clever-ribbon{font-size:.76rem}}</style></head>`);
-
-    const floatingStyles = `<style id="clever-floating-styles">.clever-floating-controls{position:fixed;inset:0;pointer-events:none;z-index:10000}.clever-floating-cart,.clever-floating-whatsapp{position:fixed;bottom:20px;width:58px;height:58px;border-radius:50%;display:grid;place-items:center;text-decoration:none;pointer-events:auto;box-shadow:0 10px 26px rgba(15,23,42,.22);transition:transform .2s,box-shadow .2s}.clever-floating-cart{right:20px;background:var(--brand-primary,#111827);color:var(--brand-text-on-primary,#fff)}.clever-floating-whatsapp{left:20px;background:#25D366;color:#fff}.clever-floating-cart:hover,.clever-floating-whatsapp:hover{transform:translateY(-3px);box-shadow:0 14px 30px rgba(15,23,42,.27)}.clever-floating-cart .floating-cart-icon{font-size:25px;line-height:1}.clever-floating-cart .floating-cart-count{position:absolute;right:-2px;top:-2px;min-width:21px;height:21px;padding:0 5px;border-radius:999px;display:grid;place-items:center;background:#fff;color:var(--brand-primary,#111827);font-size:11px;font-weight:800;line-height:1}.clever-floating-whatsapp svg{width:30px;height:30px;display:block}.clever-floating-controls .floating-cart-count[hidden]{display:none}@media(max-width:640px){.clever-floating-cart,.clever-floating-whatsapp{bottom:calc(14px + env(safe-area-inset-bottom));width:54px;height:54px}.clever-floating-cart{right:14px}.clever-floating-whatsapp{left:14px}.clever-floating-cart .floating-cart-icon{font-size:23px}.clever-floating-whatsapp svg{width:28px;height:28px}}</style>`;
     const controls = `<div class="clever-floating-controls" aria-hidden="false"><a id="clever-floating-cart" class="clever-floating-cart" href="/cart" title="View your cart" aria-label="Shopping cart"><span class="floating-cart-icon" aria-hidden="true">🛒</span><span class="floating-cart-count" aria-hidden="true" hidden>0</span></a><a id="clever-floating-whatsapp" class="clever-floating-whatsapp" href="${escapeAttr(whatsappUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Chat with Clever Toys on WhatsApp" title="Chat with us on WhatsApp"><svg viewBox="0 0 32 32" focusable="false" aria-hidden="true"><path d="M16 3.2C9.1 3.2 3.5 8.8 3.5 15.7c0 2.2.6 4.4 1.8 6.3L3.2 28.8l6.9-2.1c1.8 1 3.8 1.5 5.9 1.5 6.9 0 12.5-5.6 12.5-12.5S22.9 3.2 16 3.2Zm0 22.8c-1.9 0-3.8-.5-5.4-1.5l1.2-4-.3-.4c-1-1.6-1.5-3.5-1.5-5.4-1.5-2.1 5.1-3.7 8.8-3.7 5.7 0 10.4 4.7 10.4 10.4S21.7 26.5 16 26.5Zm5.8-7.8c-.3-.2-1.8-.9-2.1-1-.3-.1-.5-.2-.7.2-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.7-1.7-2-.2-.3 0-.5.1-.7.1-.1.3-.3.4-.5.1-.2.2-.3.3-.5.1-.2 0-.4 0-.6-.1-.2-.7-1.7-.9-2.3-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1 2.9 1.1 3.1c.1.2 2 3.1 4.9 4.3.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2.1-1.4.3-.7.3-1.3.2-1.4-.1-.1-.3-.2-.6-.4Z" fill="currentColor"/></svg></a></div>`;
-    if (!output.includes('clever-floating-controls')) output = output.replace('</body>', `${floatingStyles}${controls}</body>`);
+    if (!output.includes('clever-floating-controls')) appendToBody(controls);
   }
 
   if (adminBrandingLink && output.includes('</nav>') && !output.includes('/admin/branding')) output = output.replace('</nav>', `${adminBrandingLink}</nav>`);
