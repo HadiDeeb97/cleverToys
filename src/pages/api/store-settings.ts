@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { env } from 'cloudflare:workers';
+import { supabaseConfig } from '../../lib/config';
 
 const fallback = {
   whatsappUrl: 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product',
@@ -14,8 +14,7 @@ const fallback = {
 
 export const GET: APIRoute = async () => {
   try {
-    const base = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
-    const key = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+    const { url: base, key } = supabaseConfig();
     if (!base || !key) {
       return new Response(JSON.stringify(fallback), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
     }

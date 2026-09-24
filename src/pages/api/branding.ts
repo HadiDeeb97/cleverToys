@@ -1,8 +1,8 @@
 import type { APIRoute } from 'astro';
-import { env } from 'cloudflare:workers';
+import { supabaseConfig } from '../../lib/config';
 
 export const GET: APIRoute = async () => {
-  const base = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
+  const { url: base } = supabaseConfig();
   const logo_url = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/logo.webp` : '';
   return new Response(JSON.stringify({ logo_url }), {
     status: 200,

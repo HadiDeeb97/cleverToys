@@ -14,6 +14,7 @@ export const GET: APIRoute = async ({ site }) => {
     { path: '/categories', updated_at: null },
     { path: '/about', updated_at: null },
     { path: '/contact', updated_at: null },
+    { path: '/track-order', updated_at: null },
     { path: '/shipping-returns', updated_at: null },
     { path: '/privacy', updated_at: null },
     { path: '/terms', updated_at: null },
@@ -27,6 +28,6 @@ export const GET: APIRoute = async ({ site }) => {
   }).join('');
 
   return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${xml}</urlset>`, {
-    headers: { 'content-type': 'application/xml; charset=utf-8' }
+    headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' }
   });
 };

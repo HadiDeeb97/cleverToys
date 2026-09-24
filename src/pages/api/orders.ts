@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { createClient } from '@supabase/supabase-js';
 import { env } from 'cloudflare:workers';
+import { supabaseConfig } from '../../lib/config';
 
 const buildTelegramMessage = (body: any, orderNumber: string) => {
   const items = Array.isArray(body.items) ? body.items : [];
@@ -70,18 +71,51 @@ const sendTelegramOrderNotification = async (body: any, orderNumber: string) => 
   }
 };
 
+const MAX_BODY_BYTES = 32 * 1024;
+const text = (value: unknown, max: number) => String(value ?? '').trim().slice(0, max);
+
+// Only forward the fields create_order uses, with length limits, so oversized or unexpected
+// input never reaches the database or the Telegram message.
+const sanitizeOrder = (raw: any) => ({
+  customer_name: text(raw?.customer_name, 120),
+  customer_phone: text(raw?.customer_phone, 40),
+  customer_email: text(raw?.customer_email, 254),
+  governorate: text(raw?.governorate, 80),
+  city: text(raw?.city, 80),
+  area: text(raw?.area, 120),
+  address: text(raw?.address, 500),
+  notes: text(raw?.notes, 1000),
+  payment_method: 'cash_on_delivery',
+  items: (Array.isArray(raw?.items) ? raw.items : []).slice(0, 50).map((item: any) => ({
+    productId: text(item?.productId, 64),
+    variantId: item?.variantId ? text(item.variantId, 64) : null,
+    quantity: Math.floor(Number(item?.quantity) || 0),
+    // Display-only fields for the notification; prices are recalculated by create_order.
+    name: text(item?.name, 200),
+    variantName: item?.variantName ? text(item.variantName, 120) : null,
+    price: Math.max(0, Number(item?.price) || 0)
+  }))
+});
+
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = await request.json();
-    if (!body?.customer_name || !body?.customer_phone || !Array.isArray(body.items) || body.items.length === 0) {
+    const declaredLength = Number(request.headers.get('content-length') || 0);
+    const rawBody = await request.text();
+    if (declaredLength > MAX_BODY_BYTES || rawBody.length > MAX_BODY_BYTES) {
+      return new Response(JSON.stringify({ error: 'Order is too large.' }), {
+        status: 413,
+        headers: { 'content-type': 'application/json; charset=utf-8' }
+      });
+    }
+    const body = sanitizeOrder(JSON.parse(rawBody));
+    if (!body.customer_name || !body.customer_phone || body.items.length === 0) {
       return new Response(JSON.stringify({ error: 'Missing required order information.' }), {
         status: 400,
         headers: { 'content-type': 'application/json; charset=utf-8' }
       });
     }
 
-    const url = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
-    const key = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+    const { url, key } = supabaseConfig();
     if (!url || !key) throw new Error('Supabase server configuration is missing.');
 
     const authHeader = request.headers.get('authorization');
@@ -106,10 +140,10 @@ export const POST: APIRoute = async ({ request }) => {
     const orderNumber = result?.order_number || result?.orderNumber || 'New Order';
     const notificationBody = {
       ...body,
-      // Prefer server-calculated amounts; older create_order versions do not return subtotal.
-      subtotal: result?.subtotal ?? (result?.total != null && result?.delivery_fee != null ? Number(result.total) - Number(result.delivery_fee) : body.subtotal),
-      delivery_fee: result?.delivery_fee ?? body.delivery_fee,
-      total: result?.total ?? body.total
+      // Always use server-calculated amounts; older create_order versions do not return subtotal.
+      subtotal: result?.subtotal ?? Number(result?.total || 0) - Number(result?.delivery_fee || 0),
+      delivery_fee: result?.delivery_fee ?? 0,
+      total: result?.total ?? 0
     };
     const telegramNotificationSent = await sendTelegramOrderNotification(notificationBody, orderNumber);
 

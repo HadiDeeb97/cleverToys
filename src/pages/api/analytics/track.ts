@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { env } from 'cloudflare:workers';
+import { supabaseConfig } from '../../../lib/config';
 
 const clean = (value: unknown, max: number) => String(value ?? '').trim().slice(0, max);
 
@@ -22,8 +22,7 @@ export const POST: APIRoute = async ({ request }) => {
       return new Response(JSON.stringify({ ok: false }), { status: 400, headers: { 'content-type': 'application/json' } });
     }
 
-    const base = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
-    const key = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+    const { url: base, key } = supabaseConfig();
     if (!base || !key) return new Response(JSON.stringify({ ok: false }), { status: 503, headers: { 'content-type': 'application/json' } });
 
     const response = await fetch(`${base.replace(/\/$/, '')}/rest/v1/rpc/track_visitor`, {

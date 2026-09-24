@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'astro';
-import { env } from 'cloudflare:workers';
+import { supabaseConfig } from './lib/config';
 
 const safeHex = (value: unknown) => {
   const match = String(value ?? '').match(/^#[0-9a-fA-F]{6}$/);
@@ -26,8 +26,8 @@ const readableText = (hex: string) => {
   return onWhite >= 4.5 || onWhite >= onInk ? '#ffffff' : '#1b1530';
 };
 
-const themeVariables = (theme: { primary: string; soft: string; accent: string }) =>
-  `--brand-primary:${theme.primary};--brand-primary-hover:color-mix(in srgb,${theme.primary} 86%,#000);--brand-soft:${theme.soft};--theme-accent:${theme.accent};--brand-text-on-primary:${readableText(theme.primary)};--theme-text-on-accent:${readableText(theme.accent)}`;
+const themeVariables = (theme: { primary: string; primary2?: string; soft: string; accent: string }) =>
+  `--brand-primary:${theme.primary};--brand-primary-2:${theme.primary2 || theme.primary};--brand-primary-hover:color-mix(in srgb,${theme.primary} 86%,#000);--brand-soft:${theme.soft};--theme-accent:${theme.accent};--brand-text-on-primary:${readableText(theme.primary)};--theme-text-on-accent:${readableText(theme.accent)}`;
 
 const fallbackWhatsappUrl = 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product';
 const defaultStoreSettings = {
@@ -41,18 +41,39 @@ const defaultStoreSettings = {
   free_delivery_threshold: 0
 };
 
+const securityHeaders: Record<string, string> = {
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'strict-origin-when-cross-origin',
+  'x-frame-options': 'DENY',
+  'content-security-policy': "frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'",
+  'permissions-policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+  'strict-transport-security': 'max-age=31536000; includeSubDomains'
+};
+
+const withSecurityHeaders = (headers: Headers) => {
+  for (const [name, value] of Object.entries(securityHeaders)) if (!headers.has(name)) headers.set(name, value);
+  return headers;
+};
+
 export const onRequest: MiddlewareHandler = async (context, next) => {
   const response = await next();
   const contentType = response.headers.get('content-type');
-  if (!contentType?.toLowerCase().includes('text/html')) return response;
+  if (!contentType?.toLowerCase().includes('text/html')) {
+    try {
+      withSecurityHeaders(response.headers);
+      return response;
+    } catch {
+      // Some responses have immutable headers; copy them into a new response instead.
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers: withSecurityHeaders(new Headers(response.headers)) });
+    }
+  }
 
   const html = await response.text();
   const path = context.url.pathname;
-  const base = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
-  const publishableKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+  const { url: base, key: publishableKey } = supabaseConfig();
   const logoUrl = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/logo.webp` : '';
   const themeUrl = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/theme.json` : '';
-  type PublishedTheme = { mode: string; theme: null | { primary: string; soft: string; accent: string; id?: string; name?: string } };
+  type PublishedTheme = { mode: string; theme: null | { primary: string; primary2?: string; soft: string; accent: string; id?: string; name?: string } };
   // Accepts the published theme payload ({ mode, theme: { primary, soft, accent } }) from either source.
   const parseTheme = (d: any): PublishedTheme | null => {
     if (d?.mode === 'theme' && safeHex(d?.theme?.primary) && safeHex(d?.theme?.soft) && safeHex(d?.theme?.accent)) {
@@ -60,6 +81,8 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
         mode: 'theme',
         theme: {
           primary: safeHex(d.theme.primary)!,
+          // Optional gradient end color; themes without it render solid.
+          primary2: safeHex(d.theme.primary2) || undefined,
           soft: safeHex(d.theme.soft)!,
           accent: safeHex(d.theme.accent)!,
           id: typeof d.theme.id === 'string' ? d.theme.id : undefined,
@@ -161,8 +184,8 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   };
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify(branding).replace(/</g, '\\u003c')};</script>`;
   const earlyTheme = published.mode === 'theme' && published.theme ? `<style id="clever-theme">:root{${themeVariables(published.theme)}}</style>` : '';
-  const fontLinks = '<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" />';
-  const storeScript = '<script src="/store-ui.js?v=20260924-2" defer></script><script src="/branding-ui.js?v=20260924-1" defer></script>';
+  const fontLinks = '<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" media="print" onload="this.media=\'all\'" /><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" /></noscript>';
+  const storeScript = '<script src="/store-ui.js?v=20260924-3" defer></script><script src="/branding-ui.js?v=20260924-1" defer></script>';
   const adminBrandingLink = path.startsWith('/admin') && !path.startsWith('/admin/branding') ? '<a href="/admin/branding">Branding</a>' : '';
   const adminSeoLink = path.startsWith('/admin') && !path.startsWith('/admin/seo') ? '<a href="/admin/seo">SEO</a>' : '';
   let output = html;
@@ -174,6 +197,18 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   }
   if (!/<meta\s+charset/i.test(output)) output = output.replace(/<head[^>]*>/i, (match) => `${match}<meta charset="utf-8" />`);
   if (!/<title>/i.test(output)) output = output.replace('</head>', '<title>Clever Toys Lebanon</title></head>');
+  // Pages without an <html> element get no lang attribute, which screen readers rely on.
+  if (!/<html[\s>]/i.test(output)) output = /<!doctype html>/i.test(output) ? output.replace(/<!doctype html>/i, (match) => `${match}<html lang="en">`) : `<html lang="en">${output}`;
+
+  // SEO defaults for pages that do not set their own tags.
+  const isPrivatePage = /^\/(admin|account|cart|checkout|login|register|forgot-password|reset-password|order-success)(\/|$)/.test(path);
+  const headTags: string[] = [];
+  if (isPrivatePage && !/<meta\s+name=["']robots["']/i.test(output)) headTags.push('<meta name="robots" content="noindex, nofollow" />');
+  if (!/<meta\s+name=["']description["']/i.test(output)) headTags.push('<meta name="description" content="Clever Toys Lebanon: fun, educational and exciting toys for every stage of childhood, with cash on delivery." />');
+  if (!isPrivatePage && !/<link\s+rel=["']canonical["']/i.test(output)) headTags.push(`<link rel="canonical" href="${escapeAttr(new URL(path, context.site ?? context.url.origin).href)}" />`);
+  if (!/property=["']og:site_name["']/i.test(output)) headTags.push('<meta property="og:site_name" content="Clever Toys" />');
+  if (!/property=["']og:type["']/i.test(output)) headTags.push('<meta property="og:type" content="website" />');
+  if (headTags.length) output = output.replace('</head>', `${headTags.join('')}</head>`);
   const appendToBody = (markup: string) => {
     output = output.includes('</body>') ? output.replace('</body>', `${markup}</body>`) : `${output}${markup}`;
   };
@@ -224,14 +259,17 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     const standardLogoMarkup = logoUrl
       ? `<img class="site-logo-image" src="${escapeAttr(logoUrl)}" alt="Clever Toys" decoding="async" onerror="this.hidden=true"><span class="logo-text">Clever Toys</span>`
       : '<span class="logo-text">Clever Toys</span>';
-    const standardHeader = `<header class="site-header" data-clever-standard-header><div class="container header-inner"><a href="/" class="logo" aria-label="Clever Toys home">${standardLogoMarkup}</a><nav class="main-nav" aria-label="Main navigation">${navLink('/', 'Home')}${navLink('/products', 'Shop')}${navLink('/categories', 'Categories')}${navLink('/about', 'About')}${navLink('/contact', 'Contact')}</nav><form class="header-search" action="/products" method="get" role="search">${searchIcon}<label class="sr-only" for="header-search-input">Search toys</label><input id="header-search-input" name="q" type="search" value="${searchValue}" placeholder="Search toys…" autocomplete="off" /></form><div class="header-actions">${headerSocials}<a href="/products#product-search" class="header-icon-link header-search-link" aria-label="Search toys">${searchIcon}</a><a href="/account" class="header-icon-link header-account-link" aria-label="My account"${currentAttr('/account')}>${accountIcon}</a><a href="/cart" class="cart-link" aria-label="Shopping cart"><span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Cart</span><span class="cart-count-badge" aria-hidden="true" hidden>0</span></a></div></div></header>${ribbon}`;
+    // Skip link so keyboard users can jump past the header, targeting the page's <main> element.
+    output = output.replace(/<main(?![^>]*\bid=)([^>]*)>/i, '<main id="main-content"$1>');
+    const skipLink = /id=["']main-content["']/i.test(output) ? '<a class="skip-link" href="#main-content">Skip to content</a>' : '';
+    const standardHeader = `${skipLink}<header class="site-header" data-clever-standard-header><div class="container header-inner"><a href="/" class="logo" aria-label="Clever Toys home">${standardLogoMarkup}</a><nav class="main-nav" aria-label="Main navigation">${navLink('/', 'Home')}${navLink('/products', 'Shop')}${navLink('/categories', 'Categories')}${navLink('/about', 'About')}${navLink('/contact', 'Contact')}</nav><form class="header-search" action="/products" method="get" role="search">${searchIcon}<label class="sr-only" for="header-search-input">Search toys</label><input id="header-search-input" name="q" type="search" value="${searchValue}" placeholder="Search toys…" autocomplete="off" /></form><div class="header-actions">${headerSocials}<a href="/products#product-search" class="header-icon-link header-search-link" aria-label="Search toys">${searchIcon}</a><a href="/account" class="header-icon-link header-account-link" aria-label="My account"${currentAttr('/account')}>${accountIcon}</a><a href="/cart" class="cart-link" aria-label="Shopping cart"><span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Cart</span><span class="cart-count-badge" aria-hidden="true" hidden>0</span></a></div></div></header>${ribbon}`;
     const headerPattern = /<header([^>]*class=["'][^"']*site-header[^"']*["'][^>]*)>[\s\S]*?<\/header>/i;
     if (headerPattern.test(output)) output = output.replace(headerPattern, () => standardHeader);
     else if (/<body[^>]*>/i.test(output)) output = output.replace(/<body[^>]*>/i, (match) => `${match}${standardHeader}`);
     else output = output.replace('</head>', () => `</head>${standardHeader}`);
 
     const year = new Date().getFullYear();
-    const standardFooter = `<footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><strong>Clever Toys</strong><p>Fun, educational and exciting toys for every stage of childhood, with cash on delivery across Lebanon.</p></div><div class="footer-col"><h2>Shop</h2><ul><li><a href="/products">All toys</a></li><li><a href="/categories">Categories</a></li><li><a href="/cart">Your cart</a></li></ul></div><div class="footer-col"><h2>Help</h2><ul><li><a href="/contact">Contact us</a></li><li><a href="/shipping-returns">Shipping &amp; returns</a></li><li><a href="/account">My account</a></li></ul></div><div class="footer-col"><h2>Company</h2><ul><li><a href="/about">About us</a></li><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms</a></li></ul></div></div><div class="footer-bottom"><p>© ${year} Clever Toys. All rights reserved.</p><p>Made for curious minds 🧸</p></div></div></footer>`;
+    const standardFooter = `<footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><strong>Clever Toys</strong><p>Fun, educational and exciting toys for every stage of childhood, with cash on delivery across Lebanon.</p></div><div class="footer-col"><h2>Shop</h2><ul><li><a href="/products">All toys</a></li><li><a href="/categories">Categories</a></li><li><a href="/cart">Your cart</a></li></ul></div><div class="footer-col"><h2>Help</h2><ul><li><a href="/track-order">Track your order</a></li><li><a href="/contact">Contact us</a></li><li><a href="/shipping-returns">Shipping &amp; returns</a></li><li><a href="/account">My account</a></li></ul></div><div class="footer-col"><h2>Company</h2><ul><li><a href="/about">About us</a></li><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms</a></li></ul></div></div><div class="footer-bottom"><p>© ${year} Clever Toys. All rights reserved.</p><p>Made for curious minds 🧸</p></div></div></footer>`;
     const footerPattern = /<footer([^>]*class=["'][^"']*site-footer[^"']*["'][^>]*)>[\s\S]*?<\/footer>/i;
     const lastMain = output.lastIndexOf('</main>');
     if (footerPattern.test(output)) output = output.replace(footerPattern, () => standardFooter);
@@ -244,7 +282,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   if (adminBrandingLink && output.includes('</nav>') && !output.includes('/admin/branding')) output = output.replace('</nav>', `${adminBrandingLink}</nav>`);
   if (adminSeoLink && output.includes('</nav>') && !output.includes('/admin/seo')) output = output.replace('</nav>', `${adminSeoLink}</nav>`);
 
-  const headers = new Headers(response.headers);
+  const headers = withSecurityHeaders(new Headers(response.headers));
   headers.set('content-type', 'text/html; charset=utf-8');
   headers.set('cache-control', 'no-store');
   headers.delete('content-length');

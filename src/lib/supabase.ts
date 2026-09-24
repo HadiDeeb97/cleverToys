@@ -1,20 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
-import { env } from 'cloudflare:workers';
+import { supabaseConfig } from './config';
 
-const supabaseUrl =
-  import.meta.env.PUBLIC_SUPABASE_URL ||
-  (env as Record<string, string | undefined>).SUPABASE_URL ||
-  (env as Record<string, string | undefined>).PUBLIC_SUPABASE_URL;
-
-const supabaseKey =
-  import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
-  (env as Record<string, string | undefined>).SUPABASE_PUBLISHABLE_KEY ||
-  (env as Record<string, string | undefined>).SUPABASE_KEY ||
-  (env as Record<string, string | undefined>).PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 if (!supabaseUrl || !supabaseKey) {
   throw new Error(
-    'Supabase configuration is missing. Set PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_PUBLISHABLE_KEY, or SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in the Cloudflare Worker environment.'
+    'Supabase configuration is missing. Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY (or the PUBLIC_ versions) in the Cloudflare Worker environment.'
   );
 }
 

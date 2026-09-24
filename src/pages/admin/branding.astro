@@ -1,9 +1,8 @@
 ---
 import '../../styles/global.css';
-import { env } from 'cloudflare:workers';
+import { supabaseConfig } from '../../lib/config';
 
-const supabaseUrl = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
-const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 const logoUrl = supabaseUrl
   ? `${supabaseUrl.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/logo.webp`
   : '';
@@ -127,6 +126,10 @@ const logoUrl = supabaseUrl
       </div>
       <div class="theme-layout">
         <div class="theme-picker">
+          <label class="switch-row gradient-switch">
+            <span><strong>Gradient style</strong><small>Buttons, the cart, the ribbon and highlights blend two colors. Turn off for solid colors.</small></span>
+            <input id="use-gradient" type="checkbox" role="switch" checked />
+          </label>
           <div id="theme-grid" class="theme-grid" role="radiogroup" aria-label="Store theme choices"></div>
           <div class="custom-theme">
             <div>
@@ -135,6 +138,7 @@ const logoUrl = supabaseUrl
             </div>
             <div class="custom-theme-inputs">
               <label for="custom-primary">Main color<input id="custom-primary" type="color" value="#2563eb" /></label>
+              <label for="custom-gradient">Gradient end<input id="custom-gradient" type="color" value="#7c3aed" /></label>
               <label for="custom-accent">Accent color<input id="custom-accent" type="color" value="#ffc53d" /></label>
             </div>
             <p id="custom-note" class="custom-note" hidden></p>
@@ -210,6 +214,8 @@ const publishThemeButton = document.querySelector('#publish-theme');
 const revertThemeButton = document.querySelector('#revert-theme');
 const customPrimaryInput = document.querySelector('#custom-primary');
 const customAccentInput = document.querySelector('#custom-accent');
+const customGradientInput = document.querySelector('#custom-gradient');
+const gradientToggle = document.querySelector('#use-gradient');
 const customNote = document.querySelector('#custom-note');
 const themePreview = document.querySelector('#theme-preview');
 const themeStatus = document.querySelector('#theme-status');
@@ -228,18 +234,21 @@ const defaults = {
   free_delivery_threshold: 0
 };
 
-// Each theme needs a main color that keeps white text readable (WCAG AA) and a light accent for badges.
+// Each theme needs main and gradient colors that keep white text readable (WCAG AA) and a light accent for badges.
 const themes = [
-  { id: 'sky', name: 'Sky Blocks', primary: '#2563eb', soft: '#e8f0ff', accent: '#ffc53d', emoji: '🪁', desc: 'Bright blue + sunshine' },
-  { id: 'bubblegum', name: 'Bubblegum', primary: '#db2777', soft: '#ffe8f3', accent: '#ffd166', emoji: '🍭', desc: 'Pink + lemon' },
-  { id: 'grape', name: 'Grape Soda', primary: '#7c3aed', soft: '#f1eaff', accent: '#5eead4', emoji: '🦄', desc: 'Violet + mint' },
-  { id: 'jungle', name: 'Jungle Gym', primary: '#15803d', soft: '#e3f6e8', accent: '#ffb627', emoji: '🦖', desc: 'Leafy green + mango' },
-  { id: 'tangerine', name: 'Tangerine', primary: '#c2410c', soft: '#fff0e5', accent: '#7dd3fc', emoji: '🧡', desc: 'Orange + sky blue' },
-  { id: 'ocean', name: 'Ocean Splash', primary: '#0e7490', soft: '#e0f6f9', accent: '#ff9eb5', emoji: '🐳', desc: 'Teal + coral pink' },
-  { id: 'cherry', name: 'Cherry Pop', primary: '#dc2626', soft: '#ffeceb', accent: '#fcd34d', emoji: '🍒', desc: 'Toy red + yellow' },
-  { id: 'midnight', name: 'Midnight Stars', primary: '#312e81', soft: '#ebeafd', accent: '#f9a8d4', emoji: '🌙', desc: 'Navy + candy pink' }
+  { id: 'sky', name: 'Sky Blocks', primary: '#2563eb', gradient: '#7c3aed', soft: '#e8f0ff', accent: '#ffc53d', emoji: '🪁', desc: 'Bright blue + sunshine' },
+  { id: 'bubblegum', name: 'Bubblegum', primary: '#db2777', gradient: '#a21caf', soft: '#ffe8f3', accent: '#ffd166', emoji: '🍭', desc: 'Pink + lemon' },
+  { id: 'grape', name: 'Grape Soda', primary: '#7c3aed', gradient: '#db2777', soft: '#f1eaff', accent: '#5eead4', emoji: '🦄', desc: 'Violet + mint' },
+  { id: 'jungle', name: 'Jungle Gym', primary: '#15803d', gradient: '#0f766e', soft: '#e3f6e8', accent: '#ffb627', emoji: '🦖', desc: 'Leafy green + mango' },
+  { id: 'tangerine', name: 'Tangerine', primary: '#c2410c', gradient: '#be123c', soft: '#fff0e5', accent: '#7dd3fc', emoji: '🧡', desc: 'Orange + sky blue' },
+  { id: 'ocean', name: 'Ocean Splash', primary: '#0e7490', gradient: '#1d4ed8', soft: '#e0f6f9', accent: '#ff9eb5', emoji: '🐳', desc: 'Teal + coral pink' },
+  { id: 'cherry', name: 'Cherry Pop', primary: '#dc2626', gradient: '#c2410c', soft: '#ffeceb', accent: '#fcd34d', emoji: '🍒', desc: 'Toy red + yellow' },
+  { id: 'midnight', name: 'Midnight Stars', primary: '#312e81', gradient: '#7c3aed', soft: '#ebeafd', accent: '#f9a8d4', emoji: '🌙', desc: 'Navy + candy pink' }
 ];
-const defaultTheme = themes[0];
+let useGradient = true;
+// A preset with the current gradient setting applied: primary2 is the gradient end, or the main color when solid.
+const styled = (preset) => ({ ...preset, primary2: useGradient ? preset.gradient : preset.primary });
+const defaultTheme = styled(themes[0]);
 let liveTheme = defaultTheme;
 let previewTheme = defaultTheme;
 
@@ -281,13 +290,18 @@ function readableText(hex) {
   return onWhite >= 4.5 || onWhite >= onInk ? '#ffffff' : '#1b1530';
 }
 
-function isSameTheme(a, b) {
+function isSameColors(a, b) {
   return a.primary === b.primary && a.soft === b.soft && a.accent === b.accent;
+}
+
+function isSameTheme(a, b) {
+  return isSameColors(a, b) && (a.primary2 || a.primary) === (b.primary2 || b.primary);
 }
 
 function applyColors(theme) {
   const vars = {
     '--brand-primary': theme.primary,
+    '--brand-primary-2': theme.primary2 || theme.primary,
     '--brand-primary-hover': `color-mix(in srgb,${theme.primary} 86%,#000)`,
     '--brand-soft': theme.soft,
     '--theme-accent': theme.accent,
@@ -297,24 +311,34 @@ function applyColors(theme) {
   Object.entries(vars).forEach(([name, value]) => document.documentElement.style.setProperty(name, value));
 }
 
+// Darken a color until white button text on it passes WCAG AA contrast.
+function readableOnWhite(hex) {
+  let color = hex;
+  for (let i = 0; i < 20 && contrastWithWhite(color) < 4.5; i++) color = mixHex(color, '#000000', 0.92);
+  return color;
+}
+
 function buildCustomTheme() {
-  let primary = String(customPrimaryInput?.value || '#2563eb').toLowerCase();
+  const pickedPrimary = String(customPrimaryInput?.value || '#2563eb').toLowerCase();
+  const pickedGradient = String(customGradientInput?.value || '#7c3aed').toLowerCase();
   const accent = String(customAccentInput?.value || '#ffc53d').toLowerCase();
-  const original = primary;
-  // Darken the main color until white button text passes WCAG AA contrast.
-  for (let i = 0; i < 20 && contrastWithWhite(primary) < 4.5; i++) primary = mixHex(primary, '#000000', 0.92);
+  const primary = readableOnWhite(pickedPrimary);
+  const gradient = readableOnWhite(pickedGradient);
+  const notes = [];
+  if (primary !== pickedPrimary) notes.push(`main color darkened to ${primary}`);
+  if (useGradient && gradient !== pickedGradient) notes.push(`gradient end darkened to ${gradient}`);
   if (customNote) {
-    customNote.hidden = primary === original;
-    customNote.textContent = primary === original ? '' : `Main color darkened to ${primary} so white text on buttons stays readable.`;
+    customNote.hidden = notes.length === 0;
+    customNote.textContent = notes.length ? `To keep white text on buttons readable: ${notes.join(' and ')}.` : '';
   }
-  return { id: 'custom', name: 'Custom colors', primary, soft: mixHex(primary, '#ffffff', 0.1), accent, emoji: '🎨', desc: 'Your own colors' };
+  return { id: 'custom', name: 'Custom colors', primary, gradient, primary2: useGradient ? gradient : primary, soft: mixHex(primary, '#ffffff', 0.1), accent, emoji: '🎨', desc: 'Your own colors' };
 }
 
 function updateThemeUI() {
   grid?.querySelectorAll('.theme-choice').forEach((element) => {
     const theme = themes.find((item) => item.id === element.dataset.id);
-    const selected = Boolean(theme && isSameTheme(theme, previewTheme));
-    const live = Boolean(theme && isSameTheme(theme, liveTheme));
+    const selected = Boolean(theme && isSameColors(theme, previewTheme));
+    const live = Boolean(theme && isSameColors(theme, liveTheme));
     element.classList.toggle('selected', selected);
     element.setAttribute('aria-checked', String(selected));
     element.querySelector('.theme-live-tag')?.toggleAttribute('hidden', !live);
@@ -335,7 +359,7 @@ function previewThemeChoice(theme) {
 function renderThemes() {
   if (!grid) return;
   grid.innerHTML = themes.map((theme) => `
-    <button type="button" class="theme-choice" role="radio" aria-checked="false" data-id="${theme.id}" style="--c-primary:${theme.primary};--c-soft:${theme.soft};--c-accent:${theme.accent}">
+    <button type="button" class="theme-choice" role="radio" aria-checked="false" data-id="${theme.id}" style="--c-primary:${theme.primary};--c-primary-2:${theme.gradient};--c-soft:${theme.soft};--c-accent:${theme.accent}">
       <span class="theme-swatch"><span class="swatch-bar"></span><span class="swatch-body"><i></i><b>${theme.emoji}</b></span></span>
       <span class="theme-meta"><strong>${theme.name}</strong><small>${theme.desc}</small></span>
       <span class="theme-live-tag" hidden>Live</span>
@@ -344,7 +368,7 @@ function renderThemes() {
   grid.querySelectorAll('.theme-choice').forEach((button) => {
     button.addEventListener('click', () => {
       const theme = themes.find((item) => item.id === button.dataset.id);
-      if (theme) previewThemeChoice(theme);
+      if (theme) previewThemeChoice(styled(theme));
     });
   });
 }
@@ -371,7 +395,7 @@ async function publishTheme(theme) {
   publishThemeButton.disabled = true;
   const payload = {
     mode: 'theme',
-    theme: { id: theme.id, name: theme.name, primary: theme.primary, soft: theme.soft, accent: theme.accent },
+    theme: { id: theme.id, name: theme.name, primary: theme.primary, primary2: theme.primary2 || theme.primary, soft: theme.soft, accent: theme.accent },
     updated_at: new Date().toISOString()
   };
   // The theme lives in store_settings, which the storefront reads on every page load.
@@ -395,11 +419,15 @@ async function publishTheme(theme) {
 function loadLiveTheme() {
   const published = window.__CLEVER_BRANDING__?.publishedTheme;
   if (!published?.primary) return defaultTheme;
+  const primary2 = published.primary2 || published.primary;
+  useGradient = primary2.toLowerCase() !== published.primary.toLowerCase();
+  if (gradientToggle) gradientToggle.checked = useGradient;
   const match = themes.find((theme) => theme.primary.toLowerCase() === String(published.primary).toLowerCase() && theme.accent.toLowerCase() === String(published.accent).toLowerCase());
-  if (match) return match;
+  if (match) return { ...match, primary2 };
   if (customPrimaryInput) customPrimaryInput.value = published.primary;
   if (customAccentInput) customAccentInput.value = published.accent;
-  return { id: 'custom', name: published.name || 'Custom colors', primary: published.primary, soft: published.soft, accent: published.accent };
+  if (customGradientInput && useGradient) customGradientInput.value = primary2;
+  return { id: 'custom', name: published.name || 'Custom colors', primary: published.primary, gradient: primary2, primary2, soft: published.soft, accent: published.accent };
 }
 
 function updateRibbonPreview() {
@@ -509,10 +537,18 @@ async function initAuth() {
 
 renderThemes();
 liveTheme = loadLiveTheme();
+grid?.classList.toggle('solid', !useGradient);
 previewThemeChoice(liveTheme);
 publishStatus.textContent = 'Choose a theme to preview it here.';
 customPrimaryInput?.addEventListener('input', () => previewThemeChoice(buildCustomTheme()));
 customAccentInput?.addEventListener('input', () => previewThemeChoice(buildCustomTheme()));
+customGradientInput?.addEventListener('input', () => previewThemeChoice(buildCustomTheme()));
+gradientToggle?.addEventListener('change', () => {
+  useGradient = gradientToggle.checked;
+  grid?.classList.toggle('solid', !useGradient);
+  const preset = themes.find((theme) => theme.id === previewTheme.id);
+  previewThemeChoice(preset ? styled(preset) : buildCustomTheme());
+});
 publishThemeButton?.addEventListener('click', () => publishTheme(previewTheme));
 revertThemeButton?.addEventListener('click', () => {
   previewThemeChoice(liveTheme);
@@ -621,7 +657,8 @@ initAuth();
 .custom-theme{display:grid;gap:12px;margin-top:12px;padding:14px;border:2px dashed var(--line-strong);border-radius:18px;background:var(--surface-2)}
 .custom-theme>div:first-child{display:grid;gap:3px}
 .custom-theme small{color:var(--muted)}
-.custom-theme-inputs{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.custom-theme-inputs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.gradient-switch{margin-bottom:12px}
 .custom-theme-inputs label{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 8px 8px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);font-size:.88rem}
 .custom-theme-inputs input[type=color]{width:44px;height:36px;min-height:0;padding:2px;border:0;border-radius:10px;background:none;cursor:pointer}
 .custom-note{margin:0;padding:8px 12px;border-radius:10px;background:var(--accent-soft);font-size:.85rem;font-weight:700}
@@ -633,18 +670,18 @@ initAuth();
 .tp-nav{display:flex;gap:5px;margin-right:auto}
 .tp-nav i{display:block;width:26px;height:8px;border-radius:99px;background:var(--surface-2)}
 .tp-nav i:first-child{background:var(--brand-soft)}
-.tp-cart{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:99px;background:var(--brand-primary);color:var(--brand-text-on-primary);font-size:.72rem;font-weight:800}
+.tp-cart{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:99px;background:var(--brand-gradient);color:var(--brand-text-on-primary);font-size:.72rem;font-weight:800}
 .tp-cart em{padding:1px 6px;border-radius:99px;background:var(--theme-accent);color:var(--theme-text-on-accent);font-style:normal;font-weight:900}
-.tp-ribbon{padding:6px;background:linear-gradient(90deg,var(--brand-primary),color-mix(in srgb,var(--brand-primary) 70%,var(--theme-accent)));color:var(--brand-text-on-primary);font-size:.7rem;font-weight:800;text-align:center}
+.tp-ribbon{padding:6px;background:linear-gradient(90deg,var(--brand-primary),var(--brand-primary-2));color:var(--brand-text-on-primary);font-size:.7rem;font-weight:800;text-align:center}
 .tp-hero{position:relative;display:grid;gap:8px;padding:20px 16px;background:var(--page-hero-bg);overflow:hidden}
 .tp-eyebrow{justify-self:start;padding:3px 8px;border-radius:99px;background:var(--accent-soft);color:var(--primary-strong);font-size:.62rem;font-weight:900;letter-spacing:.06em}
 .tp-hero strong{max-width:60%;font-family:var(--font-display);font-size:1.35rem;line-height:1.05;color:var(--ink)}
 .tp-buttons{display:flex;gap:6px}
 .tp-primary,.tp-secondary{padding:6px 12px;border-radius:99px;font-size:.72rem;font-weight:800}
-.tp-primary{background:var(--brand-primary);color:var(--brand-text-on-primary);box-shadow:0 2px 0 var(--primary-strong)}
+.tp-primary{background:var(--brand-gradient);color:var(--brand-text-on-primary);box-shadow:0 2px 0 var(--primary-strong)}
 .tp-secondary{background:var(--surface);color:var(--primary-strong);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
 .tp-bubble{position:absolute;display:grid;place-items:center;border-radius:50%;box-shadow:var(--shadow-sm)}
-.tp-bubble-1{right:40px;top:18px;width:58px;height:58px;background:var(--brand-primary);font-size:30px}
+.tp-bubble-1{right:40px;top:18px;width:58px;height:58px;background:var(--brand-gradient);font-size:30px}
 .tp-bubble-2{right:10px;bottom:10px;width:40px;height:40px;background:var(--theme-accent);font-size:20px}
 .tp-products{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px}
 .tp-card{overflow:hidden;border:1.5px solid var(--line);border-radius:14px;background:var(--surface)}
@@ -669,7 +706,8 @@ initAuth();
 .theme-choice:hover{transform:translateY(-2px);box-shadow:var(--shadow-sm)}
 .theme-choice.selected{border-color:var(--c-primary);box-shadow:0 0 0 4px color-mix(in srgb,var(--c-primary) 18%,transparent)}
 .theme-swatch{flex:0 0 64px;height:64px;overflow:hidden;border-radius:14px;background:var(--c-soft);box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
-.swatch-bar{display:block;height:16px;background:var(--c-primary)}
+.swatch-bar{display:block;height:16px;background:linear-gradient(90deg,var(--c-primary),var(--c-primary-2))}
+.theme-grid.solid .swatch-bar{background:var(--c-primary)}
 .swatch-body{position:relative;display:block;height:48px}
 .swatch-body i{position:absolute;left:8px;bottom:9px;width:22px;height:9px;border-radius:99px;background:var(--c-accent)}
 .swatch-body b{position:absolute;right:6px;bottom:4px;font-size:24px;line-height:1}

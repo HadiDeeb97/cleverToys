@@ -1,8 +1,7 @@
 ---
 import '../../styles/global.css';
-import { env } from 'cloudflare:workers';
-const supabaseUrl = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
-const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+import { supabaseConfig } from '../../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
 <header class="site-header"><div class="container header-inner"><a href="/admin" class="logo">Clever Toys Admin</a><nav class="main-nav"><a href="/admin/dashboard">Dashboard</a><a href="/admin">Products</a><a href="/">Store</a></nav></div></header>
 <main class="section"><div class="container"><div class="admin-head"><div><h1>Orders</h1><p>View and update customer orders.</p></div><a class="button secondary-button" href="/admin">Back to Products</a></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><div id="guard" class="empty-state">Checking admin access…</div><div id="orders-app" hidden><div id="orders-list"></div></div></div></main>

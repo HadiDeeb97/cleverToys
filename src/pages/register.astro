@@ -1,9 +1,8 @@
 ---
 import '../styles/global.css';
-import { env } from 'cloudflare:workers';
+import { supabaseConfig } from '../lib/config';
 
-const supabaseUrl = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
-const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
 <head>
   <title>Create Account | Clever Toys</title>

@@ -29,9 +29,14 @@ Run the SQL files in `supabase/` from the Supabase SQL Editor. They can safely b
 - `visitor_analytics.sql`: visitor tracking for the admin analytics page
 - `customer_orders.sql`: lets signed-in customers see their own orders on `/account`
 - `theme_settings.sql`: stores the published theme so Admin → Branding can publish it
+- `order_tracking.sql`: powers the `/track-order` page
 
 ## Project structure
 
 - `src/pages/`: storefront pages, `admin/` dashboard pages, and `api/` endpoints
 - `src/middleware.ts`: adds the shared header, branding, store settings and SEO overrides to every HTML page
 - `public/`: client scripts (`store-ui.js`, `branding-ui.js`, `visitor-analytics.js`) and CSS fixes
+
+## Audit
+
+See [`docs/AUDIT.md`](docs/AUDIT.md) for the security, performance, accessibility, SEO and ecommerce review, including recommended next steps.

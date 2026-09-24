@@ -1,13 +1,13 @@
 ---
 import '../styles/global.css';
-import { env } from 'cloudflare:workers';
-const supabaseUrl = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
-const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+import { supabaseConfig } from '../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
 <header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart" class="cart-link">Cart <span class="cart-count" id="cart-count" hidden>0</span></a><a href="/login">Sign in</a></nav></div></header>
 <main class="section"><div class="container checkout-layout"><section><div class="section-header"><h1>Checkout</h1><p>Cash on delivery is available.</p></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><form id="checkout-form" class="form-card"><label>Full name<input name="customer_name" required autocomplete="name"></label><label>Phone number<input name="customer_phone" required type="tel" autocomplete="tel"></label><label>Email <span>(optional)</span><input name="customer_email" type="email" autocomplete="email"></label><label>Governorate<input name="governorate" required autocomplete="address-level1"></label><label>City<input name="city" required autocomplete="address-level2"></label><label>Area<input name="area" autocomplete="address-level3"></label><label>Full address<textarea name="address" required rows="3" autocomplete="street-address"></textarea></label><label>Notes <span>(optional)</span><textarea name="notes" rows="2"></textarea></label><button class="button" type="submit">Place Order — Cash on Delivery</button><p id="form-message" role="status"></p></form></section><aside id="checkout-summary" class="checkout-summary"></aside></div></main>
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script>(async()=>{
+<script>
+import { createClient } from '@supabase/supabase-js';
+(async()=>{
 const KEY='cleverToysCart';
 const form=document.querySelector('#checkout-form');
 const summary=document.querySelector('#checkout-summary');
@@ -79,7 +79,7 @@ await loadDeliverySettings();
 let checkoutTotals=renderSummary();
 
 let supabase;
-try{if(supabaseUrl&&supabaseKey&&window.supabase)supabase=window.supabase.createClient(supabaseUrl,supabaseKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});}catch(error){console.warn('Supabase client initialization failed',error);}
+try{if(supabaseUrl&&supabaseKey)supabase=createClient(supabaseUrl,supabaseKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});}catch(error){console.warn('Supabase client initialization failed',error);}
 
 async function prefill(){
   if(!supabase)return;
@@ -121,4 +121,4 @@ form.addEventListener('submit',async(e)=>{
 });
 window.addEventListener('storage',()=>{updateCartCount();renderSummary();});
 })();</script>
-<style>.cart-link{display:inline-flex;align-items:center;gap:6px}.cart-count{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:var(--brand-primary);color:var(--brand-text-on-primary);font-size:.72rem;font-weight:800;line-height:1}.summary-cart-link{display:inline-block;margin-top:12px;font-weight:700}.summary-total{font-size:1.08rem}.form-card{scroll-margin-top:24px}.delivery-note{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--success-soft);color:var(--success);font-size:.86rem;font-weight:700}</style>
+<style is:global>.summary-cart-link{display:inline-block;margin-top:12px;font-weight:700}.summary-total{font-size:1.08rem}.form-card{scroll-margin-top:24px}.delivery-note{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--success-soft);color:var(--success);font-size:.86rem;font-weight:700}</style>

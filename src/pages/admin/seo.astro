@@ -1,8 +1,7 @@
 ---
 import '../../styles/global.css';
-import { env } from 'cloudflare:workers';
-const supabaseUrl = env.SUPABASE_URL || env.PUBLIC_SUPABASE_URL || '';
-const supabaseKey = env.SUPABASE_PUBLISHABLE_KEY || env.PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';
+import { supabaseConfig } from '../../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
 <header class="site-header"><div class="container header-inner"><a class="logo" href="/admin">Clever Toys Admin</a><nav class="main-nav"><a href="/admin">Products</a><a href="/admin/dashboard">Dashboard</a><a href="/admin/orders">Orders</a><a href="/admin/branding">Branding</a><a href="/">Store</a></nav></div></header>
 <main class="section"><div class="container seo-page">

@@ -1,0 +1,82 @@
+---
+import '../styles/global.css';
+
+const initialOrder = (Astro.url.searchParams.get('order') || '').slice(0, 40);
+---
+<head>
+  <title>Track Your Order | Clever Toys</title>
+  <meta name="description" content="Check the status of your Clever Toys order with your order number and phone number." />
+</head>
+<header class="site-header"></header>
+<main class="section">
+  <div class="container narrow">
+    <div class="section-header">
+      <h1>Track your order</h1>
+      <p>Enter the order number from your confirmation and the phone number you used at checkout.</p>
+    </div>
+    <form id="track-form" class="form-card">
+      <label>Order number<input name="orderNumber" required autocomplete="off" placeholder="CT-20260924-ABC123" value={initialOrder} /></label>
+      <label>Phone number<input name="phone" type="tel" required autocomplete="tel" /></label>
+      <button class="button" type="submit">Track order</button>
+      <p id="track-message" role="status"></p>
+    </form>
+    <section id="track-result" class="form-card track-result" hidden aria-live="polite"></section>
+  </div>
+</main>
+<footer class="site-footer"></footer>
+
+<script>
+const STEPS = ['pending', 'confirmed', 'processing', 'shipped', 'delivered'];
+const LABELS: Record<string, string> = { pending: 'Received', confirmed: 'Confirmed', processing: 'Preparing', shipped: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' };
+const form = document.querySelector<HTMLFormElement>('#track-form');
+const message = document.querySelector<HTMLElement>('#track-message');
+const result = document.querySelector<HTMLElement>('#track-result');
+const esc = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+const money = (value: unknown) => `$${Number(value || 0).toFixed(2)}`;
+
+const render = (order: any) => {
+  if (!result) return;
+  const current = STEPS.indexOf(order.status);
+  const timeline = order.status === 'cancelled'
+    ? '<p class="track-cancelled">This order was cancelled. Contact us on WhatsApp if you have questions.</p>'
+    : `<ol class="track-steps">${STEPS.map((step, i) => `<li class="${i < current ? 'done' : i === current ? 'current' : ''}"${i === current ? ' aria-current="step"' : ''}><span></span>${LABELS[step]}</li>`).join('')}</ol>`;
+  const items = (order.items || []).map((item: any) => `<div class="summary-line"><span>${esc(item.name)}${item.variant ? ` · ${esc(item.variant)}` : ''} × ${Number(item.quantity)}</span><strong>${money(item.total)}</strong></div>`).join('');
+  result.innerHTML = `<h2>Order ${esc(order.order_number)}</h2><p class="track-status">Status: <strong>${esc(LABELS[order.status] || order.status)}</strong> · placed ${esc(new Date(order.created_at).toLocaleDateString())}</p>${timeline}<div class="track-items">${items}<div class="summary-line"><span>Delivery</span><strong>${Number(order.delivery_fee) ? money(order.delivery_fee) : 'Free'}</strong></div><div class="summary-line summary-total"><strong>Total</strong><strong>${money(order.total)}</strong></div></div>`;
+  result.hidden = false;
+};
+
+form?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!message || !result) return;
+  const data = Object.fromEntries(new FormData(form));
+  message.textContent = 'Looking up your order…';
+  result.hidden = true;
+  try {
+    const response = await fetch('/api/track-order', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+    const out = await response.json();
+    if (!response.ok) throw new Error(out.error || 'Could not find that order.');
+    message.textContent = '';
+    render(out.order);
+  } catch (error) {
+    message.textContent = error instanceof Error ? error.message : 'Could not find that order.';
+  }
+});
+</script>
+
+<style is:global>
+  /* The result card is rendered from script, so these rules cannot be scoped. */
+  .track-result { margin-top: 20px; }
+  .track-status { margin: 0; color: var(--muted); }
+  .track-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 6px 0; padding: 0; list-style: none; counter-reset: step; }
+  .track-steps li { display: grid; justify-items: center; gap: 8px; color: var(--subtle); font-size: .82rem; font-weight: 800; text-align: center; }
+  .track-steps li span { position: relative; width: 100%; height: 8px; border-radius: 99px; background: var(--line); }
+  .track-steps li.done span, .track-steps li.current span { background: var(--brand-gradient); }
+  .track-steps li.done, .track-steps li.current { color: var(--primary-strong); }
+  .track-cancelled { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--danger-soft); color: var(--danger); font-weight: 800; }
+  .track-items { padding-top: 6px; border-top: 1px solid var(--line); }
+  @media (max-width: 560px) {
+    .track-steps { grid-template-columns: 1fr; gap: 10px; }
+    .track-steps li { grid-template-columns: 44px 1fr; justify-items: start; align-items: center; gap: 12px; text-align: left; font-size: .9rem; }
+    .track-steps li span { width: 44px; }
+  }
+</style>

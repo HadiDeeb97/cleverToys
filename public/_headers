@@ -1,0 +1,11 @@
+# Storefront scripts are loaded with a ?v= version string, so browsers can cache them.
+/store-ui.js
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/branding-ui.js
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/visitor-analytics.js
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/favicon.ico
+  Cache-Control: public, max-age=604800
+/favicon.svg
+  Cache-Control: public, max-age=604800
