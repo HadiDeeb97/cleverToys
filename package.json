@@ -16,7 +16,10 @@
   "dependencies": {
     "@astrojs/cloudflare": "^14.3.3",
     "@supabase/supabase-js": "^2.117.1",
-    "astro": "^7.3.5"
+    "astro": "^7.3.5",
+    "fflate": "^0.8.3",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8"
   },
   "allowScripts": {
     "esbuild": true
