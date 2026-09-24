@@ -30,6 +30,7 @@ Run the SQL files in `supabase/` from the Supabase SQL Editor. They can safely b
 - `customer_orders.sql`: lets signed-in customers see their own orders on `/account`
 - `theme_settings.sql`: stores the published theme so Admin → Branding can publish it
 - `order_tracking.sql`: powers the `/track-order` page
+- `accounting.sql`: cost prices and expenses for Admin → Accounting
 
 ## Project structure
 

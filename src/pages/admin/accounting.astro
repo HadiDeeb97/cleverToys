@@ -1,0 +1,589 @@
+---
+import '../../styles/global.css';
+import { supabaseConfig } from '../../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
+---
+<head>
+  <title>Accounting | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Finance</p>
+        <h1>Accounting</h1>
+        <p id="period-text">Revenue, costs, expenses and profit for the period you choose.</p>
+      </div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+
+    <div id="app" hidden>
+      <section class="admin-panel acc-controls" aria-label="Report settings">
+        <div class="acc-control">
+          <span class="acc-label">Period</span>
+          <div class="chip-row" id="period-chips">
+            <button type="button" class="chip" data-period="month">This month</button>
+            <button type="button" class="chip" data-period="last-month">Last month</button>
+            <button type="button" class="chip" data-period="quarter">This quarter</button>
+            <button type="button" class="chip" data-period="year">This year</button>
+            <button type="button" class="chip" data-period="30d">Last 30 days</button>
+            <button type="button" class="chip" data-period="all">All time</button>
+          </div>
+        </div>
+        <div class="acc-control acc-dates">
+          <label>From<input id="from" class="admin-input" type="date" /></label>
+          <label>To<input id="to" class="admin-input" type="date" /></label>
+        </div>
+        <div class="acc-control">
+          <label for="basis" class="acc-label">Count revenue from</label>
+          <select id="basis" class="admin-input">
+            <option value="delivered">Delivered orders (cash collected)</option>
+            <option value="booked">All orders except cancelled</option>
+          </select>
+        </div>
+      </section>
+
+      <div id="setup-notice" class="acc-notice" hidden></div>
+
+      <div class="admin-tabs" role="tablist" aria-label="Accounting reports">
+        <button class="tab active" data-tab="overview" role="tab" type="button">Overview</button>
+        <button class="tab" data-tab="pnl" role="tab" type="button">Profit &amp; loss</button>
+        <button class="tab" data-tab="sales" role="tab" type="button">Sales</button>
+        <button class="tab" data-tab="expenses" role="tab" type="button">Expenses</button>
+        <button class="tab" data-tab="costs" role="tab" type="button">Cost prices</button>
+        <button class="tab" data-tab="ledger" role="tab" type="button">Orders ledger</button>
+      </div>
+
+      <!-- Overview -->
+      <section id="tab-overview" class="acc-tab">
+        <div class="acc-kpis">
+          <article class="acc-kpi"><span>Revenue</span><strong id="k-revenue">$0.00</strong><small id="d-revenue"></small></article>
+          <article class="acc-kpi"><span>Cost of goods</span><strong id="k-cogs">$0.00</strong><small id="n-cogs"></small></article>
+          <article class="acc-kpi"><span>Gross profit</span><strong id="k-gross">$0.00</strong><small id="m-gross"></small></article>
+          <article class="acc-kpi"><span>Expenses</span><strong id="k-expenses">$0.00</strong><small id="d-expenses"></small></article>
+          <article class="acc-kpi acc-kpi-net"><span>Net profit</span><strong id="k-net">$0.00</strong><small id="m-net"></small></article>
+          <article class="acc-kpi"><span>Orders</span><strong id="k-orders">0</strong><small id="k-aov"></small></article>
+        </div>
+        <div class="acc-grid">
+          <section class="admin-panel">
+            <div class="panel-title"><h2>Revenue, expenses &amp; profit</h2><div class="legend"><span class="lg-rev">Revenue</span><span class="lg-exp">Expenses</span><span class="lg-profit">Net profit</span></div></div>
+            <div id="chart" class="acc-chart" role="img" aria-label="Revenue, expenses and net profit over the period"></div>
+          </section>
+          <section class="admin-panel">
+            <div class="panel-title"><h2>Cash position</h2></div>
+            <p class="muted small-note">Cash on delivery is collected when an order is delivered.</p>
+            <div id="cash" class="cash-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <!-- Profit & loss -->
+      <section id="tab-pnl" class="acc-tab" hidden>
+        <section class="admin-panel">
+          <div class="panel-title"><div><h2>Profit &amp; loss statement</h2><small class="muted" id="pnl-sub"></small></div><div class="export-actions"><button class="button secondary-button" type="button" data-export="pnl-xlsx">⬇ Excel</button><button class="button secondary-button" type="button" data-export="pnl-pdf">⬇ PDF</button></div></div>
+          <div class="table-wrap"><table class="pnl-table"><thead><tr><th>Line</th><th>This period</th><th>Previous period</th><th>Change</th></tr></thead><tbody id="pnl-body"></tbody></table></div>
+        </section>
+      </section>
+
+      <!-- Sales -->
+      <section id="tab-sales" class="acc-tab" hidden>
+        <section class="admin-panel">
+          <div class="panel-title"><div><h2>Sales by product</h2><small class="muted">Profit uses the cost prices you set.</small></div><div class="export-actions"><button class="button secondary-button" type="button" data-export="products-xlsx">⬇ Excel</button><button class="button secondary-button" type="button" data-export="products-pdf">⬇ PDF</button></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Product</th><th>Units</th><th>Revenue</th><th>Cost</th><th>Profit</th><th>Margin</th></tr></thead><tbody id="products-body"></tbody></table></div>
+        </section>
+        <div class="acc-grid acc-grid-even">
+          <section class="admin-panel"><div class="panel-title"><h2>By category</h2></div><div id="by-category" class="acc-rank"></div></section>
+          <section class="admin-panel"><div class="panel-title"><h2>By governorate</h2></div><div id="by-region" class="acc-rank"></div></section>
+        </div>
+      </section>
+
+      <!-- Expenses -->
+      <section id="tab-expenses" class="acc-tab" hidden>
+        <div class="acc-grid acc-grid-form">
+          <section class="admin-panel">
+            <div class="panel-title"><div><h2>Expenses</h2><small class="muted" id="expenses-total"></small></div><div class="export-actions"><button class="button secondary-button" type="button" data-export="expenses-xlsx">⬇ Excel</button><button class="button secondary-button" type="button" data-export="expenses-pdf">⬇ PDF</button></div></div>
+            <div class="chip-row" id="expense-cats"></div>
+            <div class="table-wrap"><table class="expenses-table"><thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Paid with</th><th>Amount</th><th></th></tr></thead><tbody id="expenses-body"></tbody></table></div>
+          </section>
+          <form id="expense-form" class="form-card">
+            <h2 id="expense-title">Add expense</h2>
+            <input type="hidden" name="id" />
+            <div class="field-row"><label>Date<input name="spent_on" type="date" required /></label><label>Amount (USD)<input name="amount" type="number" min="0" step="0.01" required /></label></div>
+            <label>Category<select name="category" required></select></label>
+            <label>Description<input name="description" required maxlength="200" placeholder="e.g. Toy stock from supplier" /></label>
+            <label>Paid with<select name="payment_method"><option>Cash</option><option>Bank transfer</option><option>Card</option><option>OMT / Whish</option><option>Other</option></select></label>
+            <label>Notes <span>(optional)</span><textarea name="notes" rows="2" maxlength="500"></textarea></label>
+            <div class="form-actions"><button class="button" type="submit">Save expense</button><button class="button secondary-button" type="button" id="expense-clear">Clear</button></div>
+            <p id="expense-msg" role="status"></p>
+          </form>
+        </div>
+      </section>
+
+      <!-- Cost prices -->
+      <section id="tab-costs" class="acc-tab" hidden>
+        <section class="admin-panel">
+          <div class="panel-title"><div><h2>Cost prices</h2><small class="muted">What each item costs you. Changes save automatically.</small></div><div class="acc-cost-tools"><input id="cost-search" class="admin-input" type="search" placeholder="Search products" aria-label="Search products" /><label class="missing-only"><input type="checkbox" id="missing-only" /> Missing cost only</label></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Product</th><th>Selling price</th><th>Cost price</th><th>Profit per unit</th><th>Margin</th></tr></thead><tbody id="costs-body"></tbody></table></div>
+        </section>
+      </section>
+
+      <!-- Ledger -->
+      <section id="tab-ledger" class="acc-tab" hidden>
+        <section class="admin-panel">
+          <div class="panel-title"><div><h2>Orders ledger</h2><small class="muted" id="ledger-sub"></small></div><div class="export-actions"><button class="button secondary-button" type="button" data-export="ledger-xlsx">⬇ Excel</button><button class="button secondary-button" type="button" data-export="ledger-pdf">⬇ PDF</button></div></div>
+          <div class="table-wrap"><table><thead><tr><th>Date</th><th>Order</th><th>Customer</th><th>Status</th><th>Items</th><th>Discount</th><th>Delivery</th><th>Total</th><th>Cost</th><th>Profit</th></tr></thead><tbody id="ledger-body"></tbody></table></div>
+        </section>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+import { createClient } from '@supabase/supabase-js';
+import { exportPdf, exportXlsx, type ExportCell, type ExportColumn } from '../../scripts/table-export';
+
+type Row = Record<string, any>;
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+const round = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+const money = (n: number) => `${n < 0 ? '−' : ''}$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const pct = (n: number) => `${Number.isFinite(n) ? n.toFixed(1) : '0.0'}%`;
+const toast = (message: string, tone = 'success') => (window as any).adminToast?.(message, tone);
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const parseDay = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const EXPENSE_CATEGORIES = ['Inventory purchase', 'Delivery & shipping', 'Marketing & ads', 'Packaging', 'Rent', 'Salaries', 'Utilities & internet', 'Fees & taxes', 'Equipment', 'Other'];
+const OPEN_STATUSES = ['pending', 'confirmed', 'processing', 'shipped'];
+
+let supabase: ReturnType<typeof createClient>;
+let period = 'month';
+let orders: Row[] = [];
+let items: Row[] = [];
+let products: Row[] = [];
+let variants: Row[] = [];
+let categories: Row[] = [];
+let expenses: Row[] = [];
+let expensesAvailable = true;
+let costAvailable = true;
+let expenseFilter = '';
+let report: ReturnType<typeof buildReport> | null = null;
+let previous: ReturnType<typeof buildReport> | null = null;
+
+// ----- period -----
+function presetRange(name: string): [Date, Date] {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (name) {
+    case 'last-month': return [new Date(now.getFullYear(), now.getMonth() - 1, 1), new Date(now.getFullYear(), now.getMonth(), 0)];
+    case 'quarter': return [new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1), today];
+    case 'year': return [new Date(now.getFullYear(), 0, 1), today];
+    case '30d': return [new Date(today.getTime() - 29 * 864e5), today];
+    case 'all': return [new Date(2020, 0, 1), today];
+    default: return [new Date(now.getFullYear(), now.getMonth(), 1), today];
+  }
+}
+const currentRange = (): [Date, Date] => [parseDay($<HTMLInputElement>('#from').value), parseDay($<HTMLInputElement>('#to').value)];
+const previousRange = ([from, to]: [Date, Date]): [Date, Date] => { const days = Math.round((to.getTime() - from.getTime()) / 864e5) + 1; return [new Date(from.getTime() - days * 864e5), new Date(from.getTime() - 864e5)]; };
+const inRange = (iso: string, [from, to]: [Date, Date]) => { const t = new Date(iso).getTime(); return t >= from.getTime() && t < to.getTime() + 864e5; };
+const dayInRange = (day: string, [from, to]: [Date, Date]) => day >= ymd(from) && day <= ymd(to);
+
+// ----- calculations -----
+const unitCost = (item: Row): number | null => {
+  const v = item.variant_id ? variants.find((x) => x.id === item.variant_id) : null;
+  const p = products.find((x) => x.id === item.product_id);
+  const cost = v?.cost_price ?? p?.cost_price;
+  return cost === null || cost === undefined || cost === '' ? null : Number(cost);
+};
+const counts = (o: Row) => ($<HTMLSelectElement>('#basis').value === 'delivered' ? o.status === 'delivered' : o.status !== 'cancelled');
+
+function buildReport(range: [Date, Date]) {
+  const periodOrders = orders.filter((o) => inRange(o.created_at, range));
+  const recognized = periodOrders.filter(counts);
+  const ids = new Set(recognized.map((o) => o.id));
+  const periodItems = items.filter((i) => ids.has(i.order_id));
+  let grossSales = 0, discounts = 0, delivery = 0, revenue = 0, cogs = 0, missingCostUnits = 0;
+  for (const o of recognized) { grossSales += Number(o.subtotal || 0); discounts += Number(o.discount || 0); delivery += Number(o.delivery_fee || 0); revenue += Number(o.total || 0); }
+  const costByOrder = new Map<string, number>();
+  for (const i of periodItems) { const c = unitCost(i); if (c === null) { missingCostUnits += Number(i.quantity || 0); continue; } const line = c * Number(i.quantity || 0); cogs += line; costByOrder.set(i.order_id, (costByOrder.get(i.order_id) || 0) + line); }
+  const periodExpenses = expenses.filter((e) => dayInRange(e.spent_on, range));
+  const expenseByCategory = new Map<string, number>();
+  for (const e of periodExpenses) expenseByCategory.set(e.category, (expenseByCategory.get(e.category) || 0) + Number(e.amount || 0));
+  const totalExpenses = [...expenseByCategory.values()].reduce((a, b) => a + b, 0);
+  const grossProfit = revenue - cogs;
+  const netProfit = grossProfit - totalExpenses;
+  return { range, periodOrders, recognized, periodItems, periodExpenses, grossSales, discounts, delivery, revenue, cogs, missingCostUnits, grossProfit, totalExpenses, netProfit, expenseByCategory, costByOrder };
+}
+
+const change = (now: number, before: number) => (before ? ((now - before) / Math.abs(before)) * 100 : null);
+const changeText = (now: number, before: number) => { const c = change(now, before); return c === null ? (now ? 'New this period' : '—') : `${c >= 0 ? '▲' : '▼'} ${Math.abs(c).toFixed(0)}% vs previous period`; };
+
+// ----- rendering -----
+function renderOverview() {
+  if (!report || !previous) return;
+  const r = report, p = previous;
+  $('#k-revenue').textContent = money(r.revenue);
+  $('#d-revenue').innerHTML = `<span class="${r.revenue >= p.revenue ? 'up' : 'down'}">${esc(changeText(r.revenue, p.revenue))}</span>`;
+  $('#k-cogs').textContent = money(r.cogs);
+  $('#n-cogs').textContent = !costAvailable ? 'Set up cost prices to see this' : r.missingCostUnits ? `${r.missingCostUnits} units have no cost price` : 'Based on your cost prices';
+  $('#k-gross').textContent = money(r.grossProfit);
+  $('#m-gross').textContent = `${pct(r.revenue ? (r.grossProfit / r.revenue) * 100 : 0)} gross margin`;
+  $('#k-expenses').textContent = money(r.totalExpenses);
+  $('#d-expenses').textContent = expensesAvailable ? changeText(r.totalExpenses, p.totalExpenses) : 'Set up expenses to track them';
+  $('#k-net').textContent = money(r.netProfit);
+  $('#k-net').classList.toggle('negative', r.netProfit < 0);
+  $('#m-net').textContent = `${pct(r.revenue ? (r.netProfit / r.revenue) * 100 : 0)} net margin`;
+  $('#k-orders').textContent = String(r.recognized.length);
+  $('#k-aov').textContent = `Average order ${money(r.recognized.length ? r.revenue / r.recognized.length : 0)}`;
+
+  // Cash position for the period (all statuses, independent of the revenue basis)
+  const sum = (list: Row[]) => list.reduce((s, o) => s + Number(o.total || 0), 0);
+  const collected = r.periodOrders.filter((o) => o.status === 'delivered');
+  const open = r.periodOrders.filter((o) => OPEN_STATUSES.includes(o.status));
+  const cancelled = r.periodOrders.filter((o) => o.status === 'cancelled');
+  $('#cash').innerHTML = [
+    ['Collected', 'Delivered orders', collected, 'good'],
+    ['To collect', 'Pending, confirmed, preparing or on the way', open, 'wait'],
+    ['Cancelled', 'Not collected', cancelled, 'lost']
+  ].map(([label, hint, list, tone]) => `<div class="cash-row ${tone}"><div><strong>${label}</strong><small>${hint} · ${(list as Row[]).length} orders</small></div><span>${money(sum(list as Row[]))}</span></div>`).join('');
+
+  renderChart();
+}
+
+function renderChart() {
+  if (!report) return;
+  const [from, to] = report.range;
+  const days = Math.round((to.getTime() - from.getTime()) / 864e5) + 1;
+  const monthly = days > 62;
+  const buckets: { key: string; label: string; rev: number; exp: number; cogs: number }[] = [];
+  if (monthly) { for (let d = new Date(from.getFullYear(), from.getMonth(), 1); d <= to; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) buckets.push({ key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }), rev: 0, exp: 0, cogs: 0 }); }
+  else { for (let i = 0; i < days; i++) { const d = new Date(from.getTime() + i * 864e5); buckets.push({ key: ymd(d), label: d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), rev: 0, exp: 0, cogs: 0 }); } }
+  const keyOf = (d: Date) => (monthly ? `${d.getFullYear()}-${d.getMonth()}` : ymd(d));
+  const find = (d: Date) => buckets.find((b) => b.key === keyOf(d));
+  for (const o of report.recognized) { const b = find(new Date(o.created_at)); if (b) { b.rev += Number(o.total || 0); b.cogs += report.costByOrder.get(o.id) || 0; } }
+  for (const e of report.periodExpenses) { const b = find(parseDay(e.spent_on)); if (b) b.exp += Number(e.amount || 0); }
+  const W = 760, H = 260, P = { l: 52, r: 10, t: 14, b: 30 };
+  const profit = buckets.map((b) => b.rev - b.cogs - b.exp);
+  const max = Math.max(10, ...buckets.map((b) => Math.max(b.rev, b.exp)), ...profit);
+  const min = Math.min(0, ...profit);
+  const y = (v: number) => P.t + ((max - v) / (max - min)) * (H - P.t - P.b);
+  const slot = (W - P.l - P.r) / buckets.length;
+  const bw = Math.max(2, Math.min(18, slot * 0.36));
+  const cx = (i: number) => P.l + slot * i + slot / 2;
+  const every = Math.max(1, Math.ceil(buckets.length / 10));
+  const ticks = [min, (min + max) / 2, max].map((v) => Math.round(v));
+  $('#chart').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    ${ticks.map((t) => `<line x1="${P.l}" x2="${W - P.r}" y1="${y(t)}" y2="${y(t)}" class="grid"/><text x="${P.l - 6}" y="${y(t) + 4}" text-anchor="end" class="axis">$${t.toLocaleString()}</text>`).join('')}
+    <line x1="${P.l}" x2="${W - P.r}" y1="${y(0)}" y2="${y(0)}" class="zero"/>
+    ${buckets.map((b, i) => `<rect x="${cx(i) - bw - 1}" y="${y(b.rev)}" width="${bw}" height="${Math.max(0, y(0) - y(b.rev))}" rx="3" class="bar-rev"/><rect x="${cx(i) + 1}" y="${y(b.exp)}" width="${bw}" height="${Math.max(0, y(0) - y(b.exp))}" rx="3" class="bar-exp"/>`).join('')}
+    <polyline points="${profit.map((v, i) => `${cx(i)},${y(v)}`).join(' ')}" class="ln-profit"/>
+    ${buckets.map((b, i) => (i % every === 0 ? `<text x="${cx(i)}" y="${H - 8}" text-anchor="middle" class="axis">${esc(b.label)}</text>` : '')).join('')}
+    ${buckets.map((b, i) => `<rect x="${cx(i) - slot / 2}" y="${P.t}" width="${slot}" height="${H - P.t - P.b}" class="hit"><title>${esc(b.label)} — Revenue ${money(b.rev)} · Expenses ${money(b.exp)} · Net profit ${money(profit[i])}</title></rect>`).join('')}
+  </svg>`;
+}
+
+function pnlLines() {
+  if (!report || !previous) return [];
+  const r = report, p = previous;
+  const cats = [...new Set([...r.expenseByCategory.keys(), ...p.expenseByCategory.keys()])].sort();
+  type Line = { label: string; now: number; before: number; kind?: 'total' | 'grand' | 'minus' | 'sub' };
+  const lines: Line[] = [
+    { label: 'Product sales', now: r.grossSales, before: p.grossSales },
+    { label: 'Discounts', now: -r.discounts, before: -p.discounts, kind: 'minus' },
+    { label: 'Delivery fees collected', now: r.delivery, before: p.delivery },
+    { label: 'Total revenue', now: r.revenue, before: p.revenue, kind: 'total' },
+    { label: 'Cost of goods sold', now: -r.cogs, before: -p.cogs, kind: 'minus' },
+    { label: 'Gross profit', now: r.grossProfit, before: p.grossProfit, kind: 'total' },
+    ...cats.map((c) => ({ label: `Expenses · ${c}`, now: -(r.expenseByCategory.get(c) || 0), before: -(p.expenseByCategory.get(c) || 0), kind: 'sub' as const })),
+    { label: 'Total expenses', now: -r.totalExpenses, before: -p.totalExpenses, kind: 'minus' },
+    { label: 'Net profit', now: r.netProfit, before: p.netProfit, kind: 'grand' }
+  ];
+  return lines;
+}
+
+function renderPnl() {
+  if (!report) return;
+  const basis = $<HTMLSelectElement>('#basis');
+  $('#pnl-sub').textContent = `${$('#period-text').textContent} · revenue from ${basis.options[basis.selectedIndex].text.toLowerCase()}`;
+  $('#pnl-body').innerHTML = pnlLines().map((l) => { const c = change(l.now, l.before); return `<tr class="pnl-${l.kind || 'line'}"><td>${esc(l.label)}</td><td>${money(round(l.now))}</td><td>${money(round(l.before))}</td><td class="${c === null ? '' : c >= 0 ? 'up' : 'down'}">${c === null ? '—' : `${c >= 0 ? '▲' : '▼'} ${Math.abs(c).toFixed(0)}%`}</td></tr>`; }).join('')
+    + (report.missingCostUnits ? `<tr class="pnl-warning"><td colspan="4">⚠ ${report.missingCostUnits} units sold have no cost price, so cost of goods is understated and profit overstated. Add them in the Cost prices tab.</td></tr>` : '');
+}
+
+function productSales() {
+  if (!report) return [];
+  const map = new Map<string, { name: string; units: number; revenue: number; cost: number; costKnown: boolean; category: string }>();
+  const catName = (pid: string) => { const p = products.find((x) => x.id === pid); return categories.find((c) => c.id === p?.category_id)?.name || 'Uncategorised'; };
+  for (const i of report.periodItems) {
+    const key = `${i.product_id}|${i.variant_name || ''}`;
+    const entry = map.get(key) || { name: i.variant_name ? `${i.product_name} · ${i.variant_name}` : i.product_name, units: 0, revenue: 0, cost: 0, costKnown: true, category: catName(i.product_id) };
+    const c = unitCost(i);
+    entry.units += Number(i.quantity || 0);
+    entry.revenue += Number(i.total_price || 0);
+    if (c === null) entry.costKnown = false; else entry.cost += c * Number(i.quantity || 0);
+    map.set(key, entry);
+  }
+  return [...map.values()].sort((a, b) => b.revenue - a.revenue);
+}
+
+function renderSales() {
+  const list = productSales();
+  $('#products-body').innerHTML = list.length ? list.map((p) => `<tr><td>${esc(p.name)}</td><td>${p.units}</td><td>${money(p.revenue)}</td><td>${p.costKnown ? money(p.cost) : '<span class="muted">Not set</span>'}</td><td>${p.costKnown ? money(p.revenue - p.cost) : '—'}</td><td>${p.costKnown && p.revenue ? pct(((p.revenue - p.cost) / p.revenue) * 100) : '—'}</td></tr>`).join('') : '<tr><td colspan="6" class="empty-mini">No sales in this period.</td></tr>';
+  const rank = (id: string, entries: [string, number][]) => { const total = entries.reduce((s, [, v]) => s + v, 0) || 1; $(id).innerHTML = entries.length ? entries.map(([k, v]) => `<div class="acc-rank-item"><div><span>${esc(k)}</span><strong>${money(v)} <small>${Math.round((v / total) * 100)}%</small></strong></div><i style="width:${Math.max(2, (v / total) * 100)}%"></i></div>`).join('') : '<p class="empty-mini">No sales in this period.</p>'; };
+  const byCat = new Map<string, number>(); for (const p of list) byCat.set(p.category, (byCat.get(p.category) || 0) + p.revenue);
+  rank('#by-category', [...byCat.entries()].sort((a, b) => b[1] - a[1]));
+  const byRegion = new Map<string, number>(); for (const o of report!.recognized) byRegion.set(o.governorate || 'Not specified', (byRegion.get(o.governorate || 'Not specified') || 0) + Number(o.total || 0));
+  rank('#by-region', [...byRegion.entries()].sort((a, b) => b[1] - a[1]));
+}
+
+function renderExpenses() {
+  if (!report) return;
+  const list = report.periodExpenses.filter((e) => !expenseFilter || e.category === expenseFilter).sort((a, b) => b.spent_on.localeCompare(a.spent_on));
+  $('#expenses-total').textContent = `${list.length} expenses · ${money(list.reduce((s, e) => s + Number(e.amount || 0), 0))}`;
+  const cats = [...report.expenseByCategory.entries()].sort((a, b) => b[1] - a[1]);
+  $('#expense-cats').innerHTML = [`<button type="button" class="chip${expenseFilter ? '' : ' active'}" data-expense-cat="">All <b>${money(report.totalExpenses)}</b></button>`, ...cats.map(([c, v]) => `<button type="button" class="chip${expenseFilter === c ? ' active' : ''}" data-expense-cat="${esc(c)}">${esc(c)} <b>${money(v)}</b></button>`)].join('');
+  $('#expenses-body').innerHTML = !expensesAvailable ? '<tr><td colspan="6" class="empty-mini">Run <code>supabase/accounting.sql</code> to start recording expenses.</td></tr>' : list.length ? list.map((e) => `<tr><td title="${esc(parseDay(e.spent_on).toLocaleDateString(undefined, { dateStyle: 'full' }))}">${esc(parseDay(e.spent_on).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}</td><td><span class="source-pill cat-pill">${esc(e.category)}</span></td><td>${esc(e.description)}${e.notes ? `<small class="block muted">${esc(e.notes)}</small>` : ''}</td><td>${esc(e.payment_method)}</td><td><strong>${money(Number(e.amount))}</strong></td><td><div class="row-actions"><button type="button" class="small-button icon-btn" data-edit-expense="${e.id}" aria-label="Edit expense" title="Edit">✎</button><button type="button" class="small-button icon-btn danger-button" data-del-expense="${e.id}" aria-label="Delete expense" title="Delete">✕</button></div></td></tr>`).join('') : '<tr><td colspan="6" class="empty-mini">No expenses in this period yet. Add one on the right.</td></tr>';
+}
+
+function renderCosts() {
+  const q = $<HTMLInputElement>('#cost-search').value.trim().toLowerCase();
+  const missingOnly = $<HTMLInputElement>('#missing-only').checked;
+  const rows: string[] = [];
+  for (const p of products) {
+    if (q && !String(p.name).toLowerCase().includes(q)) continue;
+    const pv = variants.filter((v) => v.product_id === p.id);
+    const entries = [{ kind: 'product', id: p.id, name: p.name, price: Number(p.sale_price ?? p.price ?? 0), cost: p.cost_price }, ...pv.map((v) => ({ kind: 'variant', id: v.id, name: `${p.name} · ${v.name}`, price: Number(v.sale_price ?? v.price ?? p.sale_price ?? p.price ?? 0), cost: v.cost_price }))];
+    for (const e of entries) {
+      const has = e.cost !== null && e.cost !== undefined && e.cost !== '';
+      if (missingOnly && has) continue;
+      const profit = has ? e.price - Number(e.cost) : null;
+      rows.push(`<tr class="${e.kind === 'variant' ? 'variant-line' : ''}"><td>${esc(e.name)}</td><td>${money(e.price)}</td><td><input class="admin-input cost-input" type="number" min="0" step="0.01" value="${has ? Number(e.cost) : ''}" placeholder="Not set" data-cost-kind="${e.kind}" data-cost-id="${e.id}" aria-label="Cost price for ${esc(e.name)}" ${costAvailable ? '' : 'disabled'} /></td><td>${profit === null ? '—' : money(profit)}</td><td class="${profit !== null && profit < 0 ? 'down' : ''}">${profit === null || !e.price ? '—' : pct((profit / e.price) * 100)}</td></tr>`);
+    }
+  }
+  $('#costs-body').innerHTML = rows.join('') || '<tr><td colspan="5" class="empty-mini">No products match.</td></tr>';
+}
+
+function renderLedger() {
+  if (!report) return;
+  const list = [...report.periodOrders].sort((a, b) => b.created_at.localeCompare(a.created_at));
+  $('#ledger-sub').textContent = `${list.length} orders in the period (all statuses). Cost and profit use your cost prices.`;
+  $('#ledger-body').innerHTML = list.length ? list.map((o) => { const cost = report!.costByOrder.get(o.id); const counted = counts(o); return `<tr class="${counted ? '' : 'not-counted'}"><td>${esc(new Date(o.created_at).toLocaleDateString())}</td><td><a class="text-link" href="/admin/orders?q=${encodeURIComponent(o.order_number)}">${esc(o.order_number)}</a></td><td>${esc(o.customer_name)}</td><td><span class="status-pill status-${esc(o.status)}">${esc(o.status)}</span></td><td>${money(Number(o.subtotal || 0))}</td><td>${Number(o.discount) ? money(-Number(o.discount)) : '—'}</td><td>${money(Number(o.delivery_fee || 0))}</td><td><strong>${money(Number(o.total || 0))}</strong></td><td>${counted && cost !== undefined ? money(cost) : '—'}</td><td>${counted && cost !== undefined ? money(Number(o.total || 0) - cost) : '—'}</td></tr>`; }).join('') : '<tr><td colspan="10" class="empty-mini">No orders in this period.</td></tr>';
+}
+
+function render() {
+  const range = currentRange();
+  if (Number.isNaN(range[0].getTime()) || Number.isNaN(range[1].getTime()) || range[0] > range[1]) { toast('Choose a valid date range.', 'error'); return; }
+  report = buildReport(range);
+  previous = buildReport(previousRange(range));
+  $('#period-text').textContent = `${range[0].toLocaleDateString(undefined, { dateStyle: 'medium' })} – ${range[1].toLocaleDateString(undefined, { dateStyle: 'medium' })}`;
+  document.querySelectorAll<HTMLElement>('[data-period]').forEach((c) => c.classList.toggle('active', c.dataset.period === period));
+  renderOverview(); renderPnl(); renderSales(); renderExpenses(); renderCosts(); renderLedger();
+}
+
+// ----- data -----
+async function fetchAll(table: string, select: string, build: (q: any) => any = (q) => q) {
+  const rows: Row[] = [];
+  for (let from = 0; ; from += 1000) {
+    const r = await build(supabase.from(table).select(select)).range(from, from + 999);
+    if (r.error) throw r.error;
+    rows.push(...(r.data ?? []));
+    if ((r.data ?? []).length < 1000) return rows;
+  }
+}
+
+async function load() {
+  const [o, p, v, c] = await Promise.all([
+    fetchAll('orders', 'id,order_number,customer_name,governorate,subtotal,delivery_fee,discount,total,status,created_at', (q) => q.order('created_at', { ascending: false })),
+    fetchAll('products', '*'),
+    fetchAll('product_variants', '*'),
+    fetchAll('categories', 'id,name')
+  ]);
+  orders = o; products = p; variants = v; categories = c;
+  costAvailable = products.length === 0 || Object.prototype.hasOwnProperty.call(products[0], 'cost_price');
+  items = [];
+  const ids = orders.map((x) => x.id);
+  for (let i = 0; i < ids.length; i += 150) {
+    const r = await supabase.from('order_items').select('order_id,product_id,variant_id,product_name,variant_name,quantity,unit_price,total_price').in('order_id', ids.slice(i, i + 150));
+    if (r.error) throw r.error;
+    items.push(...(r.data ?? []));
+  }
+  try { expenses = await fetchAll('expenses', '*', (q) => q.order('spent_on', { ascending: false })); expensesAvailable = true; }
+  catch { expenses = []; expensesAvailable = false; }
+  const notice = $('#setup-notice');
+  const missing = [!costAvailable && 'cost prices', !expensesAvailable && 'expenses'].filter(Boolean);
+  notice.hidden = missing.length === 0;
+  notice.innerHTML = missing.length ? `<strong>One-time setup needed.</strong> Run <code>supabase/accounting.sql</code> in the Supabase SQL Editor to enable ${missing.join(' and ')}. Revenue reports already work.` : '';
+  render();
+}
+
+// ----- expenses form -----
+const expenseForm = $<HTMLFormElement>('#expense-form');
+(expenseForm.elements.namedItem('category') as HTMLSelectElement).innerHTML = EXPENSE_CATEGORIES.map((c) => `<option>${c}</option>`).join('');
+const resetExpenseForm = () => { expenseForm.reset(); (expenseForm.elements.namedItem('id') as HTMLInputElement).value = ''; (expenseForm.elements.namedItem('spent_on') as HTMLInputElement).value = ymd(new Date()); $('#expense-title').textContent = 'Add expense'; $('#expense-msg').textContent = ''; };
+resetExpenseForm();
+expenseForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (!expensesAvailable) { $('#expense-msg').textContent = 'Run supabase/accounting.sql first.'; return; }
+  if (!expenseForm.reportValidity()) return;
+  const fd = new FormData(expenseForm);
+  const id = String(fd.get('id') || '');
+  const data = { spent_on: String(fd.get('spent_on')), amount: round(Number(fd.get('amount'))), category: String(fd.get('category')), description: String(fd.get('description')).trim(), payment_method: String(fd.get('payment_method')), notes: String(fd.get('notes') || '').trim() || null, updated_at: new Date().toISOString() };
+  const r = id ? await supabase.from('expenses').update(data).eq('id', id).select().single() : await supabase.from('expenses').insert(data).select().single();
+  if (r.error) { $('#expense-msg').textContent = r.error.message; return; }
+  expenses = id ? expenses.map((e) => (e.id === id ? (r.data as Row) : e)) : [r.data as Row, ...expenses];
+  resetExpenseForm();
+  render();
+  toast(id ? 'Expense updated.' : 'Expense added.');
+});
+$('#expense-clear').addEventListener('click', resetExpenseForm);
+
+// ----- exports -----
+const stem = (name: string) => `clever-toys-${name}-${$<HTMLInputElement>('#from').value}-to-${$<HTMLInputElement>('#to').value}`;
+const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim();
+function exportData(kind: string): { title: string; columns: ExportColumn[]; rows: ExportCell[][] } {
+  if (kind === 'pnl') return { title: 'Profit and loss statement', columns: [{ header: 'Line', width: 34 }, { header: 'This period', width: 16 }, { header: 'Previous period', width: 16 }, { header: 'Change %', width: 12 }], rows: pnlLines().map((l) => { const c = change(l.now, l.before); return [l.label, round(l.now), round(l.before), c === null ? '' : Math.round(c)]; }) };
+  if (kind === 'products') return { title: 'Sales by product', columns: [{ header: 'Product', width: 36 }, { header: 'Category', width: 20 }, { header: 'Units', width: 8 }, { header: 'Revenue', width: 12 }, { header: 'Cost', width: 12 }, { header: 'Profit', width: 12 }, { header: 'Margin %', width: 10 }], rows: productSales().map((p) => [p.name, p.category, p.units, round(p.revenue), p.costKnown ? round(p.cost) : '', p.costKnown ? round(p.revenue - p.cost) : '', p.costKnown && p.revenue ? Math.round(((p.revenue - p.cost) / p.revenue) * 1000) / 10 : '']) };
+  if (kind === 'expenses') return { title: 'Expenses', columns: [{ header: 'Date', width: 12 }, { header: 'Category', width: 22 }, { header: 'Description', width: 36 }, { header: 'Paid with', width: 14 }, { header: 'Amount', width: 12 }, { header: 'Notes', width: 30 }], rows: (report?.periodExpenses ?? []).filter((e) => !expenseFilter || e.category === expenseFilter).sort((a, b) => a.spent_on.localeCompare(b.spent_on)).map((e) => [e.spent_on, e.category, e.description, e.payment_method, round(Number(e.amount)), e.notes || '']) };
+  return { title: 'Orders ledger', columns: [{ header: 'Date', width: 12 }, { header: 'Order', width: 22 }, { header: 'Customer', width: 22 }, { header: 'Governorate', width: 16 }, { header: 'Status', width: 12 }, { header: 'Items', width: 11 }, { header: 'Discount', width: 11 }, { header: 'Delivery', width: 11 }, { header: 'Total', width: 11 }, { header: 'Cost', width: 11 }, { header: 'Profit', width: 11 }], rows: [...(report?.periodOrders ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at)).map((o) => { const cost = counts(o) ? report!.costByOrder.get(o.id) : undefined; return [new Date(o.created_at).toLocaleDateString(), o.order_number, o.customer_name, o.governorate || '', o.status, round(Number(o.subtotal || 0)), round(Number(o.discount || 0)), round(Number(o.delivery_fee || 0)), round(Number(o.total || 0)), cost === undefined ? '' : round(cost), cost === undefined ? '' : round(Number(o.total || 0) - cost)]; }) };
+}
+document.addEventListener('click', async (event) => {
+  const t = event.target instanceof Element ? event.target : null;
+  if (!t) return;
+  const exp = t.closest<HTMLButtonElement>('[data-export]');
+  if (exp) {
+    const [kind, format] = exp.dataset.export!.split('-');
+    const { title, columns, rows } = exportData(kind);
+    if (!rows.length) { toast('Nothing to export for this period.', 'error'); return; }
+    const label = exp.textContent; exp.disabled = true; exp.textContent = 'Preparing…';
+    try {
+      if (format === 'xlsx') await exportXlsx(`${stem(kind)}.xlsx`, title, columns, rows);
+      else await exportPdf(`${stem(kind)}.pdf`, title, `${$('#period-text').textContent} · ${($<HTMLSelectElement>('#basis').selectedOptions[0]?.text || '')} · amounts in USD`, columns, rows.map((r) => r.map((v, i) => (typeof v === 'number' && !/Units|Change|Margin/.test(columns[i].header) ? money(v) : typeof v === 'number' && /Change|Margin/.test(columns[i].header) ? `${v}%` : v))), accent());
+      toast(`${title} exported.`);
+    } catch (error) { toast(`Export failed: ${error instanceof Error ? error.message : 'unknown error'}`, 'error'); }
+    finally { exp.disabled = false; exp.textContent = label; }
+    return;
+  }
+  const tab = t.closest<HTMLElement>('.tab[data-tab]');
+  if (tab) { document.querySelectorAll<HTMLElement>('.tab[data-tab]').forEach((x) => { x.classList.toggle('active', x === tab); x.setAttribute('aria-selected', String(x === tab)); }); document.querySelectorAll<HTMLElement>('.acc-tab').forEach((s) => { s.hidden = s.id !== `tab-${tab.dataset.tab}`; }); return; }
+  const chip = t.closest<HTMLElement>('[data-period]');
+  if (chip) { period = chip.dataset.period!; const [a, b] = presetRange(period); $<HTMLInputElement>('#from').value = ymd(a); $<HTMLInputElement>('#to').value = ymd(b); render(); return; }
+  const cat = t.closest<HTMLElement>('[data-expense-cat]');
+  if (cat) { expenseFilter = cat.dataset.expenseCat || ''; renderExpenses(); return; }
+  const edit = t.closest<HTMLElement>('[data-edit-expense]');
+  if (edit) { const e = expenses.find((x) => x.id === edit.dataset.editExpense); if (!e) return; for (const k of ['id', 'spent_on', 'amount', 'category', 'description', 'payment_method', 'notes']) (expenseForm.elements.namedItem(k) as HTMLInputElement).value = e[k] ?? ''; $('#expense-title').textContent = 'Edit expense'; expenseForm.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+  const del = t.closest<HTMLElement>('[data-del-expense]');
+  if (del) { const e = expenses.find((x) => x.id === del.dataset.delExpense); if (!e || !confirm(`Delete the expense "${e.description}" (${money(Number(e.amount))})?`)) return; const r = await supabase.from('expenses').delete().eq('id', e.id); if (r.error) { toast(r.error.message, 'error'); return; } expenses = expenses.filter((x) => x.id !== e.id); render(); toast('Expense deleted.'); }
+});
+document.addEventListener('change', async (event) => {
+  const el = event.target as HTMLInputElement;
+  if (el.id === 'from' || el.id === 'to') { period = 'custom'; render(); return; }
+  if (el.id === 'basis') { render(); return; }
+  if (el.dataset.costId) {
+    const table = el.dataset.costKind === 'variant' ? 'product_variants' : 'products';
+    const value = el.value === '' ? null : round(Math.max(0, Number(el.value)));
+    const r = await supabase.from(table).update({ cost_price: value }).eq('id', el.dataset.costId);
+    if (r.error) { toast(r.error.message, 'error'); return; }
+    const list = table === 'products' ? products : variants;
+    const row = list.find((x) => x.id === el.dataset.costId); if (row) row.cost_price = value;
+    const focusId = el.dataset.costId;
+    render();
+    (document.querySelector(`[data-cost-id="${focusId}"]`) as HTMLInputElement | null)?.closest('tr')?.nextElementSibling?.querySelector<HTMLInputElement>('input')?.focus();
+    toast(value === null ? 'Cost price cleared.' : `Cost price saved (${money(value)}).`);
+  }
+});
+$('#cost-search').addEventListener('input', renderCosts);
+$('#missing-only').addEventListener('change', renderCosts);
+
+async function init() {
+  const guard = $('#guard');
+  try {
+    const cfg = $('#auth-config');
+    const url = cfg.dataset.url, key = cfg.dataset.key;
+    if (!url || !key) throw new Error('Supabase browser configuration is missing.');
+    supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) { location.href = `/login?next=${encodeURIComponent('/admin/accounting')}`; return; }
+    const { data: isAdmin, error } = await supabase.rpc('is_admin');
+    if (error) throw new Error(error.message);
+    if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><a class="button" href="/">Back to store</a>'; return; }
+    const [a, b] = presetRange(period);
+    $<HTMLInputElement>('#from').value = ymd(a);
+    $<HTMLInputElement>('#to').value = ymd(b);
+    guard.hidden = true;
+    $('#app').hidden = false;
+    await load();
+  } catch (error) {
+    guard.hidden = false;
+    guard.innerHTML = `<h2>Accounting could not load</h2><p>${esc(error instanceof Error ? error.message : 'Unknown error')}</p>`;
+  }
+}
+init();
+</script>
+
+<style is:global>
+.acc-controls{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:flex-end;margin-bottom:16px}
+.acc-control{display:grid;gap:8px}
+.acc-label{color:var(--muted);font-size:.75rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+.acc-dates{display:flex;gap:10px}
+.acc-dates label{display:grid;gap:6px;color:var(--muted);font-size:.75rem;font-weight:900;text-transform:uppercase}
+.acc-notice{margin-bottom:16px;padding:14px 16px;border:1.5px solid #f0b429;border-radius:14px;background:#fff9e8;color:#6b4a00;font-weight:600}
+.acc-notice code,.empty-mini code{padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.06)}
+html[data-area=admin] .admin-tabs{margin-bottom:16px}
+.acc-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;margin-bottom:16px}
+.acc-kpi{display:grid;gap:4px;padding:18px;border:1.5px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:var(--shadow-sm)}
+.acc-kpi>span{color:var(--muted);font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.acc-kpi strong{font-family:var(--font-display);font-size:1.6rem;font-weight:600}
+.acc-kpi strong.negative{color:var(--danger)}
+.acc-kpi small{color:var(--muted);font-size:.78rem;font-weight:700}
+.acc-kpi-net{background:linear-gradient(160deg,var(--surface) 35%,var(--brand-soft));border-color:color-mix(in srgb,var(--brand-primary) 30%,var(--line))}
+.up{color:var(--success)!important}.down{color:var(--danger)!important}
+.acc-grid{display:grid;grid-template-columns:minmax(0,2fr) minmax(280px,1fr);gap:16px;margin-bottom:16px}
+.acc-grid-even{grid-template-columns:1fr 1fr}
+.acc-grid-form{grid-template-columns:minmax(0,1fr) 360px;align-items:start}
+.expenses-table{min-width:0}
+.expenses-table td:nth-child(1),.expenses-table td:nth-child(5){white-space:nowrap}
+.expenses-table .row-actions{flex-wrap:nowrap}
+.expenses-table .cat-pill{white-space:normal}
+.icon-btn{width:34px;min-height:34px;padding:0}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;font-weight:800;color:var(--muted)}
+.legend span::before{content:"";display:inline-block;width:12px;height:10px;margin-right:6px;border-radius:3px;vertical-align:middle}
+.lg-rev::before{background:var(--brand-primary)}.lg-exp::before{background:var(--theme-accent)}.lg-profit::before{height:3px!important;background:var(--success)}
+.acc-chart svg{display:block;width:100%;height:280px}
+.acc-chart .grid{stroke:var(--line)}.acc-chart .zero{stroke:var(--line-strong)}
+.acc-chart .axis{fill:var(--muted);font-size:10px;font-weight:700}
+.acc-chart .bar-rev{fill:var(--brand-primary)}.acc-chart .bar-exp{fill:var(--theme-accent)}
+.acc-chart .ln-profit{fill:none;stroke:var(--success);stroke-width:2.5;vector-effect:non-scaling-stroke}
+.acc-chart .hit{fill:transparent}.acc-chart .hit:hover{fill:color-mix(in srgb,var(--brand-primary) 7%,transparent)}
+.small-note{margin:-4px 0 12px;font-size:.85rem}
+.cash-list{display:grid;gap:10px}
+.cash-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px;border-radius:14px;background:var(--surface-2)}
+.cash-row small{display:block;color:var(--muted);font-size:.78rem;font-weight:600}
+.cash-row span{font-family:var(--font-display);font-size:1.25rem;font-weight:600}
+.cash-row.good{border-left:4px solid var(--success)}.cash-row.wait{border-left:4px solid #f0b429}.cash-row.lost{border-left:4px solid var(--danger)}
+.pnl-table{min-width:560px}
+.pnl-table td:not(:first-child),.pnl-table th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
+.pnl-table tr.pnl-sub td:first-child{padding-left:32px;color:var(--muted)}
+.pnl-table tr.pnl-total td{font-weight:800;border-top:1.5px solid var(--line-strong)}
+.pnl-table tr.pnl-grand td{font-weight:900;font-size:1.05rem;background:var(--brand-soft);border-top:2px solid var(--brand-primary)}
+.pnl-table tr.pnl-warning td{background:#fff9e8;color:#6b4a00;font-weight:700;text-align:left!important}
+.acc-tab table td{font-variant-numeric:tabular-nums}
+.acc-rank{display:grid;gap:12px}
+.acc-rank-item{display:grid;gap:6px}
+.acc-rank-item>div{display:flex;justify-content:space-between;gap:10px;font-weight:700}
+.acc-rank-item small{color:var(--muted)}
+.acc-rank-item i{display:block;height:8px;border-radius:99px;background:var(--brand-gradient)}
+.export-actions{display:flex;gap:8px;flex-wrap:wrap}
+.export-actions .button{min-height:40px;padding:0 14px;font-size:.88rem}
+#expense-cats{margin-bottom:12px}
+.row-actions{display:flex;gap:6px;justify-content:flex-end}
+.block{display:block}
+.source-pill{display:inline-block;padding:3px 9px;border-radius:99px;background:var(--brand-soft);color:var(--primary-strong);font-size:.78rem;font-weight:800;white-space:nowrap}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.acc-cost-tools{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.missing-only{display:flex;align-items:center;gap:6px;font-weight:700;color:var(--muted)}
+.cost-input{width:120px;min-height:38px;padding:6px 10px}
+tr.variant-line td:first-child{padding-left:30px;color:var(--muted)}
+tr.not-counted td{color:var(--subtle)}
+.empty-mini{padding:18px;color:var(--subtle);text-align:center}
+@media(max-width:1200px){.acc-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.acc-grid,.acc-grid-form{grid-template-columns:1fr}}
+@media(max-width:640px){.acc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.acc-kpi strong{font-size:1.25rem}.acc-grid-even,.field-row{grid-template-columns:1fr}.acc-dates{width:100%}.acc-dates label{flex:1}.acc-chart svg{height:220px}}
+</style>

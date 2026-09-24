@@ -91,11 +91,37 @@
     if (header && ribbon) header.insertAdjacentElement('afterend', ribbon);
   };
 
+  // On product pages the floating and header WhatsApp buttons ask about the product being viewed,
+  // sent to the number from Admin → Branding. Other pages use the Branding link exactly as saved.
+  const productInquiryMessage = () => {
+    const title = document.querySelector('.product-details h1')?.textContent?.trim();
+    if (!title) return '';
+    const price = document.querySelector('#detail-price')?.textContent?.trim();
+    const select = document.querySelector('#variant-select');
+    const option = select instanceof HTMLSelectElement && select.value ? (select.options[select.selectedIndex]?.textContent || '').split('·')[0].trim() : '';
+    return [
+      'Hello Clever Toys 👋',
+      "I'm interested in this product and would like more information:",
+      '',
+      `*${title}*`,
+      option ? `Option: ${option}` : null,
+      price ? `Price: ${price}` : null,
+      `Link: ${location.origin}${location.pathname}`,
+      '',
+      'Is it available, and how long would delivery take? Thank you!'
+    ].filter((line) => line !== null).join('\n');
+  };
+
   const patchFloatingWhatsapp = () => {
     const branding = getBranding();
+    if (!branding.whatsappUrl) return;
+    const inquiry = isProductDetailPage() ? productInquiryMessage() : '';
+    const href = inquiry ? buildWhatsappUrl(branding.whatsappUrl, inquiry) : branding.whatsappUrl;
     const floating = document.getElementById('clever-floating-whatsapp');
-    if (floating && branding.whatsappUrl) floating.href = branding.whatsappUrl;
+    if (floating) floating.href = href;
+    document.querySelectorAll('.clever-header-whatsapp').forEach((link) => { link.href = href; });
   };
+  document.addEventListener('change', (event) => { if (event.target instanceof HTMLSelectElement && event.target.id === 'variant-select') patchFloatingWhatsapp(); });
 
   const saveCustomer = (details) => {
     try {

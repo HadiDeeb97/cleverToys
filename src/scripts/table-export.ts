@@ -60,7 +60,7 @@ export async function exportPdf(filename: string, title: string, subtitle: strin
   const hex = /^#[0-9a-f]{6}$/i.test(accent) ? accent : '#2563eb';
   const rgb: [number, number, number] = [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
   // The built-in PDF fonts only cover Latin-1, so drop emoji and other symbols they cannot draw.
-  const pdfText = (value: ExportCell) => String(value ?? '').replace(/[^\u0009\u000A\u000D -ÿ–—‘’“”…]/g, '').trim();
+  const pdfText = (value: ExportCell) => String(value ?? '').replace(/\u2212/g, '-').replace(/[^\u0009\u000A\u000D -ÿ–—‘’“”…]/g, '').trim();
   doc.setFontSize(18);
   doc.setTextColor(27, 21, 48);
   doc.text('Clever Toys', 40, 44);

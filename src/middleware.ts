@@ -186,7 +186,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify(branding).replace(/</g, '\\u003c')};</script>`;
   const earlyTheme = published.mode === 'theme' && published.theme ? `<style id="clever-theme">:root{${themeVariables(published.theme)}}</style>` : '';
   const fontLinks = '<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" media="print" onload="this.media=\'all\'" /><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" /></noscript>';
-  const storeScript = '<script src="/store-ui.js?v=20260925-1" defer></script><script src="/branding-ui.js?v=20260925-3" defer></script>';
+  const storeScript = '<script src="/store-ui.js?v=20260925-1" defer></script><script src="/branding-ui.js?v=20260925-4" defer></script>';
   let output = html;
 
   // Several page templates have no <head> or <body>. Give every page a real <head> so the theme,
@@ -245,6 +245,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     const adminLinks: Array<[string, string, string]> = [
       ['/admin/dashboard', 'Dashboard', '<path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 4v4h6V4z"/>'],
       ['/admin/orders', 'Orders', '<path d="M6 3h12l2 5v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8zM4 8h16M9 12h6"/>'],
+      ['/admin/accounting', 'Accounting', '<path d="M4 4h16v16H4zM4 9h16M9 9v11M13 13h4M13 17h4"/>'],
       ['/admin', 'Products', '<path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/>'],
       ['/admin/analytics', 'Visitors', '<path d="M3 20V10M9 20V4M15 20v-7M21 20v-11"/>'],
       ['/admin/seo', 'SEO', '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'],

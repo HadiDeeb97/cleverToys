@@ -449,6 +449,7 @@ html[data-area=admin] .form-card,html[data-area=admin] .admin-panel{border-radiu
   .cart-summary .button{width:100%}
   .checkout-summary{order:-1}
   .admin-head{align-items:flex-start;flex-direction:column}
+  .admin-tabs{flex-wrap:wrap;width:auto;border-radius:18px}
   .panel-title{align-items:stretch;flex-direction:column}
   .panel-title #product-search{max-width:none}
   .site-footer{margin-top:40px;padding:36px 0 110px}
