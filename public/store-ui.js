@@ -1,7 +1,7 @@
 (() => {
   const CART_KEY = 'cleverToysCart';
   const STORE_NAME = 'Clever Toys';
-  const DEFAULT_WHATSAPP_URL = 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product';
+  const DEFAULT_WHATSAPP_URL = 'https://wa.me/96171220251?text=Hello%20Clever%20Toys%21%20I%20have%20a%20question%20about%20your%20toys.';
   const getWhatsappUrl = () => String(window.__CLEVER_BRANDING__?.whatsappUrl || '').trim() || DEFAULT_WHATSAPP_URL;
   const branding = window.__CLEVER_BRANDING__ || {};
   const FALLBACK_LOGO = branding.logoUrl || '';
@@ -34,7 +34,8 @@
     let root = document.querySelector('.clever-floating-controls');
     const whatsappUrl = getWhatsappUrl();
     if (!root) { root = document.createElement('div'); root.className = 'clever-floating-controls'; root.innerHTML = `<a id="clever-floating-cart" class="clever-floating-cart" href="/cart" title="View your cart" aria-label="Shopping cart"><span class="floating-cart-icon" aria-hidden="true">🛒</span><span class="floating-cart-count" aria-hidden="true" hidden>0</span></a><a id="clever-floating-whatsapp" class="clever-floating-whatsapp" href="${whatsappUrl}" target="_blank" rel="noopener noreferrer" aria-label="Chat with Clever Toys on WhatsApp" title="Chat with us on WhatsApp">${whatsappSvg}</a>`; document.body.appendChild(root); }
-    else { const whatsapp = root.querySelector('#clever-floating-whatsapp'); if (whatsapp) { whatsapp.href = whatsappUrl; whatsapp.innerHTML = whatsappSvg; } }
+    // branding-ui.js may set a page-specific greeting, so only fill the link when it is missing.
+    else { const whatsapp = root.querySelector('#clever-floating-whatsapp'); if (whatsapp && !whatsapp.getAttribute('href')) whatsapp.href = whatsappUrl; }
     updateCartUI();
   };
   const ensureCartLinks = () => {

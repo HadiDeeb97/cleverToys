@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS public.store_settings (
   id text PRIMARY KEY DEFAULT 'default',
-  whatsapp_url text NOT NULL DEFAULT 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product',
+  whatsapp_url text NOT NULL DEFAULT 'https://wa.me/96171220251?text=Hello%20Clever%20Toys%21%20I%20have%20a%20question%20about%20your%20toys.',
   instagram_url text NOT NULL DEFAULT '',
   show_whatsapp boolean NOT NULL DEFAULT true,
   show_instagram boolean NOT NULL DEFAULT false,

@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import { supabaseConfig } from '../../lib/config';
 
 const fallback = {
-  whatsappUrl: 'https://wa.me/96171220251?text=Hello%2C%20I%27m%20interested%20with%20your%20product',
+  whatsappUrl: 'https://wa.me/96171220251?text=Hello%20Clever%20Toys%21%20I%20have%20a%20question%20about%20your%20toys.',
   instagramUrl: '',
   showWhatsapp: true,
   showInstagram: false,
