@@ -44,12 +44,12 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
           <input type="hidden" name="id" />
           <label>Name<input name="name" required maxlength="160" /></label>
           <div class="field-row"><label>Slug<input name="slug" required pattern="[a-z0-9\-]+" /></label><label>SKU<input name="sku" /></label></div>
-          <div class="field-row three"><label>Price (USD)<input name="price" type="number" min="0" step="0.01" required /></label><label>Sale price<input name="sale_price" type="number" min="0" step="0.01" /></label><label>Stock<input name="stock_quantity" type="number" min="0" value="0" required /></label></div>
+          <div class="field-row four"><label>Price (USD)<input name="price" type="number" min="0" step="0.01" required /></label><label>Sale price<input name="sale_price" type="number" min="0" step="0.01" /></label><label>Cost price<input name="cost_price" type="number" min="0" step="0.01" placeholder="What it costs you" /></label><label>Stock<input name="stock_quantity" type="number" min="0" value="0" required /></label></div>
+          <p id="profit-hint" class="profit-hint" aria-live="polite"></p>
           <fieldset class="category-picker"><legend>Categories</legend><div id="category-checks" class="check-grid"></div></fieldset>
           <div class="variant-box">
             <div class="panel-title"><h3>Variants</h3><button id="add-variant" class="small-button" type="button">+ Add variant</button></div>
-            <div class="variant-head" id="variant-head" hidden><span>Name</span><span>SKU</span><span>Price</span><span>Sale</span><span>Stock</span><span></span></div>
-            <div id="variant-list"></div>
+                        <div id="variant-list"></div>
             <small class="field-help">Sizes, colors or packs. Leave price empty to use the product price.</small>
           </div>
           <div class="image-box">
@@ -176,7 +176,7 @@ function renderProducts() {
     const stockClass = p.stock_quantity <= 0 ? 'out' : p.stock_quantity <= 5 ? 'low' : '';
     return `<div class="product-row${editingId === p.id ? ' editing' : ''}${p.is_active ? '' : ' is-hidden'}">
       <div class="product-thumb">${p.primary_image_url ? `<img src="${esc(p.primary_image_url)}" alt="" loading="lazy" />` : '🧸'}</div>
-      <div class="product-main"><button type="button" class="product-name" data-edit="${p.id}">${esc(p.name)}</button><small>${esc(p.sku || 'No SKU')} · ${money(price)}${p.sale_price != null ? ` <s>${money(p.price)}</s>` : ''}${p.is_featured ? ' · ⭐ Featured' : ''}</small></div>
+      <div class="product-main"><button type="button" class="product-name" data-edit="${p.id}">${esc(p.name)}</button><small>${esc(p.sku || 'No SKU')} · ${money(price)}${p.sale_price != null ? ` <s>${money(p.price)}</s>` : ''}${p.cost_price != null && p.cost_price !== '' ? ` · cost ${money(p.cost_price)}${price ? ` (${Math.round(((price - Number(p.cost_price)) / price) * 100)}% margin)` : ''}` : ' · <span class="no-cost">no cost set</span>'}${p.is_featured ? ' · ⭐ Featured' : ''}</small></div>
       <label class="stock-edit ${stockClass}" title="Stock">Stock<input type="number" min="0" value="${Number(p.stock_quantity)}" data-stock="${p.id}" aria-label="Stock for ${esc(p.name)}" /></label>
       <label class="row-toggle" title="Visible in store"><input class="toggle" type="checkbox" data-active="${p.id}"${p.is_active ? ' checked' : ''} aria-label="Visible: ${esc(p.name)}" /></label>
       <div class="item-actions"><button class="small-button" data-edit="${p.id}" type="button">Edit</button><button class="small-button" data-duplicate="${p.id}" type="button" title="Duplicate">Copy</button><a class="small-button" href="/product/${encodeURIComponent(p.slug)}" target="_blank" rel="noopener" title="View on store">↗</a><button class="small-button danger-button" data-del="${p.id}" type="button" aria-label="Delete ${esc(p.name)}">Delete</button></div>
@@ -195,8 +195,8 @@ function renderCategories() {
 }
 
 function renderVariants() {
-  $('#variant-head').hidden = variants.length === 0;
-  $('#variant-list').innerHTML = variants.map((v, i) => `<div class="variant-row" data-i="${i}"><input placeholder="Name" data-v="name" value="${esc(v.name)}" aria-label="Variant name"><input placeholder="SKU" data-v="sku" value="${esc(v.sku || '')}" aria-label="Variant SKU"><input placeholder="Price" type="number" step="0.01" min="0" data-v="price" value="${v.price ?? ''}" aria-label="Variant price"><input placeholder="Sale" type="number" step="0.01" min="0" data-v="sale_price" value="${v.sale_price ?? ''}" aria-label="Variant sale price"><input placeholder="0" type="number" min="0" data-v="stock_quantity" value="${v.stock_quantity ?? 0}" aria-label="Variant stock"><button class="small-button danger-button" type="button" data-rm="${i}" aria-label="Remove variant">×</button></div>`).join('');
+  const field = (label: string, key: string, v: Row, attrs: string, cls = '') => `<label class="v-field ${cls}"><span>${label}</span><input data-v="${key}" value="${esc(v[key] ?? '')}" ${attrs}></label>`;
+  $('#variant-list').innerHTML = variants.map((v, i) => `<div class="variant-row" data-i="${i}">${field('Name', 'name', v, 'placeholder="e.g. Large"', 'v-name')}${field('SKU', 'sku', v, 'placeholder="Optional"', 'v-sku')}<button class="small-button danger-button v-remove" type="button" data-rm="${i}" aria-label="Remove variant">×</button>${field('Price', 'price', v, 'type="number" step="0.01" min="0" placeholder="Product price"')}${field('Sale', 'sale_price', v, 'type="number" step="0.01" min="0"')}${field('Cost', 'cost_price', v, 'type="number" step="0.01" min="0"')}${field('Stock', 'stock_quantity', v, 'type="number" min="0" placeholder="0"')}</div>`).join('');
 }
 const readVariants = () => document.querySelectorAll<HTMLElement>('.variant-row').forEach((row) => { const i = Number(row.dataset.i); row.querySelectorAll<HTMLInputElement>('[data-v]').forEach((el) => { variants[i][el.dataset.v!] = el.value; }); });
 
@@ -215,6 +215,7 @@ async function editProduct(id: string) {
   field('slug').dataset.auto = '';
   const ids = links.filter((l) => l.product_id === id).map((l) => l.category_id);
   renderCategoryChecks(ids.length ? ids : p.category_id ? [p.category_id] : []);
+  updateProfitHint();
   $('#form-title').textContent = `Edit: ${p.name}`;
   const view = $<HTMLAnchorElement>('#view-on-store'); view.href = `/product/${encodeURIComponent(p.slug)}`; view.hidden = false;
   const [v, im] = await Promise.all([
@@ -241,6 +242,7 @@ function clearForm(focus = true) {
   $('#form-title').textContent = 'Add product';
   $('#view-on-store').hidden = true;
   $('#product-msg').textContent = '';
+  updateProfitHint();
   renderProducts();
   if (focus) { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); field('name').focus({ preventScroll: true }); }
 }
@@ -287,7 +289,7 @@ async function saveVariants(id: string) {
   for (const o of (old.data ?? []) as Row[]) if (!variants.some((v) => v.id === o.id)) { const d = await supabase.from('product_variants').delete().eq('id', o.id); if (d.error) throw new Error(d.error.message); }
   for (const v of variants) {
     if (!String(v.name || '').trim()) continue;
-    const data = { product_id: id, name: String(v.name).trim(), sku: String(v.sku || '').trim() || null, price: num(v.price), sale_price: num(v.sale_price), stock_quantity: int(v.stock_quantity, 0), attributes: v.attributes || {}, is_active: true, updated_at: new Date().toISOString() };
+    const data = { product_id: id, name: String(v.name).trim(), sku: String(v.sku || '').trim() || null, price: num(v.price), sale_price: num(v.sale_price), cost_price: num(v.cost_price), stock_quantity: int(v.stock_quantity, 0), attributes: v.attributes || {}, is_active: true, updated_at: new Date().toISOString() };
     const r = v.id ? await supabase.from('product_variants').update(data).eq('id', v.id) : await supabase.from('product_variants').insert(data);
     if (r.error) throw new Error(friendly(r.error.message));
   }
@@ -438,7 +440,19 @@ $('#category-filter').addEventListener('change', renderProducts);
 $('#clear').addEventListener('click', () => clearForm());
 $('#new-product').addEventListener('click', () => { switchTab('products'); clearForm(); });
 $('#clear-category').addEventListener('click', clearCategoryForm);
-$('#add-variant').addEventListener('click', () => { readVariants(); variants.push({ name: '', sku: '', price: '', sale_price: '', stock_quantity: 0 }); renderVariants(); ($('#variant-list').lastElementChild?.querySelector('input') as HTMLInputElement | null)?.focus(); });
+$('#add-variant').addEventListener('click', () => { readVariants(); variants.push({ name: '', sku: '', price: '', sale_price: '', cost_price: '', stock_quantity: 0 }); renderVariants(); ($('#variant-list').lastElementChild?.querySelector('input') as HTMLInputElement | null)?.focus(); });
+
+// Live profit/margin hint under the price fields.
+const updateProfitHint = () => {
+  const price = num(field('sale_price').value) ?? num(field('price').value);
+  const cost = num(field('cost_price').value);
+  const hint = $('#profit-hint');
+  if (price === null || cost === null) { hint.textContent = cost === null ? 'Add a cost price to see profit per unit (used by Accounting).' : ''; hint.className = 'profit-hint'; return; }
+  const profit = price - cost;
+  hint.textContent = `Profit per unit: ${money(profit)} · ${price ? Math.round((profit / price) * 100) : 0}% margin`;
+  hint.className = `profit-hint ${profit < 0 ? 'loss' : 'gain'}`;
+};
+['price', 'sale_price', 'cost_price'].forEach((name) => field(name).addEventListener('input', updateProfitHint));
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -451,7 +465,7 @@ form.addEventListener('submit', async (event) => {
   const salePrice = num(fd.get('sale_price'));
   if (salePrice !== null && salePrice >= price) { msg.textContent = 'Sale price must be lower than the regular price.'; return; }
   const selected = fd.getAll('category_ids').map(String);
-  const data = { name, slug: slugify(fd.get('slug') || name), sku: String(fd.get('sku') || '').trim() || null, category_id: selected[0] || null, price, sale_price: salePrice, stock_quantity: int(fd.get('stock_quantity'), 0), age_min: int(fd.get('age_min')), age_max: int(fd.get('age_max')), brand: String(fd.get('brand') || '').trim() || null, short_description: String(fd.get('short_description') || ''), description: String(fd.get('description') || ''), seo_title: String(fd.get('seo_title') || '').trim() || null, seo_description: String(fd.get('seo_description') || '').trim() || null, is_featured: fd.get('is_featured') === 'on', is_active: fd.get('is_active') === 'on', updated_at: new Date().toISOString() };
+  const data = { name, slug: slugify(fd.get('slug') || name), sku: String(fd.get('sku') || '').trim() || null, category_id: selected[0] || null, price, sale_price: salePrice, cost_price: num(fd.get('cost_price')), stock_quantity: int(fd.get('stock_quantity'), 0), age_min: int(fd.get('age_min')), age_max: int(fd.get('age_max')), brand: String(fd.get('brand') || '').trim() || null, short_description: String(fd.get('short_description') || ''), description: String(fd.get('description') || ''), seo_title: String(fd.get('seo_title') || '').trim() || null, seo_description: String(fd.get('seo_description') || '').trim() || null, is_featured: fd.get('is_featured') === 'on', is_active: fd.get('is_active') === 'on', updated_at: new Date().toISOString() };
   const button = $<HTMLButtonElement>('#save-product');
   button.disabled = true; msg.textContent = 'Saving…';
   try {
@@ -494,10 +508,13 @@ $<HTMLFormElement>('#category-form').addEventListener('submit', async (event) =>
 $('#template').addEventListener('click', () => {
   const XLSX = (window as any).XLSX;
   if (!XLSX) { toast('Excel tools are still loading. Try again in a moment.', 'error'); return; }
-  const h = ['name', 'slug', 'sku', 'categories', 'price', 'sale_price', 'stock_quantity', 'age_min', 'age_max', 'brand', 'short_description', 'description', 'primary_image_url', 'seo_title', 'seo_description', 'is_active', 'is_featured'];
-  const ws = XLSX.utils.aoa_to_sheet([h, ['Example Toy', 'example-toy', 'CT-001', 'Educational Toys, Outdoor Toys', 9.99, '', 10, 3, 8, 'Clever Toys', 'Short description', 'Description', '', 'Example Toy | Clever Toys', 'Shop toys in Lebanon.', true, false]]);
+  const h = ['name', 'slug', 'sku', 'categories', 'price', 'sale_price', 'cost_price', 'stock_quantity', 'age_min', 'age_max', 'brand', 'short_description', 'description', 'primary_image_url', 'seo_title', 'seo_description', 'is_active', 'is_featured'];
+  const ws = XLSX.utils.aoa_to_sheet([h, ['Example Toy', 'example-toy', 'CT-001', 'Educational Toys, Outdoor Toys', 9.99, '', 5.5, 10, 3, 8, 'Clever Toys', 'Short description', 'Description', '', 'Example Toy | Clever Toys', 'Shop toys in Lebanon.', true, false]]);
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Products'); XLSX.writeFile(wb, 'Clever_Toys_Product_Import_Template.xlsx');
 });
+
+// An empty or missing cost_price cell keeps the cost already saved, so older files never erase costs.
+const costFromRow = (row: Row) => { const cost = num(row.cost_price ?? row['cost price'] ?? row.cost); return cost === null ? {} : { cost_price: Math.max(0, cost) }; };
 
 $('#import').addEventListener('click', async () => {
   const XLSX = (window as any).XLSX;
@@ -520,7 +537,7 @@ $('#import').addEventListener('click', async () => {
         const price = num(row.price, null);
         if (price === null || price < 0) throw new Error('Invalid price');
         const matched = String(row.categories || row.category || '').split(',').map((x) => x.trim()).filter(Boolean).map((n) => categories.find((c) => c.name.toLowerCase() === n.toLowerCase() || c.slug === slugify(n))).filter(Boolean) as Row[];
-        const payload = { name, slug, sku: String(row.sku || '').trim() || null, category_id: matched[0]?.id || null, price, sale_price: num(row.sale_price), stock_quantity: int(row.stock_quantity, 0), age_min: int(row.age_min), age_max: int(row.age_max), brand: String(row.brand || '').trim() || null, short_description: String(row.short_description || ''), description: String(row.description || ''), primary_image_url: String(row.primary_image_url || '').trim() || null, seo_title: String(row.seo_title || '').trim() || null, seo_description: String(row.seo_description || '').trim() || null, is_active: String(row.is_active).toLowerCase() !== 'false', is_featured: String(row.is_featured).toLowerCase() === 'true', updated_at: new Date().toISOString() };
+        const payload = { name, slug, sku: String(row.sku || '').trim() || null, category_id: matched[0]?.id || null, price, sale_price: num(row.sale_price), stock_quantity: int(row.stock_quantity, 0), ...costFromRow(row), age_min: int(row.age_min), age_max: int(row.age_max), brand: String(row.brand || '').trim() || null, short_description: String(row.short_description || ''), description: String(row.description || ''), primary_image_url: String(row.primary_image_url || '').trim() || null, seo_title: String(row.seo_title || '').trim() || null, seo_description: String(row.seo_description || '').trim() || null, is_active: String(row.is_active).toLowerCase() !== 'false', is_featured: String(row.is_featured).toLowerCase() === 'true', updated_at: new Date().toISOString() };
         const existing = products.find((p) => p.slug === slug) || (payload.sku ? products.find((p) => p.sku === payload.sku) : undefined);
         const r = existing ? await supabase.from('products').update(payload).eq('id', existing.id).select().single() : await supabase.from('products').insert(payload).select().single();
         if (r.error) throw new Error(friendly(r.error.message));
@@ -595,6 +612,10 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .editor-head h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .field-row.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.field-row.four{grid-template-columns:repeat(4,minmax(0,1fr))}
+.profit-hint{margin:-6px 0 0;color:var(--muted);font-size:.85rem;font-weight:700}
+.profit-hint.gain{color:var(--success)}.profit-hint.loss{color:var(--danger)}
+.no-cost{color:#8a5a00}
 .category-picker{margin:0;padding:12px;border:1.5px solid var(--line);border-radius:14px}
 .category-picker legend{padding:0 6px;font-weight:800;font-size:.93rem}
 .check-grid{display:flex;flex-wrap:wrap;gap:6px}
@@ -602,8 +623,10 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .check-pill:has(input:checked){border-color:var(--brand-primary);background:var(--brand-soft)}
 .variant-box,.image-box{display:grid;gap:8px;padding:12px;border:1.5px solid var(--line);border-radius:14px}
 .variant-box h3,.image-box h3{margin:0;font-size:1rem}
-.variant-head,.variant-row{display:grid;grid-template-columns:1.4fr 1fr .8fr .8fr .7fr 34px;gap:6px}
-.variant-head span{color:var(--muted);font-size:.7rem;font-weight:900;text-transform:uppercase}
+.variant-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) 34px;gap:8px;padding:10px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.variant-row .v-name{grid-column:1/3}.variant-row .v-sku{grid-column:3/5}.variant-row .v-remove{grid-row:1/3;grid-column:5;align-self:center;width:34px;min-height:34px;padding:0}
+.form-card .v-field{display:grid;gap:3px;padding-left:0;font-size:.68rem;font-weight:900;text-transform:uppercase;color:var(--muted)}
+.form-card .v-field::after{content:none}
 .form-card .variant-row input{min-height:38px;padding:6px 8px;border-radius:10px;font-size:.88rem}
 .image-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
 .image-item{position:relative;margin:0;overflow:hidden;border:2px solid var(--line);border-radius:12px;background:var(--surface-2)}
@@ -624,5 +647,5 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .import-errors{padding:14px;border-radius:12px;background:var(--danger-soft);color:var(--danger)}
 .import-errors p{margin:6px 0}
 @media(max-width:1100px){.catalog-layout{grid-template-columns:1fr}.product-editor{position:static;max-height:none}}
-@media(max-width:640px){.product-row{grid-template-columns:44px auto 44px;grid-template-areas:"thumb main main" "stock stock toggle" "actions actions actions"}.product-row>.product-thumb{width:44px;height:44px}.product-row>.item-actions{justify-content:flex-start}.list-toolbar,.field-row,.field-row.three{grid-template-columns:1fr}.variant-head{display:none}.variant-row{grid-template-columns:1fr 1fr 34px}}
+@media(max-width:640px){.product-row{grid-template-columns:44px auto 44px;grid-template-areas:"thumb main main" "stock stock toggle" "actions actions actions"}.product-row>.product-thumb{width:44px;height:44px}.product-row>.item-actions{justify-content:flex-start}.list-toolbar,.field-row,.field-row.three{grid-template-columns:1fr}.field-row.four{grid-template-columns:1fr 1fr}.variant-row{grid-template-columns:1fr 1fr 34px}.variant-row .v-name,.variant-row .v-sku{grid-column:auto}.variant-row .v-remove{grid-row:1/4;grid-column:3}}
 </style>
