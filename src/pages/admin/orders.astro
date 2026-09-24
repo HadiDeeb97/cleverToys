@@ -3,17 +3,267 @@ import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
-<header class="site-header"><div class="container header-inner"><a href="/admin" class="logo">Clever Toys Admin</a><nav class="main-nav"><a href="/admin/dashboard">Dashboard</a><a href="/admin">Products</a><a href="/">Store</a></nav></div></header>
-<main class="section"><div class="container"><div class="admin-head"><div><h1>Orders</h1><p>View and update customer orders.</p></div><a class="button secondary-button" href="/admin">Back to Products</a></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><div id="guard" class="empty-state">Checking admin access…</div><div id="orders-app" hidden><div id="orders-list"></div></div></div></main>
+<head>
+  <title>Orders | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Sales</p>
+        <h1>Orders</h1>
+        <p id="orders-summary">Loading orders…</p>
+      </div>
+      <div class="quick-actions">
+        <button id="export-csv" class="button secondary-button" type="button">Export CSV</button>
+        <button id="refresh" class="button" type="button">Refresh</button>
+      </div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+    <div id="orders-app" hidden>
+      <div class="orders-toolbar admin-panel">
+        <div id="status-tabs" class="chip-row" role="tablist" aria-label="Filter by status"></div>
+        <div class="orders-filters">
+          <label class="sr-only" for="order-search">Search orders</label>
+          <input id="order-search" class="admin-input" type="search" placeholder="Search order #, name, phone or email" />
+          <label class="date-filter">From<input id="date-from" class="admin-input" type="date" /></label>
+          <label class="date-filter">To<input id="date-to" class="admin-input" type="date" /></label>
+          <label class="sr-only" for="order-sort">Sort orders</label>
+          <select id="order-sort" class="admin-input"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="total">Highest total</option></select>
+        </div>
+      </div>
+      <div id="orders-list" class="orders-list"></div>
+      <div class="load-more-wrap"><button id="load-more" class="button secondary-button" type="button" hidden>Show more orders</button></div>
+    </div>
+  </div>
+</main>
+
 <script>
 import { createClient } from '@supabase/supabase-js';
-const config=document.querySelector('#auth-config');const url=config?.dataset.url;const key=config?.dataset.key;const guard=document.querySelector('#guard');const app=document.querySelector('#orders-app');const list=document.querySelector('#orders-list');let supabase;
-const statuses=['pending','confirmed','processing','shipped','delivered','cancelled'];
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function load(){const {data:orders,error}=await supabase.from('orders').select('id,order_number,customer_name,customer_phone,customer_email,governorate,city,area,address,total,payment_method,status,notes,created_at').order('created_at',{ascending:false});if(error){list.innerHTML=`<p>${esc(error.message)}</p>`;return;}if(!orders?.length){list.innerHTML='<div class="empty-state"><h2>No orders yet</h2></div>';return;}const ids=orders.map(o=>o.id);const {data:items}=await supabase.from('order_items').select('order_id,product_name,variant_name,quantity,unit_price,total_price').in('order_id',ids);const grouped=(items||[]).reduce((acc,item)=>{(acc[item.order_id]??=[]).push(item);return acc;},{});list.innerHTML=`<div class="table-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>Location</th><th>Items</th><th>Total</th><th>Status</th><th>Date</th></tr></thead><tbody>${orders.map(o=>`<tr><td><strong>${esc(o.order_number)}</strong><br><small>${esc(o.payment_method)}</small></td><td>${esc(o.customer_name)}<br><small>${esc(o.customer_phone)}</small>${o.customer_email?`<br><small>${esc(o.customer_email)}</small>`:''}</td><td>${esc([o.governorate,o.city].filter(Boolean).join(', '))}<br><small>${esc(o.area||'')}${o.address?` · ${esc(o.address)}`:''}</small></td><td><div class="order-items">${(grouped[o.id]||[]).map(i=>`<div><strong>${esc(i.product_name)}</strong>${i.variant_name?` · ${esc(i.variant_name)}`:''} × ${i.quantity}<small>$${Number(i.total_price).toFixed(2)}</small></div>`).join('')||'<small>No item details</small>'}</div></td><td>$${Number(o.total).toFixed(2)}</td><td><select data-status="${o.id}">${statuses.map(s=>`<option value="${s}" ${o.status===s?'selected':''}>${s}</option>`).join('')}</select>${o.notes?`<small class="order-note">${esc(o.notes)}</small>`:''}</td><td>${new Date(o.created_at).toLocaleString()}</td></tr>`).join('')}</tbody></table></div>`;list.querySelectorAll('[data-status]').forEach(s=>s.onchange=async()=>{s.disabled=true;const {error}=await supabase.from('orders').update({status:s.value,updated_at:new Date().toISOString()}).eq('id',s.dataset.status);s.disabled=false;if(error)alert(error.message);});}
-async function init(){try{if(!url||!key)throw new Error('Supabase browser configuration is missing.');supabase=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const {data:{session},error:sessionError}=await supabase.auth.getSession();if(sessionError)throw new Error(sessionError.message);if(!session?.user){location.href=`/login?next=${encodeURIComponent('/admin/orders')}`;return;}const {data:isAdmin,error}=await supabase.rpc('is_admin');if(error)throw new Error(error.message);if(!isAdmin){guard.innerHTML='<h2>Access denied</h2><a class="button" href="/">Back to store</a>';return;}guard.hidden=true;app.hidden=false;await load();}catch(error){guard.textContent=error?.message||'Could not load orders.';}}
+
+const STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+const LABELS: Record<string, string> = { pending: 'Pending', confirmed: 'Confirmed', processing: 'Preparing', shipped: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' };
+const PAGE_SIZE = 25;
+// Order fields come from anonymous checkout input, so everything rendered as HTML is escaped.
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+const money = (n: unknown) => `$${Number(n || 0).toFixed(2)}`;
+const toast = (message: string, tone = 'success') => (window as any).adminToast?.(message, tone);
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+
+let supabase: ReturnType<typeof createClient>;
+let orders: any[] = [];
+const itemsByOrder = new Map<string, any[]>();
+const params = new URLSearchParams(location.search);
+let statusFilter = STATUSES.includes(params.get('status') || '') ? String(params.get('status')) : 'all';
+let visible = PAGE_SIZE;
+const expanded = new Set<string>();
+$<HTMLInputElement>('#order-search').value = params.get('q') || '';
+
+// wa.me needs an international number; Lebanese numbers without a country code get 961.
+const whatsappNumber = (phone: string) => {
+  let digits = String(phone || '').replace(/\D/g, '').replace(/^00/, '');
+  if (digits.length <= 8) digits = `961${digits.replace(/^0/, '')}`;
+  return digits;
+};
+const trackingLink = (order: any) => `${location.origin}/track-order?order=${encodeURIComponent(order.order_number)}`;
+const whatsappMessage = (order: any) => `Hi ${order.customer_name}, this is Clever Toys. Your order ${order.order_number} (${money(order.total)}) is now: ${LABELS[order.status] || order.status}. Track it here: ${trackingLink(order)}`;
+
+function filtered() {
+  const q = $<HTMLInputElement>('#order-search').value.trim().toLowerCase();
+  const from = $<HTMLInputElement>('#date-from').value;
+  const to = $<HTMLInputElement>('#date-to').value;
+  const sort = $<HTMLSelectElement>('#order-sort').value;
+  const list = orders.filter((o) => {
+    if (statusFilter !== 'all' && o.status !== statusFilter) return false;
+    if (from && new Date(o.created_at) < new Date(`${from}T00:00:00`)) return false;
+    if (to && new Date(o.created_at) > new Date(`${to}T23:59:59`)) return false;
+    if (!q) return true;
+    return [o.order_number, o.customer_name, o.customer_phone, o.customer_email].some((v) => String(v || '').toLowerCase().includes(q)) || String(o.customer_phone || '').replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§');
+  });
+  if (sort === 'oldest') list.sort((a, b) => a.created_at.localeCompare(b.created_at));
+  else if (sort === 'total') list.sort((a, b) => Number(b.total) - Number(a.total));
+  else list.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return list;
+}
+
+function renderTabs() {
+  const counts: Record<string, number> = { all: orders.length };
+  for (const s of STATUSES) counts[s] = orders.filter((o) => o.status === s).length;
+  $('#status-tabs').innerHTML = ['all', ...STATUSES].map((s) => `<button type="button" role="tab" class="chip${statusFilter === s ? ' active' : ''}" aria-selected="${statusFilter === s}" data-status-tab="${s}">${s === 'all' ? 'All' : LABELS[s]} <b>${counts[s]}</b></button>`).join('');
+}
+
+function detailsHtml(o: any) {
+  const items = itemsByOrder.get(o.id);
+  const itemRows = items ? (items.length ? items.map((i) => `<tr><td>${esc(i.product_name)}${i.variant_name ? `<small> · ${esc(i.variant_name)}</small>` : ''}${i.sku ? `<br><small>SKU ${esc(i.sku)}</small>` : ''}</td><td>${Number(i.quantity)}</td><td>${money(i.unit_price)}</td><td>${money(i.total_price)}</td></tr>`).join('') : '<tr><td colspan="4">No items recorded.</td></tr>') : '<tr><td colspan="4">Loading items…</td></tr>';
+  return `<div class="order-details">
+    <div class="order-detail-grid">
+      <div><h3>Customer</h3><p><strong>${esc(o.customer_name)}</strong></p><p><a href="tel:${esc(o.customer_phone)}">${esc(o.customer_phone)}</a></p>${o.customer_email ? `<p><a href="mailto:${esc(o.customer_email)}">${esc(o.customer_email)}</a></p>` : ''}</div>
+      <div><h3>Delivery address</h3><p>${esc([o.governorate, o.city, o.area].filter(Boolean).join(', '))}</p><p>${esc(o.address)}</p></div>
+      <div><h3>Notes</h3><p>${o.notes ? esc(o.notes) : '<span class="muted">No notes</span>'}</p></div>
+    </div>
+    <table class="items-table"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody>
+    <tfoot><tr><td colspan="3">Subtotal</td><td>${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr>${Number(o.discount) ? `<tr><td colspan="3">Discount</td><td>−${money(o.discount)}</td></tr>` : ''}<tr class="grand"><td colspan="3">Total (cash on delivery)</td><td>${money(o.total)}</td></tr></tfoot></table>
+    <div class="order-actions">
+      <a class="button whatsapp-action" target="_blank" rel="noopener" href="https://wa.me/${whatsappNumber(o.customer_phone)}?text=${encodeURIComponent(whatsappMessage(o))}">💬 Message on WhatsApp</a>
+      <button class="button secondary-button" type="button" data-print="${o.id}">🧾 Print invoice</button>
+      <button class="button secondary-button" type="button" data-copy-link="${o.id}">🔗 Copy tracking link</button>
+    </div>
+  </div>`;
+}
+
+function render() {
+  renderTabs();
+  const list = filtered();
+  const revenue = list.filter((o) => o.status !== 'cancelled').reduce((s, o) => s + Number(o.total || 0), 0);
+  $('#orders-summary').textContent = `${list.length} order${list.length === 1 ? '' : 's'} · ${money(revenue)} excluding cancelled`;
+  const page = list.slice(0, visible);
+  $('#orders-list').innerHTML = page.length ? page.map((o) => `<article class="order-card${expanded.has(o.id) ? ' open' : ''}" data-order="${o.id}">
+    <div class="order-row">
+      <button type="button" class="order-toggle" aria-expanded="${expanded.has(o.id)}" data-toggle="${o.id}"><span class="chev" aria-hidden="true">›</span><span><strong>${esc(o.order_number)}</strong><small>${new Date(o.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</small></span></button>
+      <div class="order-customer"><strong>${esc(o.customer_name)}</strong><small>${esc(o.customer_phone)} · ${esc(o.city || o.governorate || '')}</small></div>
+      <strong class="order-total">${money(o.total)}</strong>
+      <span class="status-pill status-${esc(o.status)}">${esc(LABELS[o.status] || o.status)}</span>
+      <div class="order-status-edit">
+        <label class="sr-only" for="status-${o.id}">Status for ${esc(o.order_number)}</label>
+        <select id="status-${o.id}" class="admin-input" data-status="${o.id}">${STATUSES.map((s) => `<option value="${s}"${o.status === s ? ' selected' : ''}>${LABELS[s]}</option>`).join('')}</select>
+        ${o.status === 'pending' ? `<button type="button" class="small-button" data-confirm="${o.id}">Confirm</button>` : ''}
+      </div>
+    </div>
+    ${expanded.has(o.id) ? detailsHtml(o) : ''}
+  </article>`).join('') : '<div class="empty-state"><h2>No orders match</h2><p>Try another status, search or date range.</p></div>';
+  $('#load-more').hidden = list.length <= visible;
+}
+
+async function loadItems(orderId: string) {
+  if (itemsByOrder.has(orderId)) return;
+  const r = await supabase.from('order_items').select('order_id,product_name,variant_name,sku,quantity,unit_price,total_price').eq('order_id', orderId);
+  itemsByOrder.set(orderId, (r.data ?? []) as any[]);
+}
+
+async function setStatus(id: string, status: string) {
+  const order = orders.find((o) => o.id === id);
+  if (!order || order.status === status) return;
+  const previous = order.status;
+  order.status = status;
+  render();
+  const r = await supabase.from('orders').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  if (r.error) { order.status = previous; render(); toast(`Could not update ${order.order_number}: ${r.error.message}`, 'error'); return; }
+  toast(`${order.order_number} marked ${LABELS[status]}.`);
+}
+
+function printInvoice(o: any) {
+  const items = itemsByOrder.get(o.id) || [];
+  const win = window.open('', '_blank', 'width=800,height=900');
+  if (!win) { toast('Allow pop-ups to print invoices.', 'error'); return; }
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${esc(o.order_number)}</title><style>body{font-family:system-ui,sans-serif;color:#1b1530;margin:40px}h1{margin:0}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}td:last-child,th:last-child{text-align:right}.meta{display:flex;justify-content:space-between;gap:24px;margin-top:24px}.total td{font-weight:800;font-size:1.1em}small{color:#666}</style></head><body>
+    <h1>Clever Toys</h1><small>Invoice · Cash on delivery</small>
+    <div class="meta"><div><strong>Bill to</strong><br>${esc(o.customer_name)}<br>${esc(o.customer_phone)}<br>${esc([o.governorate, o.city, o.area].filter(Boolean).join(', '))}<br>${esc(o.address)}</div><div><strong>Order ${esc(o.order_number)}</strong><br>${new Date(o.created_at).toLocaleString()}<br>Status: ${esc(LABELS[o.status] || o.status)}</div></div>
+    <table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${items.map((i) => `<tr><td>${esc(i.product_name)}${i.variant_name ? ` · ${esc(i.variant_name)}` : ''}</td><td>${Number(i.quantity)}</td><td>${money(i.unit_price)}</td><td>${money(i.total_price)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr><td colspan="3">Subtotal</td><td>${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr><tr class="total"><td colspan="3">Total due on delivery</td><td>${money(o.total)}</td></tr></tfoot></table>
+    ${o.notes ? `<p><strong>Notes:</strong> ${esc(o.notes)}</p>` : ''}<p><small>Thank you for shopping with Clever Toys!</small></p></body></html>`);
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+function exportCsv() {
+  const rows = filtered();
+  const cell = (v: unknown) => { const text = String(v ?? ''); return /[",\n]/.test(text) || /^[=+\-@]/.test(text) ? `"${text.replace(/^([=+\-@])/, "'$1").replace(/"/g, '""')}"` : text; };
+  const header = ['Order', 'Date', 'Status', 'Customer', 'Phone', 'Email', 'Governorate', 'City', 'Area', 'Address', 'Subtotal', 'Delivery', 'Total', 'Notes'];
+  const lines = [header, ...rows.map((o) => [o.order_number, new Date(o.created_at).toISOString(), o.status, o.customer_name, o.customer_phone, o.customer_email, o.governorate, o.city, o.area, o.address, o.subtotal, o.delivery_fee, o.total, o.notes])].map((r) => r.map(cell).join(','));
+  const blob = new Blob([`﻿${lines.join('\n')}`], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `clever-toys-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`Exported ${rows.length} orders.`);
+}
+
+async function load() {
+  const r = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(1000);
+  if (r.error) throw new Error(r.error.message);
+  orders = (r.data ?? []) as any[];
+  render();
+}
+
+document.addEventListener('click', async (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const tab = target?.closest<HTMLElement>('[data-status-tab]');
+  if (tab) { statusFilter = tab.dataset.statusTab || 'all'; visible = PAGE_SIZE; const u = new URL(location.href); if (statusFilter === 'all') u.searchParams.delete('status'); else u.searchParams.set('status', statusFilter); history.replaceState(null, '', u); render(); return; }
+  const toggle = target?.closest<HTMLElement>('[data-toggle]');
+  if (toggle) { const id = toggle.dataset.toggle!; if (expanded.has(id)) expanded.delete(id); else { expanded.add(id); render(); await loadItems(id); } render(); return; }
+  const confirmBtn = target?.closest<HTMLElement>('[data-confirm]');
+  if (confirmBtn) { await setStatus(confirmBtn.dataset.confirm!, 'confirmed'); return; }
+  const print = target?.closest<HTMLElement>('[data-print]');
+  if (print) { const o = orders.find((x) => x.id === print.dataset.print); if (o) { await loadItems(o.id); printInvoice(o); } return; }
+  const copy = target?.closest<HTMLElement>('[data-copy-link]');
+  if (copy) { const o = orders.find((x) => x.id === copy.dataset.copyLink); if (o) { try { await navigator.clipboard.writeText(trackingLink(o)); toast('Tracking link copied.'); } catch { toast(trackingLink(o)); } } }
+});
+document.addEventListener('change', (event) => {
+  const select = event.target instanceof HTMLSelectElement && event.target.dataset.status ? event.target : null;
+  if (select) setStatus(select.dataset.status!, select.value);
+});
+['#order-search', '#date-from', '#date-to', '#order-sort'].forEach((sel) => $(sel).addEventListener('input', () => { visible = PAGE_SIZE; render(); }));
+$('#load-more').addEventListener('click', () => { visible += PAGE_SIZE; render(); });
+$('#export-csv').addEventListener('click', exportCsv);
+$('#refresh').addEventListener('click', async () => { itemsByOrder.clear(); await load(); toast('Orders refreshed.'); });
+
+async function init() {
+  const guard = $('#guard');
+  try {
+    const cfg = $('#auth-config');
+    const url = cfg.dataset.url, key = cfg.dataset.key;
+    if (!url || !key) throw new Error('Supabase browser configuration is missing.');
+    supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) { location.href = `/login?next=${encodeURIComponent('/admin/orders')}`; return; }
+    const { data: isAdmin, error } = await supabase.rpc('is_admin');
+    if (error) throw new Error(error.message);
+    if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><a class="button" href="/">Back to store</a>'; return; }
+    guard.hidden = true;
+    $('#orders-app').hidden = false;
+    await load();
+  } catch (error) {
+    guard.hidden = false;
+    guard.textContent = error instanceof Error ? error.message : 'Could not load orders.';
+  }
+}
 init();
 </script>
-<style>
-.order-items{min-width:180px}.order-items>div{margin:3px 0}.order-items small{display:block;color:var(--muted)}.order-note{display:block;max-width:180px;margin-top:6px;color:var(--muted)}@media(max-width:900px){.order-items{min-width:140px}}
+
+<style is:global>
+.quick-actions{display:flex;gap:10px;flex-wrap:wrap}
+.orders-toolbar{display:grid;gap:14px;margin-bottom:16px}
+.orders-filters{display:grid;grid-template-columns:minmax(220px,1fr) auto auto auto;gap:10px;align-items:end}
+.date-filter{display:grid;gap:4px;color:var(--muted);font-size:.75rem;font-weight:800;text-transform:uppercase}
+.orders-list{display:grid;gap:10px}
+.order-card{border:1.5px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:var(--shadow-sm);transition:border-color .15s}
+.order-card.open{border-color:color-mix(in srgb,var(--brand-primary) 45%,var(--line))}
+.order-row{display:grid;grid-template-columns:minmax(200px,1.2fr) minmax(180px,1.3fr) 100px 120px minmax(190px,auto);gap:14px;align-items:center;padding:12px 16px}
+.order-toggle{display:flex;align-items:center;gap:10px;padding:0;border:0;background:none;text-align:left;cursor:pointer;color:inherit}
+.order-toggle small,.order-customer small{display:block;color:var(--muted);font-size:.8rem;font-weight:600}
+.chev{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--surface-2);font-size:1.2rem;transition:transform .2s}
+.order-card.open .chev{transform:rotate(90deg)}
+.order-total{font-family:var(--font-display);font-size:1.1rem;font-weight:600}
+.order-status-edit{display:flex;gap:6px;justify-content:flex-end}
+.order-status-edit select{min-height:38px;padding:6px 10px}
+.order-details{display:grid;gap:16px;padding:4px 16px 18px;border-top:1px dashed var(--line)}
+.order-detail-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;padding-top:14px}
+.order-detail-grid h3{margin:0 0 6px;font-family:var(--font-body);font-size:.75rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.order-detail-grid p{margin:0 0 4px}
+.order-detail-grid a{color:var(--primary-strong);font-weight:700}
+.items-table{min-width:0;border:1.5px solid var(--line);border-radius:14px;overflow:hidden;border-collapse:separate;border-spacing:0}
+.items-table td,.items-table th{padding:10px 12px}
+.items-table td:last-child,.items-table th:last-child{text-align:right}
+.items-table tfoot td{border-bottom:0;padding-top:6px;padding-bottom:6px;color:var(--muted);font-weight:700}
+.items-table tfoot .grand td{padding-top:10px;color:var(--ink);font-size:1.05rem;font-weight:900;border-top:1px solid var(--line)}
+.order-actions{display:flex;gap:8px;flex-wrap:wrap}
+.order-actions .button{min-height:42px;padding:0 16px;font-size:.9rem}
+.whatsapp-action{background:#25d366!important;box-shadow:0 3px 0 #1a9e4b!important}
+.load-more-wrap{display:flex;justify-content:center;margin-top:18px}
+@media(max-width:1100px){.order-row{grid-template-columns:1fr auto;grid-template-areas:"toggle total" "customer status" "edit edit"}.order-toggle{grid-area:toggle}.order-customer{grid-area:customer}.order-total{grid-area:total;text-align:right}.order-row .status-pill{grid-area:status;justify-self:end}.order-status-edit{grid-area:edit;justify-content:flex-start}.orders-filters{grid-template-columns:1fr 1fr}.orders-filters #order-search{grid-column:1/-1}.order-detail-grid{grid-template-columns:1fr}}
+@media(max-width:560px){.order-actions .button{flex:1 1 100%}}
 </style>

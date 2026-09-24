@@ -18,10 +18,15 @@
   const readCart = () => { try { const items = JSON.parse(localStorage.getItem(CART_KEY) || '[]'); return Array.isArray(items) ? items.filter(i => i && Number(i.quantity) > 0) : []; } catch { return []; } };
   const cartCount = () => readCart().reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0), 0);
   const normalizeCartLink = link => { if (!(link instanceof HTMLAnchorElement)) return; link.classList.add('cart-link'); link.innerHTML = '<span class="cart-icon" aria-hidden="true">🛒</span><span class="cart-label">Cart</span><span class="cart-count-badge" aria-hidden="true"></span>'; };
+  let lastCartCount = null;
+  const bump = element => { if (!element || element.hidden) return; element.classList.remove('bump'); void element.offsetWidth; element.classList.add('bump'); element.addEventListener('animationend', () => element.classList.remove('bump'), { once: true }); };
   const updateCartUI = () => {
     const count = cartCount();
+    const grew = lastCartCount !== null && count > lastCartCount;
+    lastCartCount = count;
     document.querySelectorAll('.site-header a[href="/cart"],.site-header a[href="/cart/"]').forEach(link => { normalizeCartLink(link); const badge = link.querySelector('.cart-count-badge'); if (badge) { badge.textContent = String(count); badge.hidden = count === 0; } link.setAttribute('aria-label', count ? `Shopping cart, ${count} ${count === 1 ? 'item' : 'items'}` : 'Shopping cart'); });
     const floating = document.getElementById('clever-floating-cart');
+    if (grew) requestAnimationFrame(() => document.querySelectorAll('.site-header .cart-count-badge, .floating-cart-count').forEach(bump));
     if (floating) { const badge = floating.querySelector('.floating-cart-count'); if (badge) { badge.textContent = String(count); badge.hidden = count === 0; } floating.setAttribute('aria-label', count ? `Shopping cart, ${count} ${count === 1 ? 'item' : 'items'}` : 'Shopping cart'); }
   };
   const ensureControls = () => {
@@ -51,6 +56,30 @@
   const showImageAt = index => { if (!imageViewerState.images.length) return; const total = imageViewerState.images.length; imageViewerState.index = (index + total) % total; renderImageViewer(); };
   const openImageViewer = (clickedSrc, clickedAlt) => { ensureImageViewerStyles(); let viewer = document.getElementById('clever-image-viewer'); if (!viewer) { viewer = document.createElement('div'); viewer.id = 'clever-image-viewer'; viewer.className = 'clever-image-viewer'; viewer.setAttribute('role', 'dialog'); viewer.setAttribute('aria-modal', 'true'); viewer.setAttribute('aria-hidden', 'true'); viewer.innerHTML = `<button class="clever-image-viewer-button clever-image-viewer-close" type="button" aria-label="Close image viewer">×</button><button class="clever-image-viewer-button clever-image-viewer-prev" type="button" aria-label="Previous image">‹</button><div class="clever-image-viewer-image-wrap"><img class="clever-image-viewer-image" alt="" decoding="async" draggable="false" /></div><button class="clever-image-viewer-button clever-image-viewer-next" type="button" aria-label="Next image">›</button><div class="clever-image-viewer-counter" aria-live="polite"></div><div class="clever-image-viewer-hint">Click outside or press Esc to close</div>`; document.body.appendChild(viewer); viewer.addEventListener('click', event => { if (event.target === viewer || event.target === viewer.querySelector('.clever-image-viewer-image-wrap')) closeImageViewer(); }); viewer.querySelector('.clever-image-viewer-close')?.addEventListener('click', closeImageViewer); viewer.querySelector('.clever-image-viewer-prev')?.addEventListener('click', event => { event.stopPropagation(); showImageAt(imageViewerState.index - 1); }); viewer.querySelector('.clever-image-viewer-next')?.addEventListener('click', event => { event.stopPropagation(); showImageAt(imageViewerState.index + 1); }); document.addEventListener('keydown', event => { const open = document.getElementById('clever-image-viewer')?.classList.contains('is-open'); if (!open) return; if (event.key === 'Escape') closeImageViewer(); else if (event.key === 'ArrowLeft') showImageAt(imageViewerState.index - 1); else if (event.key === 'ArrowRight') showImageAt(imageViewerState.index + 1); }); let touchStartX = 0; let touchStartY = 0; viewer.addEventListener('touchstart', event => { const touch = event.changedTouches[0]; touchStartX = touch.clientX; touchStartY = touch.clientY; }, { passive: true }); viewer.addEventListener('touchend', event => { const touch = event.changedTouches[0]; const dx = touch.clientX - touchStartX; const dy = touch.clientY - touchStartY; if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) && imageViewerState.images.length > 1) showImageAt(imageViewerState.index + (dx < 0 ? 1 : -1)); }, { passive: true }); } imageViewerState.images = getViewerImages(); if (!imageViewerState.images.length) imageViewerState.images = [{ src: clickedSrc, alt: clickedAlt || STORE_NAME }]; const clickedIndex = imageViewerState.images.findIndex(item => item.src === clickedSrc); imageViewerState.index = clickedIndex >= 0 ? clickedIndex : 0; imageViewerState.previousOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; viewer.classList.add('is-open'); viewer.setAttribute('aria-hidden', 'false'); renderImageViewer(); };
   const bindImageViewer = () => { if (location.pathname.startsWith('/admin') || location.pathname === '/products' || location.pathname === '/products/' || /^\/products\/page\/\d+\/?$/.test(location.pathname)) return; document.querySelectorAll('img').forEach(img => { if (!(img instanceof HTMLImageElement)) return; if (img.closest('.clever-image-viewer') || img.classList.contains('site-logo-image') || img.closest('.logo') || img.closest('.clever-floating-controls')) return; if (img.closest('a, button')) return; if (img.dataset.cleverViewerBound === 'true') return; if (img.width < 60 && img.height < 60) return; img.dataset.cleverViewerBound = 'true'; img.classList.add('clever-image-clickable'); img.setAttribute('tabindex', '0'); img.setAttribute('role', 'button'); img.setAttribute('aria-label', img.alt ? `View ${img.alt}` : 'View image'); img.addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); openImageViewer(img.currentSrc || img.src, img.alt || STORE_NAME); }); img.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openImageViewer(img.currentSrc || img.src, img.alt || STORE_NAME); } }); }); };
+  // Fade cards and headings up as they scroll into view. Elements already on screen are left alone.
+  let revealObserver = null;
+  const initReveal = () => {
+    if (location.pathname.startsWith('/admin') || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    revealObserver ??= new IntersectionObserver(entries => entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const element = entry.target;
+      revealObserver.unobserve(element);
+      element.classList.add('reveal-in');
+      element.classList.remove('reveal-pending');
+      const done = event => { if (event.propertyName !== 'transform') return; element.removeEventListener('transitionend', done); element.classList.remove('reveal-in'); element.style.removeProperty('--reveal-delay'); };
+      element.addEventListener('transitionend', done);
+    }), { rootMargin: '0px 0px -6% 0px', threshold: 0.06 });
+    const fold = window.innerHeight;
+    document.querySelectorAll('.product-card, .category-card, .category-page-card, .benefit-grid > div, .section-header, .cart-item').forEach(element => {
+      if (element.dataset.reveal) return;
+      element.dataset.reveal = '1';
+      if (element.getBoundingClientRect().top < fold) return;
+      const index = element.parentElement ? [...element.parentElement.children].indexOf(element) % 4 : 0;
+      element.style.setProperty('--reveal-delay', `${index * 70}ms`);
+      element.classList.add('reveal-pending');
+      revealObserver.observe(element);
+    });
+  };
   const initVisitorAnalytics = () => {
     if (location.pathname.startsWith('/admin') || location.pathname.startsWith('/api')) return;
     if (document.querySelector('script[data-clever-visitor-analytics]')) return;
@@ -60,7 +89,7 @@
     script.dataset.cleverVisitorAnalytics = 'true';
     document.head.appendChild(script);
   };
-  const refresh = () => { detectDevice(); if (location.pathname.startsWith('/admin')) return; patchLogos(); ensureCartLinks(); ensureControls(); bindImageViewer(); initVisitorAnalytics(); updateCartUI(); };
+  const refresh = () => { detectDevice(); if (location.pathname.startsWith('/admin')) return; patchLogos(); ensureCartLinks(); ensureControls(); bindImageViewer(); initReveal(); initVisitorAnalytics(); updateCartUI(); };
   // The server injects the published theme into every page, so there is nothing to fetch here.
   applyCachedThemeImmediately(); refresh();
   window.addEventListener('resize', detectDevice, { passive: true }); window.addEventListener('orientationchange', detectDevice, { passive: true }); window.addEventListener('storage', e => { if (e.key === CART_KEY) refresh(); }); window.addEventListener('clever-cart-updated', refresh); window.addEventListener('cart-updated', refresh); window.addEventListener('pageshow', refresh); document.addEventListener('DOMContentLoaded', refresh);;

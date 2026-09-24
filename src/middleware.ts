@@ -185,9 +185,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify(branding).replace(/</g, '\\u003c')};</script>`;
   const earlyTheme = published.mode === 'theme' && published.theme ? `<style id="clever-theme">:root{${themeVariables(published.theme)}}</style>` : '';
   const fontLinks = '<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" media="print" onload="this.media=\'all\'" /><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700;800;900&display=swap" /></noscript>';
-  const storeScript = '<script src="/store-ui.js?v=20260924-3" defer></script><script src="/branding-ui.js?v=20260924-1" defer></script>';
-  const adminBrandingLink = path.startsWith('/admin') && !path.startsWith('/admin/branding') ? '<a href="/admin/branding">Branding</a>' : '';
-  const adminSeoLink = path.startsWith('/admin') && !path.startsWith('/admin/seo') ? '<a href="/admin/seo">SEO</a>' : '';
+  const storeScript = '<script src="/store-ui.js?v=20260924-4" defer></script><script src="/branding-ui.js?v=20260924-1" defer></script>';
   let output = html;
 
   // Several page templates have no <head> or <body>. Give every page a real <head> so the theme,
@@ -197,8 +195,10 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   }
   if (!/<meta\s+charset/i.test(output)) output = output.replace(/<head[^>]*>/i, (match) => `${match}<meta charset="utf-8" />`);
   if (!/<title>/i.test(output)) output = output.replace('</head>', '<title>Clever Toys Lebanon</title></head>');
+  const isAdmin = path === '/admin' || path.startsWith('/admin/');
+  const htmlArea = isAdmin ? ' data-area="admin"' : '';
   // Pages without an <html> element get no lang attribute, which screen readers rely on.
-  if (!/<html[\s>]/i.test(output)) output = /<!doctype html>/i.test(output) ? output.replace(/<!doctype html>/i, (match) => `${match}<html lang="en">`) : `<html lang="en">${output}`;
+  if (!/<html[\s>]/i.test(output)) output = /<!doctype html>/i.test(output) ? output.replace(/<!doctype html>/i, (match) => `${match}<html lang="en"${htmlArea}>`) : `<html lang="en"${htmlArea}>${output}`;
 
   // SEO defaults for pages that do not set their own tags.
   const isPrivatePage = /^\/(admin|account|cart|checkout|login|register|forgot-password|reset-password|order-success)(\/|$)/.test(path);
@@ -238,6 +238,24 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   }
 
   if (!output.includes('/store-ui.js')) output = output.replace('</head>', `${fontLinks}${earlyTheme}${storeConfig}${storeScript}</head>`);
+
+  if (isAdmin) {
+    // One admin layout for every admin page: sidebar navigation on desktop, compact top bar on phones.
+    const adminLinks: Array<[string, string, string]> = [
+      ['/admin/dashboard', 'Dashboard', '<path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 4v4h6V4z"/>'],
+      ['/admin/orders', 'Orders', '<path d="M6 3h12l2 5v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8zM4 8h16M9 12h6"/>'],
+      ['/admin', 'Products', '<path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/>'],
+      ['/admin/analytics', 'Visitors', '<path d="M3 20V10M9 20V4M15 20v-7M21 20v-11"/>'],
+      ['/admin/seo', 'SEO', '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'],
+      ['/admin/branding', 'Branding & settings', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>']
+    ];
+    const adminNav = adminLinks.map(([href, label, icon]) => `<a href="${href}"${path === href || (href !== '/admin' && path.startsWith(href + '/')) ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg><span>${label}</span></a>`).join('');
+    const adminSidebar = `<aside class="admin-sidebar" aria-label="Admin"><a href="/admin/dashboard" class="admin-brand"><span class="admin-brand-mark" aria-hidden="true">🧸</span><span>Clever Toys<small>Admin</small></span></a><nav class="admin-nav" aria-label="Admin navigation">${adminNav}</nav><div class="admin-sidebar-footer"><a href="/" target="_blank" rel="noopener">View store ↗</a><button type="button" id="admin-signout">Sign out</button></div></aside>`;
+    const adminHeaderPattern = /<header([^>]*class=["'][^"']*site-header[^"']*["'][^>]*)>[\s\S]*?<\/header>/i;
+    if (adminHeaderPattern.test(output)) output = output.replace(adminHeaderPattern, () => adminSidebar);
+    else output = output.replace('</head>', () => `</head>${adminSidebar}`);
+    output = output.replace('</head>', '<script src="/admin-ui.js?v=20260924-1" defer></script></head>');
+  }
 
   if (!path.startsWith('/admin')) {
     const headerSocials = (showWhatsapp || showInstagram)
@@ -279,8 +297,6 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     if (!output.includes('clever-floating-controls')) appendToBody(controls);
   }
 
-  if (adminBrandingLink && output.includes('</nav>') && !output.includes('/admin/branding')) output = output.replace('</nav>', `${adminBrandingLink}</nav>`);
-  if (adminSeoLink && output.includes('</nav>') && !output.includes('/admin/seo')) output = output.replace('</nav>', `${adminSeoLink}</nav>`);
 
   const headers = withSecurityHeaders(new Headers(response.headers));
   headers.set('content-type', 'text/html; charset=utf-8');

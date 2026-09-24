@@ -3,18 +3,195 @@ import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
-<header class="site-header"><div class="container header-inner"><a href="/admin" class="logo">Clever Toys Admin</a><nav class="main-nav"><a href="/admin">Products</a><a href="/admin/orders">Orders</a><a href="/admin/analytics">Visitors</a><a href="/">Store</a></nav></div></header>
-<main class="section"><div class="container"><div class="admin-head"><div><p class="eyebrow">Overview</p><h1>Dashboard</h1><p>Quick view of your store performance and inventory.</p></div><button id="logout" class="button secondary-button" type="button">Sign Out</button></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><div id="guard" class="empty-state">Checking admin access…</div><div id="dashboard" hidden><div class="stats-grid"><article class="stat-card"><span>Sales</span><strong id="sales">$0.00</strong><small>Delivered orders</small></article><article class="stat-card"><span>Orders today</span><strong id="today">0</strong><small>All statuses</small></article><article class="stat-card"><span>Pending</span><strong id="pending">0</strong><small>Need attention</small></article><article class="stat-card"><span>Products</span><strong id="products">0</strong><small>Active products</small></article><article class="stat-card"><span>Low stock</span><strong id="low">0</strong><small>1–5 units</small></article><article class="stat-card"><span>Out of stock</span><strong id="out">0</strong><small>Active products</small></article></div><section class="admin-panel dashboard-panel"><div class="panel-title"><h2>Recent orders</h2><a href="/admin/orders">View all</a></div><div id="recent"></div></section></div></div></main>
+<head>
+  <title>Dashboard | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow" id="greeting">Overview</p>
+        <h1>Dashboard</h1>
+        <p id="today-label">Your store at a glance.</p>
+      </div>
+      <div class="quick-actions">
+        <a class="button secondary-button" href="/admin/orders?status=pending">Review pending orders</a>
+        <a class="button" href="/admin?new=1">+ Add product</a>
+      </div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+    <div id="dashboard" hidden>
+      <section class="kpi-grid" aria-label="Key numbers">
+        <article class="kpi"><span>Revenue · 30 days</span><strong id="kpi-revenue">$0.00</strong><small id="kpi-revenue-delta"></small></article>
+        <article class="kpi"><span>Orders · 30 days</span><strong id="kpi-orders">0</strong><small id="kpi-orders-delta"></small></article>
+        <article class="kpi"><span>Average order</span><strong id="kpi-aov">$0.00</strong><small>Excludes cancelled orders</small></article>
+        <a class="kpi kpi-link" href="/admin/orders?status=pending"><span>Pending orders</span><strong id="kpi-pending">0</strong><small>Need confirmation →</small></a>
+        <a class="kpi kpi-link" href="/admin?filter=low"><span>Low stock</span><strong id="kpi-low">0</strong><small>5 or fewer left →</small></a>
+        <a class="kpi kpi-link" href="/admin?filter=out"><span>Out of stock</span><strong id="kpi-out">0</strong><small>Active products →</small></a>
+      </section>
+
+      <div class="dash-grid">
+        <section class="admin-panel chart-panel">
+          <div class="panel-title"><h2>Sales · last 14 days</h2><span class="muted" id="chart-total"></span></div>
+          <div id="sales-chart" class="sales-chart" role="img" aria-label="Daily revenue for the last 14 days"></div>
+        </section>
+        <section class="admin-panel">
+          <div class="panel-title"><h2>Orders by status</h2><a href="/admin/orders" class="text-link">All orders</a></div>
+          <div id="status-list" class="status-list"></div>
+        </section>
+        <section class="admin-panel">
+          <div class="panel-title"><h2>Top sellers · 30 days</h2></div>
+          <ol id="top-products" class="rank-list"></ol>
+        </section>
+        <section class="admin-panel">
+          <div class="panel-title"><h2>Restock soon</h2><a href="/admin?filter=low" class="text-link">Manage stock</a></div>
+          <ul id="low-stock" class="rank-list"></ul>
+        </section>
+      </div>
+
+      <section class="admin-panel">
+        <div class="panel-title"><h2>Recent orders</h2><a href="/admin/orders" class="text-link">View all</a></div>
+        <div id="recent"></div>
+      </section>
+    </div>
+  </div>
+</main>
+
 <script>
 import { createClient } from '@supabase/supabase-js';
+
 // Order fields come from anonymous checkout input, so everything rendered as HTML is escaped.
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const config=document.querySelector('#auth-config');const url=config?.dataset.url;const key=config?.dataset.key;const guard=document.querySelector('#guard');const dash=document.querySelector('#dashboard');let supabase;
-const money=n=>`$${Number(n||0).toFixed(2)}`;
-async function load(){const [orders,products]=await Promise.all([supabase.from('orders').select('order_number,customer_name,total,status,created_at').order('created_at',{ascending:false}),supabase.from('products').select('id,stock_quantity,is_active')]);if(orders.error||products.error){guard.textContent=(orders.error||products.error).message;return;}const os=orders.data||[],ps=products.data||[],today=new Date().toDateString();document.querySelector('#sales').textContent=money(os.filter(o=>o.status==='delivered').reduce((s,o)=>s+Number(o.total),0));document.querySelector('#today').textContent=os.filter(o=>new Date(o.created_at).toDateString()===today).length;document.querySelector('#pending').textContent=os.filter(o=>o.status==='pending').length;document.querySelector('#products').textContent=ps.filter(p=>p.is_active).length;document.querySelector('#low').textContent=ps.filter(p=>p.is_active&&p.stock_quantity>0&&p.stock_quantity<=5).length;document.querySelector('#out').textContent=ps.filter(p=>p.is_active&&p.stock_quantity===0).length;document.querySelector('#recent').innerHTML=os.length?`<div class="table-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Status</th><th>Date</th></tr></thead><tbody>${os.slice(0,8).map(o=>`<tr><td><strong>${esc(o.order_number)}</strong></td><td>${esc(o.customer_name)}</td><td>${money(o.total)}</td><td><span class="status-pill">${esc(o.status)}</span></td><td>${new Date(o.created_at).toLocaleDateString()}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty-state"><h2>No orders yet</h2></div>';}
-async function init(){try{if(!url||!key)throw new Error('Supabase browser configuration is missing.');supabase=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const {data:{session},error:sessionError}=await supabase.auth.getSession();if(sessionError)throw new Error(sessionError.message);if(!session?.user){location.href=`/login?next=${encodeURIComponent('/admin/dashboard')}`;return;}const {data:isAdmin,error}=await supabase.rpc('is_admin');if(error)throw new Error(error.message);if(!isAdmin){guard.innerHTML='<h2>Access denied</h2><a class="button" href="/">Back to store</a>';return;}guard.hidden=true;dash.hidden=false;await load();}catch(error){guard.textContent=error?.message||'Could not load dashboard.';}}
-init();document.querySelector('#logout').onclick=async()=>{if(supabase)await supabase.auth.signOut();location.href='/login';};
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+const money = (n: unknown) => `$${Number(n || 0).toFixed(2)}`;
+const DAY = 864e5;
+const STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+const $ = (id: string) => document.getElementById(id) as HTMLElement;
+
+const config = document.querySelector<HTMLElement>('#auth-config');
+const guard = $('guard');
+const dash = $('dashboard');
+let supabase: ReturnType<typeof createClient>;
+
+const delta = (current: number, previous: number) => {
+  if (!previous) return current ? 'New this month' : 'No change';
+  const pct = Math.round(((current - previous) / previous) * 100);
+  return `${pct >= 0 ? '▲' : '▼'} ${Math.abs(pct)}% vs previous 30 days`;
+};
+
+async function load() {
+  const since = new Date(Date.now() - 60 * DAY).toISOString();
+  const [ordersRes, productsRes, variantsRes] = await Promise.all([
+    supabase.from('orders').select('id,order_number,customer_name,total,status,created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(2000),
+    supabase.from('products').select('id,name,stock_quantity,is_active,primary_image_url'),
+    supabase.from('product_variants').select('id,product_id,name,stock_quantity,is_active')
+  ]);
+  const error = ordersRes.error || productsRes.error;
+  if (error) throw new Error(error.message);
+  const orders = (ordersRes.data ?? []) as any[];
+  const products = (productsRes.data ?? []) as any[];
+  const variants = (variantsRes.data ?? []) as any[];
+  const now = Date.now();
+  const valid = orders.filter((o) => o.status !== 'cancelled');
+  const inRange = (o: any, from: number, to: number) => { const t = new Date(o.created_at).getTime(); return t >= now - from * DAY && t < now - to * DAY; };
+  const last30 = valid.filter((o) => inRange(o, 30, 0));
+  const prev30 = valid.filter((o) => inRange(o, 60, 30));
+  const sum = (list: any[]) => list.reduce((s, o) => s + Number(o.total || 0), 0);
+
+  $('kpi-revenue').textContent = money(sum(last30));
+  $('kpi-revenue-delta').textContent = delta(sum(last30), sum(prev30));
+  $('kpi-orders').textContent = String(last30.length);
+  $('kpi-orders-delta').textContent = delta(last30.length, prev30.length);
+  $('kpi-aov').textContent = money(last30.length ? sum(last30) / last30.length : 0);
+  $('kpi-pending').textContent = String(orders.filter((o) => o.status === 'pending').length);
+  const active = products.filter((p) => p.is_active);
+  $('kpi-low').textContent = String(active.filter((p) => p.stock_quantity > 0 && p.stock_quantity <= 5).length);
+  $('kpi-out').textContent = String(active.filter((p) => p.stock_quantity <= 0).length);
+
+  // 14-day revenue bars
+  const days = Array.from({ length: 14 }, (_, i) => { const d = new Date(now - (13 - i) * DAY); d.setHours(0, 0, 0, 0); return d; });
+  const byDay = days.map((d) => { const next = d.getTime() + DAY; const list = valid.filter((o) => { const t = new Date(o.created_at).getTime(); return t >= d.getTime() && t < next; }); return { d, revenue: sum(list), count: list.length }; });
+  const max = Math.max(1, ...byDay.map((x) => x.revenue));
+  $('chart-total').textContent = `${money(byDay.reduce((s, x) => s + x.revenue, 0))} total`;
+  $('sales-chart').innerHTML = byDay.map((x) => `<div class="bar-col" title="${esc(x.d.toLocaleDateString())}: ${money(x.revenue)} · ${x.count} orders"><div class="bar-track"><i style="height:${Math.max(3, Math.round((x.revenue / max) * 100))}%"></i></div><span>${x.d.toLocaleDateString(undefined, { day: 'numeric' })}</span></div>`).join('');
+
+  const counts = STATUSES.map((s) => [s, orders.filter((o) => o.status === s).length] as const);
+  $('status-list').innerHTML = counts.map(([s, n]) => `<a href="/admin/orders?status=${s}" class="status-row"><span class="status-pill status-${s}">${s}</span><strong>${n}</strong></a>`).join('');
+
+  const ids = last30.map((o) => o.id).slice(0, 300);
+  let top: [string, number][] = [];
+  if (ids.length) {
+    const items = await supabase.from('order_items').select('order_id,product_name,quantity').in('order_id', ids);
+    const tally = new Map<string, number>();
+    for (const item of (items.data ?? []) as any[]) tally.set(item.product_name, (tally.get(item.product_name) || 0) + Number(item.quantity || 0));
+    top = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }
+  $('top-products').innerHTML = top.length ? top.map(([name, qty]) => `<li><span>${esc(name)}</span><strong>${qty} sold</strong></li>`).join('') : '<li class="muted">No sales in the last 30 days yet.</li>';
+
+  const productName = new Map(products.map((p) => [p.id, p.name]));
+  const low = [
+    ...active.filter((p) => p.stock_quantity <= 5).map((p) => ({ id: p.id, name: p.name, stock: p.stock_quantity })),
+    ...variants.filter((v) => v.is_active && v.stock_quantity <= 3 && productName.has(v.product_id)).map((v) => ({ id: v.product_id, name: `${productName.get(v.product_id)} · ${v.name}`, stock: v.stock_quantity }))
+  ].sort((a, b) => a.stock - b.stock).slice(0, 8);
+  $('low-stock').innerHTML = low.length ? low.map((p) => `<li><a href="/admin?edit=${encodeURIComponent(p.id)}">${esc(p.name)}</a><strong class="${p.stock <= 0 ? 'out' : 'low'}">${p.stock <= 0 ? 'Out of stock' : `${p.stock} left`}</strong></li>`).join('') : '<li class="muted">Everything is well stocked. 🎉</li>';
+
+  $('recent').innerHTML = orders.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Status</th><th>Date</th></tr></thead><tbody>${orders.slice(0, 8).map((o) => `<tr><td><a class="text-link" href="/admin/orders?q=${encodeURIComponent(o.order_number)}">${esc(o.order_number)}</a></td><td>${esc(o.customer_name)}</td><td>${money(o.total)}</td><td><span class="status-pill status-${esc(o.status)}">${esc(o.status)}</span></td><td>${new Date(o.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</td></tr>`).join('')}</tbody></table></div>`
+    : '<div class="empty-state"><h2>No orders yet</h2><p>New orders will appear here.</p></div>';
+}
+
+async function init() {
+  const hour = new Date().getHours();
+  $('greeting').textContent = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  $('today-label').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  try {
+    const url = config?.dataset.url, key = config?.dataset.key;
+    if (!url || !key) throw new Error('Supabase browser configuration is missing.');
+    supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) { location.href = `/login?next=${encodeURIComponent('/admin/dashboard')}`; return; }
+    const { data: isAdmin, error } = await supabase.rpc('is_admin');
+    if (error) throw new Error(error.message);
+    if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><a class="button" href="/">Back to store</a>'; return; }
+    guard.hidden = true;
+    dash.hidden = false;
+    await load();
+  } catch (error) {
+    guard.hidden = false;
+    guard.textContent = error instanceof Error ? error.message : 'Could not load dashboard.';
+  }
+}
+init();
 </script>
-<style>
-.stats-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:28px}.stat-card{padding:22px;border:1px solid var(--line);border-radius:16px;background:#fff}.stat-card span,.stat-card small{display:block;color:var(--muted)}.stat-card strong{display:block;margin:7px 0;font-size:2rem}.dashboard-panel{padding:22px}.status-pill{display:inline-block;padding:4px 8px;border-radius:999px;background:var(--surface-2);font-size:.8rem;font-weight:700}@media(max-width:700px){.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.stat-card strong{font-size:1.5rem}}
+
+<style is:global>
+.quick-actions{display:flex;gap:10px;flex-wrap:wrap}
+.kpi-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px;margin-bottom:18px}
+.kpi{display:grid;gap:4px;padding:18px;border:1.5px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:var(--shadow-sm)}
+.kpi span{color:var(--muted);font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.kpi strong{font-family:var(--font-display);font-size:1.75rem;font-weight:600;color:var(--ink)}
+.kpi small{color:var(--muted);font-size:.78rem;font-weight:700}
+.kpi-link{transition:transform .15s,border-color .15s}
+.kpi-link:hover{transform:translateY(-2px);border-color:var(--brand-primary)}
+.kpi-link small{color:var(--primary-strong)}
+.dash-grid{display:grid;grid-template-columns:1.6fr 1fr;gap:16px;margin-bottom:18px}
+.panel-title .muted,.muted{color:var(--muted);font-weight:700}
+.sales-chart{display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:6px;height:240px;align-items:end}
+.bar-col{display:grid;grid-template-rows:1fr auto;gap:6px;height:100%;text-align:center}
+.bar-track{display:flex;align-items:flex-end;height:100%;border-radius:10px;background:var(--surface-2)}
+.bar-track i{display:block;width:100%;border-radius:10px;background:var(--brand-gradient)}
+.bar-col span{color:var(--muted);font-size:.72rem;font-weight:700}
+.status-list{display:grid;gap:6px}
+.status-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:12px}
+.status-row:hover{background:var(--surface-2)}
+.rank-list{display:grid;gap:4px;margin:0;padding:0;list-style:none}
+.rank-list li{display:flex;justify-content:space-between;gap:12px;padding:9px 10px;border-radius:12px;font-weight:700}
+.rank-list li:nth-child(odd){background:var(--surface-2)}
+.rank-list a:hover{color:var(--primary-strong);text-decoration:underline}
+.rank-list strong.low{color:#8a5a00}.rank-list strong.out{color:var(--danger)}
+#recent .table-wrap{border:0}
+@media(max-width:1200px){.kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:900px){.dash-grid{grid-template-columns:1fr}}
+@media(max-width:560px){.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi strong{font-size:1.35rem}.sales-chart{height:170px;gap:3px}.quick-actions .button{flex:1}}
 </style>

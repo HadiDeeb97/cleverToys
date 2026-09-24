@@ -3,46 +3,626 @@ import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
-<header class="site-header"><div class="container header-inner"><a class="logo" href="/admin">Clever Toys Admin</a><nav class="main-nav"><a href="/admin/dashboard">Dashboard</a><a href="/admin/orders">Orders</a><a href="/">Store</a></nav></div></header>
-<main class="section"><div class="container"><div class="admin-head"><div><p class="eyebrow">Store management</p><h1>Products &amp; Categories</h1><p>Create, edit, delete products, manage variants, categories and images.</p></div><button id="logout" class="button secondary-button" type="button">Sign Out</button></div>
-<div id="cfg" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><div id="guard" class="empty-state">Checking admin access…</div><div id="error" class="empty-state" hidden></div>
-<div id="app" hidden>
-<section class="import-card"><h2>Excel import</h2><p>Download the template, fill it, then import your products. Use comma-separated category names in the <strong>categories</strong> column.</p><div class="import-actions"><button id="template" class="button secondary-button" type="button">Download Excel Template</button><input id="file" type="file" accept=".xlsx,.xls,.csv" /><button id="import" class="button" type="button">Import Excel</button></div><p id="msg" role="status"></p><div id="errors" class="import-errors" hidden></div></section>
-<div class="admin-tabs"><button class="tab active" data-tab="products" type="button">Products</button><button class="tab" data-tab="categories" type="button">Categories</button></div>
-<section id="products-tab"><div class="admin-grid"><form id="product-form" class="form-card"><h2 id="form-title">Add Product</h2><input type="hidden" name="id"/><label>Name<input name="name" required/></label><label>Slug<input name="slug" required/></label><label>SKU<input name="sku"/></label><label>Categories<select name="category_ids" id="category-select" multiple size="6"></select><small class="field-help">Hold Ctrl/Cmd to select multiple categories.</small></label><label>Price (USD)<input name="price" type="number" min="0" step="0.01" required/></label><label>Sale price<input name="sale_price" type="number" min="0" step="0.01"/></label><label>Stock quantity<input name="stock_quantity" type="number" min="0" value="0" required/></label><div class="variant-box"><div class="panel-title"><h3>Variants</h3><button id="add-variant" class="small-button" type="button">+ Add variant</button></div><div id="variant-list"></div><small>Use variants for size, color, model or pack size.</small></div><label>Age minimum<input name="age_min" type="number" min="0"/></label><label>Age maximum<input name="age_max" type="number" min="0"/></label><label>Brand<input name="brand"/></label><label>Short description<textarea name="short_description" rows="2"></textarea></label><label>Description<textarea name="description" rows="5"></textarea></label><label>SEO title<input name="seo_title" maxlength="70"/></label><label>SEO description<textarea name="seo_description" rows="3" maxlength="170"></textarea></label><label>Product images<input id="image-files" type="file" accept="image/jpeg,image/png,image/webp" multiple/></label><label class="check"><input name="is_featured" type="checkbox"/> Featured</label><label class="check"><input name="is_active" type="checkbox" checked/> Active</label><div class="form-actions"><button class="button" type="submit">Save Product</button><button id="clear" class="button secondary-button" type="button">Clear</button></div><p id="product-msg" role="status"></p></form><div><div class="panel-title"><h2>Products</h2><input id="search" placeholder="Search products…"/></div><div id="products" class="admin-list"></div></div></div></section>
-<section id="categories-tab" hidden><div class="admin-grid"><form id="category-form" class="form-card"><h2>Add Category</h2><label>Name<input name="name" required/></label><label>Slug<input name="slug" required/></label><label>Description<textarea name="description" rows="3"></textarea></label><button class="button" type="submit">Add Category</button><p id="category-msg" role="status"></p></form><div><h2>Categories</h2><div id="categories" class="admin-list"></div></div></div></section>
-</div></div></main>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<head>
+  <title>Products | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Catalog</p>
+        <h1>Products &amp; categories</h1>
+        <p id="catalog-summary">Loading catalog…</p>
+      </div>
+      <div class="quick-actions">
+        <button id="new-product" class="button" type="button">+ Add product</button>
+      </div>
+    </div>
+    <div id="cfg" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+    <div id="app" hidden>
+      <div class="admin-tabs" role="tablist">
+        <button class="tab active" data-tab="products" type="button" role="tab">Products</button>
+        <button class="tab" data-tab="categories" type="button" role="tab">Categories</button>
+        <button class="tab" data-tab="import" type="button" role="tab">Excel import</button>
+      </div>
+
+      <section id="products-tab" class="catalog-layout">
+        <div class="catalog-list admin-panel">
+          <div class="list-toolbar">
+            <label class="sr-only" for="search">Search products</label>
+            <input id="search" class="admin-input" type="search" placeholder="Search by name, SKU or brand" />
+            <select id="category-filter" class="admin-input" aria-label="Filter by category"><option value="">All categories</option></select>
+          </div>
+          <div id="product-filters" class="chip-row" role="tablist" aria-label="Filter products"></div>
+          <div id="products" class="product-rows"></div>
+        </div>
+
+        <form id="product-form" class="form-card product-editor" novalidate>
+          <div class="editor-head"><h2 id="form-title">Add product</h2><a id="view-on-store" class="text-link" target="_blank" rel="noopener" hidden>View on store ↗</a></div>
+          <input type="hidden" name="id" />
+          <label>Name<input name="name" required maxlength="160" /></label>
+          <div class="field-row"><label>Slug<input name="slug" required pattern="[a-z0-9\-]+" /></label><label>SKU<input name="sku" /></label></div>
+          <div class="field-row three"><label>Price (USD)<input name="price" type="number" min="0" step="0.01" required /></label><label>Sale price<input name="sale_price" type="number" min="0" step="0.01" /></label><label>Stock<input name="stock_quantity" type="number" min="0" value="0" required /></label></div>
+          <fieldset class="category-picker"><legend>Categories</legend><div id="category-checks" class="check-grid"></div></fieldset>
+          <div class="variant-box">
+            <div class="panel-title"><h3>Variants</h3><button id="add-variant" class="small-button" type="button">+ Add variant</button></div>
+            <div class="variant-head" id="variant-head" hidden><span>Name</span><span>SKU</span><span>Price</span><span>Sale</span><span>Stock</span><span></span></div>
+            <div id="variant-list"></div>
+            <small class="field-help">Sizes, colors or packs. Leave price empty to use the product price.</small>
+          </div>
+          <div class="image-box">
+            <h3>Images</h3>
+            <div id="image-list" class="image-list"></div>
+            <label>Add images<input id="image-files" type="file" accept="image/jpeg,image/png,image/webp" multiple /></label>
+            <small class="field-help">Images are converted to WebP. The first new image becomes the main image if there is none.</small>
+          </div>
+          <details class="more-fields">
+            <summary>Details, ages &amp; SEO</summary>
+            <div class="field-row"><label>Age minimum<input name="age_min" type="number" min="0" /></label><label>Age maximum<input name="age_max" type="number" min="0" /></label></div>
+            <label>Brand<input name="brand" /></label>
+            <label>Short description<textarea name="short_description" rows="2" maxlength="300"></textarea></label>
+            <label>Description<textarea name="description" rows="5"></textarea></label>
+            <label>SEO title <span>(max 70)</span><input name="seo_title" maxlength="70" /></label>
+            <label>SEO description <span>(max 170)</span><textarea name="seo_description" rows="3" maxlength="170"></textarea></label>
+          </details>
+          <div class="switch-line"><label><input class="toggle" name="is_active" type="checkbox" checked /> Visible in store</label><label><input class="toggle" name="is_featured" type="checkbox" /> Featured on home page</label></div>
+          <div class="form-actions"><button class="button" type="submit" id="save-product">Save product</button><button id="clear" class="button secondary-button" type="button">Clear</button></div>
+          <p id="product-msg" role="status"></p>
+        </form>
+      </section>
+
+      <section id="categories-tab" class="catalog-layout" hidden>
+        <div class="admin-panel">
+          <div class="panel-title"><h2>Categories</h2><small class="muted">Use ↑ ↓ to set the order shown in the store.</small></div>
+          <div id="categories" class="category-rows"></div>
+        </div>
+        <form id="category-form" class="form-card product-editor">
+          <h2 id="category-form-title">Add category</h2>
+          <input type="hidden" name="id" />
+          <label>Name<input name="name" required /></label>
+          <label>Slug<input name="slug" required pattern="[a-z0-9\-]+" /></label>
+          <label>Description<textarea name="description" rows="3"></textarea></label>
+          <label>SEO title <span>(optional)</span><input name="seo_title" maxlength="70" /></label>
+          <label>SEO description <span>(optional)</span><textarea name="seo_description" rows="2" maxlength="170"></textarea></label>
+          <div class="switch-line"><label><input class="toggle" name="is_active" type="checkbox" checked /> Visible in store</label></div>
+          <div class="form-actions"><button class="button" type="submit">Save category</button><button id="clear-category" class="button secondary-button" type="button">Clear</button></div>
+          <p id="category-msg" role="status"></p>
+        </form>
+      </section>
+
+      <section id="import-tab" class="admin-panel import-card" hidden>
+        <h2>Excel import</h2>
+        <p>Download the template, fill it in, then import. Products are matched by slug or SKU and updated; new ones are created. Put comma-separated category names in the <strong>categories</strong> column.</p>
+        <div class="import-actions"><button id="template" class="button secondary-button" type="button">Download Excel template</button><input id="file" type="file" accept=".xlsx,.xls,.csv" /><button id="import" class="button" type="button">Import file</button></div>
+        <p id="msg" role="status"></p>
+        <div id="errors" class="import-errors" hidden></div>
+      </section>
+    </div>
+  </div>
+</main>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" defer></script>
 <script>
 import { createClient } from '@supabase/supabase-js';
-const cfg=document.querySelector('#cfg');const url=cfg?.dataset.url,key=cfg?.dataset.key;const guard=document.querySelector('#guard'),app=document.querySelector('#app'),errorBox=document.querySelector('#error');let supabase,categories=[],products=[],variants=[];
-const esc=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
-const slugify=v=>String(v||'').toLowerCase().trim().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s-]/g,'').replace(/\s+/g,'-').replace(/-+/g,'-');
-const num=(v,d=null)=>{if(v===null||v===undefined||String(v).trim()==='')return d;const n=Number(String(v).replace(/[$,]/g,'').trim());return Number.isFinite(n)?n:d};
-const int=(v,d=null)=>{const n=num(v,d);return n===null?d:Math.trunc(n)};
-function showError(t){guard.hidden=true;app.hidden=true;errorBox.hidden=false;errorBox.innerHTML='<h2>Admin access could not be verified</h2><p>'+esc(t)+'</p><button class="button" onclick="location.reload()">Try again</button>';}
-function renderCategoryOptions(selected=[]){const s=new Set(selected);document.querySelector('#category-select').innerHTML=categories.map(c=>'<option value="'+c.id+'" '+(s.has(c.id)?'selected':'')+'>'+esc(c.name)+'</option>').join('');}
-async function load(){const[c,p]=await Promise.all([supabase.from('categories').select('*').order('sort_order').order('name'),supabase.from('products').select('*').order('created_at',{ascending:false})]);if(c.error||p.error)throw new Error((c.error||p.error).message);categories=c.data||[];products=p.data||[];renderCategoryOptions();renderProducts();renderCategories();}
-function renderProducts(){const q=document.querySelector('#search').value.toLowerCase();const list=products.filter(p=>p.name.toLowerCase().includes(q)||String(p.sku||'').toLowerCase().includes(q));document.querySelector('#products').innerHTML=list.length?list.map(p=>'<div class="admin-item"><div><strong>'+esc(p.name)+'</strong><small>'+esc(p.sku||'No SKU')+' · $'+Number(p.sale_price??p.price).toFixed(2)+' · stock '+p.stock_quantity+(p.is_active?'':' · inactive')+'</small></div><div class="item-actions"><button class="small-button" data-edit="'+p.id+'" type="button">Edit</button><button class="small-button danger-button" data-del="'+p.id+'" type="button">Delete</button></div></div>').join(''):'<p>No products found.</p>';document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editProduct(b.dataset.edit));document.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>deleteProduct(b.dataset.del));}
-function renderCategories(){document.querySelector('#categories').innerHTML=categories.length?categories.map(c=>'<div class="admin-item"><div><strong>'+esc(c.name)+'</strong><small>/'+esc(c.slug)+'</small></div><button class="small-button danger-button" data-cat="'+c.id+'" type="button">Delete</button></div>').join(''):'<p>No categories.</p>';document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>deleteCategory(b.dataset.cat));}
-function renderVariants(){const box=document.querySelector('#variant-list');box.innerHTML=variants.map((v,i)=>'<div class="variant-row" data-i="'+i+'"><input placeholder="Name" data-v="name" value="'+esc(v.name)+'"><input placeholder="SKU" data-v="sku" value="'+esc(v.sku||'')+'"><input placeholder="Price" type="number" step="0.01" data-v="price" value="'+(v.price??'')+'"><input placeholder="Sale" type="number" step="0.01" data-v="sale_price" value="'+(v.sale_price??'')+'"><input placeholder="Stock" type="number" min="0" data-v="stock_quantity" value="'+(v.stock_quantity??0)+'"><button class="small-button danger-button" type="button" data-rm="'+i+'">×</button></div>').join('');document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{variants.splice(Number(b.dataset.rm),1);renderVariants()});}
-function readVariants(){document.querySelectorAll('.variant-row').forEach(row=>{const i=Number(row.dataset.i);row.querySelectorAll('[data-v]').forEach(el=>variants[i][el.dataset.v]=el.value)});}
-async function getProductCategoryIds(id){const r=await supabase.from('product_categories').select('category_id').eq('product_id',id);if(r.error)throw new Error(r.error.message);return (r.data||[]).map(x=>x.category_id);}
-async function saveProductCategories(id,ids){const unique=[...new Set(ids.filter(Boolean))];const del=await supabase.from('product_categories').delete().eq('product_id',id);if(del.error)throw new Error(del.error.message);if(unique.length){const rows=unique.map(category_id=>({product_id:id,category_id}));const ins=await supabase.from('product_categories').insert(rows);if(ins.error)throw new Error(ins.error.message);}const primary=unique[0]||null;const up=await supabase.from('products').update({category_id:primary,updated_at:new Date().toISOString()}).eq('id',id);if(up.error)throw new Error(up.error.message);}
-async function editProduct(id){const p=products.find(x=>x.id===id);if(!p)return;const f=document.querySelector('#product-form');for(const[k,v] of Object.entries(p)){const e=f.elements.namedItem(k);if(!e||k==='category_id')continue;if(e.type==='checkbox')e.checked=Boolean(v);else e.value=v??'';}f.elements.namedItem('id').value=p.id;let categoryIds=[];try{categoryIds=await getProductCategoryIds(id);}catch(e){document.querySelector('#product-msg').textContent=e.message;return;}if(!categoryIds.length&&p.category_id)categoryIds=[p.category_id];renderCategoryOptions(categoryIds);const r=await supabase.from('product_variants').select('*').eq('product_id',id).order('created_at');if(r.error){document.querySelector('#product-msg').textContent=r.error.message;return;}variants=r.data||[];renderVariants();document.querySelector('#form-title').textContent='Edit Product';window.scrollTo({top:0,behavior:'smooth'});}
-async function deleteProduct(id){if(!confirm('Delete this product?'))return;const r=await supabase.from('products').delete().eq('id',id);if(r.error)alert(r.error.message);else{await load();clearForm();}}
-async function deleteCategory(id){if(!confirm('Delete this category?'))return;const r=await supabase.from('categories').delete().eq('id',id);if(r.error)alert(r.error.message);else await load();}
-async function toWebp(file){const bmp=await createImageBitmap(file),max=1800,scale=Math.min(1,max/Math.max(bmp.width,bmp.height)),c=document.createElement('canvas');c.width=Math.max(1,Math.round(bmp.width*scale));c.height=Math.max(1,Math.round(bmp.height*scale));c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);return await new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('WebP conversion failed')),'image/webp',.82));}
-async function uploadImages(id,files){for(let i=0;i<files.length;i++){const blob=await toWebp(files[i]);const path=id+'/'+Date.now()+'-'+i+'.webp';const up=await supabase.storage.from('product-images').upload(path,blob,{contentType:'image/webp',upsert:false});if(up.error)throw new Error(up.error.message);const pub=supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;const ins=await supabase.from('product_images').insert({product_id:id,image_url:pub,alt_text:files[i].name.replace(/\.[^.]+$/,''),sort_order:i,is_primary:i===0});if(ins.error)throw new Error(ins.error.message);if(i===0){const r=await supabase.from('products').update({primary_image_url:pub}).eq('id',id);if(r.error)throw new Error(r.error.message);}}}
-async function saveVariants(id){readVariants();const old=await supabase.from('product_variants').select('*').eq('product_id',id);if(old.error)throw new Error(old.error.message);for(const o of old.data||[]){if(!variants.some(v=>v.id===o.id)){const d=await supabase.from('product_variants').delete().eq('id',o.id);if(d.error)throw new Error(d.error.message);}}for(const v of variants){if(!String(v.name||'').trim())continue;const data={product_id:id,name:String(v.name).trim(),sku:String(v.sku||'').trim()||null,price:num(v.price),sale_price:num(v.sale_price),stock_quantity:int(v.stock_quantity,0),attributes:v.attributes||{},is_active:true,updated_at:new Date().toISOString()};const r=v.id?await supabase.from('product_variants').update(data).eq('id',v.id):await supabase.from('product_variants').insert(data);if(r.error)throw new Error(r.error.message);}}
-function clearForm(){const f=document.querySelector('#product-form');f.reset();f.elements.namedItem('id').value='';f.elements.namedItem('is_active').checked=true;renderCategoryOptions([]);variants=[];renderVariants();document.querySelector('#form-title').textContent='Add Product';document.querySelector('#product-msg').textContent='';}
-document.querySelector('#search').oninput=renderProducts;document.querySelector('#clear').onclick=clearForm;document.querySelector('#add-variant').onclick=()=>{variants.push({name:'',sku:'',price:'',sale_price:'',stock_quantity:0});renderVariants()};document.querySelector('#logout').onclick=async()=>{await supabase.auth.signOut();location.href='/login';};
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');const productsTab=document.querySelector('#products-tab'),catsTab=document.querySelector('#categories-tab');productsTab.hidden=b.dataset.tab!=='products';catsTab.hidden=b.dataset.tab!=='categories';});
-document.querySelector('#product-form').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget,msg=document.querySelector('#product-msg');msg.textContent='Saving…';const fd=new FormData(f),id=String(fd.get('id')||''),name=String(fd.get('name')||'').trim(),selectedCategoryIds=fd.getAll('category_ids').map(String);const data={name,slug:String(fd.get('slug')||slugify(name)),sku:String(fd.get('sku')||'').trim()||null,category_id:selectedCategoryIds[0]||null,price:num(fd.get('price'),0),sale_price:num(fd.get('sale_price')),stock_quantity:int(fd.get('stock_quantity'),0),age_min:int(fd.get('age_min')),age_max:int(fd.get('age_max')),brand:String(fd.get('brand')||'').trim()||null,short_description:String(fd.get('short_description')||''),description:String(fd.get('description')||''),seo_title:String(fd.get('seo_title')||'').trim()||null,seo_description:String(fd.get('seo_description')||'').trim()||null,is_featured:fd.get('is_featured')==='on',is_active:fd.get('is_active')==='on',updated_at:new Date().toISOString()};const r=id?await supabase.from('products').update(data).eq('id',id).select().single():await supabase.from('products').insert(data).select().single();if(r.error){msg.textContent=r.error.message;return;}try{await saveProductCategories(r.data.id,selectedCategoryIds);const files=[...document.querySelector('#image-files').files];if(files.length)await uploadImages(r.data.id,files);await saveVariants(r.data.id);msg.textContent='Saved successfully.';clearForm();await load();}catch(err){msg.textContent=err?.message||'Save failed.';}};
-document.querySelector('#category-form').onsubmit=async e=>{e.preventDefault();const fd=new FormData(e.currentTarget),name=String(fd.get('name')||'').trim(),r=await supabase.from('categories').insert({name,slug:String(fd.get('slug')||slugify(name)),description:String(fd.get('description')||'')}).select().single();document.querySelector('#category-msg').textContent=r.error?r.error.message:'Category added.';if(!r.error){e.currentTarget.reset();await load();}};
-document.querySelector('#template').onclick=()=>{if(!window.XLSX)return;const h=['name','slug','sku','categories','price','sale_price','stock_quantity','age_min','age_max','brand','short_description','description','primary_image_url','seo_title','seo_description','is_active','is_featured'];const ws=XLSX.utils.aoa_to_sheet([h,['Example Toy','example-toy','CT-001','Educational Toys, Outdoor Toys',9.99,'',10,3,8,'Clever Toys','Short description','Description','','Example Toy | Clever Toys','Shop toys in Lebanon.',true,false]]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Products');XLSX.writeFile(wb,'Clever_Toys_Product_Import_Template.xlsx');};
-document.querySelector('#import').onclick=async()=>{const file=document.querySelector('#file').files?.[0],msg=document.querySelector('#msg'),errBox=document.querySelector('#errors');if(!file){msg.textContent='Choose a file first.';return;}if(!window.XLSX){msg.textContent='Excel tools still loading.';return;}msg.textContent='Importing…';const errors=[];try{const wb=XLSX.read(await file.arrayBuffer(),{type:'array'}),rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});let created=0,updated=0;for(let i=0;i<rows.length;i++){try{const row=rows[i],name=String(row.name||row.Name||'').trim();if(!name)throw new Error('Missing name');const slug=slugify(row.slug||name),price=num(row.price,null);if(price===null||price<0)throw new Error('Invalid price');const rawCats=String(row.categories||row.category||'').split(',').map(x=>x.trim()).filter(Boolean);const matchedCats=rawCats.map(name=>categories.find(c=>c.name.toLowerCase()===name.toLowerCase()||c.slug.toLowerCase()===slugify(name))).filter(Boolean);const payload={name,slug,sku:String(row.sku||'').trim()||null,category_id:matchedCats[0]?.id||null,price,sale_price:num(row.sale_price),stock_quantity:int(row.stock_quantity,0),age_min:int(row.age_min),age_max:int(row.age_max),brand:String(row.brand||'').trim()||null,short_description:String(row.short_description||''),description:String(row.description||''),primary_image_url:String(row.primary_image_url||'').trim()||null,seo_title:String(row.seo_title||'').trim()||null,seo_description:String(row.seo_description||'').trim()||null,is_active:String(row.is_active).toLowerCase()!=='false',is_featured:String(row.is_featured).toLowerCase()==='true',updated_at:new Date().toISOString()};let ex=products.find(p=>p.slug===slug);if(!ex&&payload.sku)ex=products.find(p=>p.sku===payload.sku);const r=ex?await supabase.from('products').update(payload).eq('id',ex.id).select().single():await supabase.from('products').insert(payload).select().single();if(r.error)throw new Error(r.error.message);await saveProductCategories(r.data.id,matchedCats.map(c=>c.id));ex?updated++:created++;}catch(x){errors.push('Row '+(i+2)+': '+(x?.message||'Unknown error'));}}msg.textContent='Import complete: '+created+' created, '+updated+' updated, '+errors.length+' failed.';if(errors.length){errBox.hidden=false;errBox.innerHTML='<strong>Import errors</strong>'+errors.slice(0,50).map(x=>'<p>'+esc(x)+'</p>').join('');}else errBox.hidden=true;await load();}catch(x){msg.textContent=x?.message||'Import failed.';}};
-async function init(){try{if(!url||!key)throw new Error('Supabase browser configuration is missing.');supabase=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const s=await supabase.auth.getSession();if(s.error)throw new Error(s.error.message);if(!s.data.session?.user){location.href='/login?next=%2Fadmin';return;}const a=await supabase.rpc('is_admin');if(a.error)throw new Error(a.error.message);if(!a.data){showError('This account is not an administrator.');return;}guard.hidden=true;app.hidden=false;await load();}catch(x){showError(x?.message||'Unknown admin error.');}}
+
+type Row = Record<string, any>;
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+const slugify = (v: unknown) => String(v || '').toLowerCase().trim().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+const num = (v: unknown, d: number | null = null) => { if (v === null || v === undefined || String(v).trim() === '') return d; const n = Number(String(v).replace(/[$,]/g, '').trim()); return Number.isFinite(n) ? n : d; };
+const int = (v: unknown, d: number | null = null) => { const n = num(v, d); return n === null ? d : Math.trunc(n); };
+const money = (n: unknown) => `$${Number(n || 0).toFixed(2)}`;
+const toast = (message: string, tone = 'success') => (window as any).adminToast?.(message, tone);
+const friendly = (message: string) => /duplicate key|unique/i.test(message) ? 'That slug or SKU is already used by another item. Choose a different one.' : message;
+
+let supabase: ReturnType<typeof createClient>;
+let categories: Row[] = [];
+let products: Row[] = [];
+let links: Row[] = [];
+let variants: Row[] = [];
+let images: Row[] = [];
+let productFilter = 'all';
+const params = new URLSearchParams(location.search);
+if (['active', 'hidden', 'featured', 'low', 'out'].includes(params.get('filter') || '')) productFilter = String(params.get('filter'));
+
+const form = $<HTMLFormElement>('#product-form');
+const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+
+async function load() {
+  const [c, p, l] = await Promise.all([
+    supabase.from('categories').select('*').order('sort_order').order('name'),
+    supabase.from('products').select('*').order('created_at', { ascending: false }),
+    supabase.from('product_categories').select('product_id,category_id')
+  ]);
+  const error = c.error || p.error;
+  if (error) throw new Error(error.message);
+  categories = (c.data ?? []) as Row[];
+  products = (p.data ?? []) as Row[];
+  links = (l.data ?? []) as Row[];
+  $('#category-filter').innerHTML = '<option value="">All categories</option>' + categories.map((cat) => `<option value="${cat.id}">${esc(cat.name)}</option>`).join('');
+  renderCategoryChecks(currentCategoryIds());
+  renderProducts();
+  renderCategories();
+  const active = products.filter((x) => x.is_active).length;
+  $('#catalog-summary').textContent = `${products.length} products (${active} visible) · ${categories.length} categories`;
+}
+
+const currentCategoryIds = () => [...form.querySelectorAll<HTMLInputElement>('#category-checks input:checked')].map((x) => x.value);
+function renderCategoryChecks(selected: string[] = []) {
+  const set = new Set(selected);
+  $('#category-checks').innerHTML = categories.length ? categories.map((cat) => `<label class="check-pill"><input type="checkbox" name="category_ids" value="${cat.id}"${set.has(cat.id) ? ' checked' : ''} /> ${esc(cat.name)}</label>`).join('') : '<small class="muted">Create a category first.</small>';
+}
+
+const FILTERS: Array<[string, string, (p: Row) => boolean]> = [
+  ['all', 'All', () => true],
+  ['active', 'Visible', (p) => p.is_active],
+  ['hidden', 'Hidden', (p) => !p.is_active],
+  ['featured', 'Featured', (p) => p.is_featured],
+  ['low', 'Low stock', (p) => p.stock_quantity > 0 && p.stock_quantity <= 5],
+  ['out', 'Out of stock', (p) => p.stock_quantity <= 0]
+];
+
+function renderProducts() {
+  $('#product-filters').innerHTML = FILTERS.map(([id, label, test]) => `<button type="button" class="chip${productFilter === id ? ' active' : ''}" data-filter="${id}">${label} <b>${products.filter(test).length}</b></button>`).join('');
+  const q = $<HTMLInputElement>('#search').value.trim().toLowerCase();
+  const cat = $<HTMLSelectElement>('#category-filter').value;
+  const test = FILTERS.find(([id]) => id === productFilter)?.[2] ?? (() => true);
+  const inCategory = cat ? new Set(links.filter((l) => l.category_id === cat).map((l) => l.product_id)) : null;
+  const list = products.filter((p) => test(p) && (!inCategory || inCategory.has(p.id) || p.category_id === cat) && (!q || [p.name, p.sku, p.brand].some((v) => String(v || '').toLowerCase().includes(q))));
+  const editingId = field('id').value;
+  $('#products').innerHTML = list.length ? list.map((p) => {
+    const price = Number(p.sale_price ?? p.price);
+    const stockClass = p.stock_quantity <= 0 ? 'out' : p.stock_quantity <= 5 ? 'low' : '';
+    return `<div class="product-row${editingId === p.id ? ' editing' : ''}${p.is_active ? '' : ' is-hidden'}">
+      <div class="product-thumb">${p.primary_image_url ? `<img src="${esc(p.primary_image_url)}" alt="" loading="lazy" />` : '🧸'}</div>
+      <div class="product-main"><button type="button" class="product-name" data-edit="${p.id}">${esc(p.name)}</button><small>${esc(p.sku || 'No SKU')} · ${money(price)}${p.sale_price != null ? ` <s>${money(p.price)}</s>` : ''}${p.is_featured ? ' · ⭐ Featured' : ''}</small></div>
+      <label class="stock-edit ${stockClass}" title="Stock">Stock<input type="number" min="0" value="${Number(p.stock_quantity)}" data-stock="${p.id}" aria-label="Stock for ${esc(p.name)}" /></label>
+      <label class="row-toggle" title="Visible in store"><input class="toggle" type="checkbox" data-active="${p.id}"${p.is_active ? ' checked' : ''} aria-label="Visible: ${esc(p.name)}" /></label>
+      <div class="item-actions"><button class="small-button" data-edit="${p.id}" type="button">Edit</button><button class="small-button" data-duplicate="${p.id}" type="button" title="Duplicate">Copy</button><a class="small-button" href="/product/${encodeURIComponent(p.slug)}" target="_blank" rel="noopener" title="View on store">↗</a><button class="small-button danger-button" data-del="${p.id}" type="button" aria-label="Delete ${esc(p.name)}">Delete</button></div>
+    </div>`;
+  }).join('') : '<div class="empty-state"><h2>No products here</h2><p>Try another filter or add a product.</p></div>';
+}
+
+function renderCategories() {
+  const counts = new Map<string, number>();
+  for (const l of links) counts.set(l.category_id, (counts.get(l.category_id) || 0) + 1);
+  $('#categories').innerHTML = categories.length ? categories.map((c, i) => `<div class="category-row${c.is_active === false ? ' is-hidden' : ''}">
+    <div class="order-buttons"><button type="button" class="small-button" data-move="${c.id}" data-dir="-1" aria-label="Move ${esc(c.name)} up"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" class="small-button" data-move="${c.id}" data-dir="1" aria-label="Move ${esc(c.name)} down"${i === categories.length - 1 ? ' disabled' : ''}>↓</button></div>
+    <div class="product-main"><button type="button" class="product-name" data-edit-cat="${c.id}">${esc(c.name)}</button><small>/${esc(c.slug)} · ${counts.get(c.id) || 0} products${c.is_active === false ? ' · hidden' : ''}</small></div>
+    <div class="item-actions"><button class="small-button" data-edit-cat="${c.id}" type="button">Edit</button><a class="small-button" href="/category/${encodeURIComponent(c.slug)}" target="_blank" rel="noopener" title="View on store">↗</a><button class="small-button danger-button" data-cat="${c.id}" type="button">Delete</button></div>
+  </div>`).join('') : '<div class="empty-state"><h2>No categories yet</h2><p>Add your first category on the right.</p></div>';
+}
+
+function renderVariants() {
+  $('#variant-head').hidden = variants.length === 0;
+  $('#variant-list').innerHTML = variants.map((v, i) => `<div class="variant-row" data-i="${i}"><input placeholder="Name" data-v="name" value="${esc(v.name)}" aria-label="Variant name"><input placeholder="SKU" data-v="sku" value="${esc(v.sku || '')}" aria-label="Variant SKU"><input placeholder="Price" type="number" step="0.01" min="0" data-v="price" value="${v.price ?? ''}" aria-label="Variant price"><input placeholder="Sale" type="number" step="0.01" min="0" data-v="sale_price" value="${v.sale_price ?? ''}" aria-label="Variant sale price"><input placeholder="0" type="number" min="0" data-v="stock_quantity" value="${v.stock_quantity ?? 0}" aria-label="Variant stock"><button class="small-button danger-button" type="button" data-rm="${i}" aria-label="Remove variant">×</button></div>`).join('');
+}
+const readVariants = () => document.querySelectorAll<HTMLElement>('.variant-row').forEach((row) => { const i = Number(row.dataset.i); row.querySelectorAll<HTMLInputElement>('[data-v]').forEach((el) => { variants[i][el.dataset.v!] = el.value; }); });
+
+function renderImages() {
+  const id = field('id').value;
+  const product = products.find((p) => p.id === id);
+  $('#image-list').innerHTML = images.length ? images.map((img) => `<figure class="image-item${product?.primary_image_url === img.image_url ? ' primary' : ''}"><img src="${esc(img.image_url)}" alt="${esc(img.alt_text || '')}" /><figcaption>${product?.primary_image_url === img.image_url ? '<span class="main-tag">Main</span>' : `<button type="button" class="small-button" data-primary-img="${img.id}">Make main</button>`}<button type="button" class="small-button danger-button" data-del-img="${img.id}" aria-label="Remove image">×</button></figcaption></figure>`).join('') : '<small class="muted">No images yet.</small>';
+}
+
+async function editProduct(id: string) {
+  const p = products.find((x) => x.id === id);
+  if (!p) return;
+  switchTab('products');
+  clearForm(false);
+  for (const [k, v] of Object.entries(p)) { const e = form.elements.namedItem(k) as HTMLInputElement | null; if (!e || k === 'category_id') continue; if (e.type === 'checkbox') e.checked = Boolean(v); else e.value = v ?? ''; }
+  field('slug').dataset.auto = '';
+  const ids = links.filter((l) => l.product_id === id).map((l) => l.category_id);
+  renderCategoryChecks(ids.length ? ids : p.category_id ? [p.category_id] : []);
+  $('#form-title').textContent = `Edit: ${p.name}`;
+  const view = $<HTMLAnchorElement>('#view-on-store'); view.href = `/product/${encodeURIComponent(p.slug)}`; view.hidden = false;
+  const [v, im] = await Promise.all([
+    supabase.from('product_variants').select('*').eq('product_id', id).order('created_at'),
+    supabase.from('product_images').select('*').eq('product_id', id).order('sort_order')
+  ]);
+  variants = (v.data ?? []) as Row[];
+  images = (im.data ?? []) as Row[];
+  renderVariants();
+  renderImages();
+  renderProducts();
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  field('name').focus({ preventScroll: true });
+}
+
+function clearForm(focus = true) {
+  form.reset();
+  field('id').value = '';
+  field('is_active').checked = true;
+  field('slug').dataset.auto = '1';
+  renderCategoryChecks([]);
+  variants = []; images = [];
+  renderVariants(); renderImages();
+  $('#form-title').textContent = 'Add product';
+  $('#view-on-store').hidden = true;
+  $('#product-msg').textContent = '';
+  renderProducts();
+  if (focus) { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); field('name').focus({ preventScroll: true }); }
+}
+
+async function saveProductCategories(id: string, ids: string[]) {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const del = await supabase.from('product_categories').delete().eq('product_id', id);
+  if (del.error) throw new Error(del.error.message);
+  if (unique.length) { const ins = await supabase.from('product_categories').insert(unique.map((category_id) => ({ product_id: id, category_id }))); if (ins.error) throw new Error(ins.error.message); }
+  const up = await supabase.from('products').update({ category_id: unique[0] || null, updated_at: new Date().toISOString() }).eq('id', id);
+  if (up.error) throw new Error(up.error.message);
+}
+
+async function toWebp(file: File) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1800 / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bmp.width * scale));
+  canvas.height = Math.max(1, Math.round(bmp.height * scale));
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  return new Promise<Blob>((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('WebP conversion failed'))), 'image/webp', 0.82));
+}
+
+async function uploadImages(id: string, files: File[]) {
+  const product = products.find((p) => p.id === id);
+  let hasPrimary = Boolean(product?.primary_image_url);
+  const start = images.length;
+  for (let i = 0; i < files.length; i++) {
+    const blob = await toWebp(files[i]);
+    const path = `${id}/${Date.now()}-${i}.webp`;
+    const up = await supabase.storage.from('product-images').upload(path, blob, { contentType: 'image/webp', upsert: false });
+    if (up.error) throw new Error(up.error.message);
+    const pub = supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+    const ins = await supabase.from('product_images').insert({ product_id: id, image_url: pub, alt_text: files[i].name.replace(/\.[^.]+$/, ''), sort_order: start + i, is_primary: !hasPrimary && i === 0 });
+    if (ins.error) throw new Error(ins.error.message);
+    if (!hasPrimary) { const r = await supabase.from('products').update({ primary_image_url: pub }).eq('id', id); if (r.error) throw new Error(r.error.message); hasPrimary = true; }
+  }
+}
+
+async function saveVariants(id: string) {
+  readVariants();
+  const old = await supabase.from('product_variants').select('id').eq('product_id', id);
+  if (old.error) throw new Error(old.error.message);
+  for (const o of (old.data ?? []) as Row[]) if (!variants.some((v) => v.id === o.id)) { const d = await supabase.from('product_variants').delete().eq('id', o.id); if (d.error) throw new Error(d.error.message); }
+  for (const v of variants) {
+    if (!String(v.name || '').trim()) continue;
+    const data = { product_id: id, name: String(v.name).trim(), sku: String(v.sku || '').trim() || null, price: num(v.price), sale_price: num(v.sale_price), stock_quantity: int(v.stock_quantity, 0), attributes: v.attributes || {}, is_active: true, updated_at: new Date().toISOString() };
+    const r = v.id ? await supabase.from('product_variants').update(data).eq('id', v.id) : await supabase.from('product_variants').insert(data);
+    if (r.error) throw new Error(friendly(r.error.message));
+  }
+}
+
+async function quickUpdate(id: string, changes: Row, message: string) {
+  const p = products.find((x) => x.id === id);
+  if (!p) return;
+  const before = { ...p };
+  Object.assign(p, changes);
+  renderProducts();
+  const r = await supabase.from('products').update({ ...changes, updated_at: new Date().toISOString() }).eq('id', id);
+  if (r.error) { Object.assign(p, before); renderProducts(); toast(r.error.message, 'error'); return; }
+  toast(message);
+}
+
+async function duplicateProduct(id: string) {
+  const p = products.find((x) => x.id === id);
+  if (!p) return;
+  let slug = `${p.slug}-copy`; let n = 2;
+  while (products.some((x) => x.slug === slug)) slug = `${p.slug}-copy-${n++}`;
+  const { id: _id, created_at, updated_at, ...rest } = p;
+  const r = await supabase.from('products').insert({ ...rest, name: `${p.name} (copy)`, slug, sku: null, is_active: false, is_featured: false }).select().single();
+  if (r.error) { toast(friendly(r.error.message), 'error'); return; }
+  const copyId = (r.data as Row).id;
+  const cats = links.filter((l) => l.product_id === id).map((l) => l.category_id);
+  if (cats.length) await supabase.from('product_categories').insert(cats.map((category_id) => ({ product_id: copyId, category_id })));
+  await load();
+  toast('Copied as a hidden product. Edit it, then make it visible.');
+  editProduct(copyId);
+}
+
+async function moveCategory(id: string, dir: number) {
+  const i = categories.findIndex((c) => c.id === id);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= categories.length) return;
+  [categories[i], categories[j]] = [categories[j], categories[i]];
+  renderCategories();
+  const updates = categories.map((c, index) => supabase.from('categories').update({ sort_order: index }).eq('id', c.id));
+  const results = await Promise.all(updates);
+  const failed = results.find((r) => r.error);
+  if (failed?.error) { toast(failed.error.message, 'error'); await load(); return; }
+  categories.forEach((c, index) => { c.sort_order = index; });
+  toast('Category order saved.');
+}
+
+function editCategory(id: string) {
+  const c = categories.find((x) => x.id === id);
+  if (!c) return;
+  const f = $<HTMLFormElement>('#category-form');
+  for (const name of ['id', 'name', 'slug', 'description', 'seo_title', 'seo_description']) (f.elements.namedItem(name) as HTMLInputElement).value = c[name] ?? '';
+  (f.elements.namedItem('is_active') as HTMLInputElement).checked = c.is_active !== false;
+  (f.elements.namedItem('slug') as HTMLInputElement).dataset.auto = '';
+  $('#category-form-title').textContent = `Edit: ${c.name}`;
+  f.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function clearCategoryForm() {
+  const f = $<HTMLFormElement>('#category-form');
+  f.reset();
+  (f.elements.namedItem('id') as HTMLInputElement).value = '';
+  (f.elements.namedItem('slug') as HTMLInputElement).dataset.auto = '1';
+  $('#category-form-title').textContent = 'Add category';
+  $('#category-msg').textContent = '';
+}
+
+function switchTab(tab: string) {
+  document.querySelectorAll<HTMLElement>('.tab').forEach((x) => { x.classList.toggle('active', x.dataset.tab === tab); x.setAttribute('aria-selected', String(x.dataset.tab === tab)); });
+  $('#products-tab').hidden = tab !== 'products';
+  $('#categories-tab').hidden = tab !== 'categories';
+  $('#import-tab').hidden = tab !== 'import';
+}
+
+// ----- events -----
+document.addEventListener('click', async (event) => {
+  const t = event.target instanceof Element ? event.target : null;
+  if (!t) return;
+  const tab = t.closest<HTMLElement>('.tab'); if (tab) { switchTab(tab.dataset.tab!); return; }
+  const filter = t.closest<HTMLElement>('[data-filter]'); if (filter) { productFilter = filter.dataset.filter!; renderProducts(); return; }
+  const edit = t.closest<HTMLElement>('[data-edit]'); if (edit) { editProduct(edit.dataset.edit!); return; }
+  const dup = t.closest<HTMLElement>('[data-duplicate]'); if (dup) { duplicateProduct(dup.dataset.duplicate!); return; }
+  const del = t.closest<HTMLElement>('[data-del]');
+  if (del) {
+    const p = products.find((x) => x.id === del.dataset.del);
+    if (!p || !confirm(`Delete "${p.name}"? This cannot be undone. Tip: hide it instead to keep its order history tidy.`)) return;
+    const r = await supabase.from('products').delete().eq('id', p.id);
+    if (r.error) { toast(r.error.message, 'error'); return; }
+    if (field('id').value === p.id) clearForm(false);
+    await load(); toast(`Deleted ${p.name}.`); return;
+  }
+  const rm = t.closest<HTMLElement>('[data-rm]'); if (rm) { readVariants(); variants.splice(Number(rm.dataset.rm), 1); renderVariants(); return; }
+  const primary = t.closest<HTMLElement>('[data-primary-img]');
+  if (primary) {
+    const img = images.find((x) => x.id === primary.dataset.primaryImg); const id = field('id').value;
+    if (!img || !id) return;
+    const r = await supabase.from('products').update({ primary_image_url: img.image_url }).eq('id', id);
+    if (r.error) { toast(r.error.message, 'error'); return; }
+    await supabase.from('product_images').update({ is_primary: false }).eq('product_id', id);
+    await supabase.from('product_images').update({ is_primary: true }).eq('id', img.id);
+    const p = products.find((x) => x.id === id); if (p) p.primary_image_url = img.image_url;
+    renderImages(); renderProducts(); toast('Main image updated.'); return;
+  }
+  const delImg = t.closest<HTMLElement>('[data-del-img]');
+  if (delImg) {
+    const img = images.find((x) => x.id === delImg.dataset.delImg); const id = field('id').value;
+    if (!img || !id || !confirm('Remove this image from the product?')) return;
+    const r = await supabase.from('product_images').delete().eq('id', img.id);
+    if (r.error) { toast(r.error.message, 'error'); return; }
+    images = images.filter((x) => x.id !== img.id);
+    const p = products.find((x) => x.id === id);
+    if (p && p.primary_image_url === img.image_url) {
+      const next = images[0]?.image_url || null;
+      await supabase.from('products').update({ primary_image_url: next }).eq('id', id);
+      p.primary_image_url = next;
+    }
+    renderImages(); renderProducts(); toast('Image removed.'); return;
+  }
+  const move = t.closest<HTMLElement>('[data-move]'); if (move) { moveCategory(move.dataset.move!, Number(move.dataset.dir)); return; }
+  const editCat = t.closest<HTMLElement>('[data-edit-cat]'); if (editCat) { editCategory(editCat.dataset.editCat!); return; }
+  const delCat = t.closest<HTMLElement>('[data-cat]');
+  if (delCat) {
+    const c = categories.find((x) => x.id === delCat.dataset.cat);
+    if (!c || !confirm(`Delete category "${c.name}"? Products stay, they just leave this category.`)) return;
+    const r = await supabase.from('categories').delete().eq('id', c.id);
+    if (r.error) { toast(r.error.message, 'error'); return; }
+    await load(); toast(`Deleted ${c.name}.`);
+  }
+});
+
+document.addEventListener('change', (event) => {
+  const el = event.target as HTMLInputElement;
+  if (el.dataset.active) { quickUpdate(el.dataset.active, { is_active: el.checked }, el.checked ? 'Product is now visible.' : 'Product hidden from the store.'); return; }
+  if (el.dataset.stock) { const value = Math.max(0, int(el.value, 0) ?? 0); quickUpdate(el.dataset.stock, { stock_quantity: value }, `Stock set to ${value}.`); }
+});
+
+// Slugs follow the name until the admin edits the slug by hand.
+const autoSlug = (f: HTMLFormElement) => {
+  const name = f.elements.namedItem('name') as HTMLInputElement;
+  const slug = f.elements.namedItem('slug') as HTMLInputElement;
+  slug.dataset.auto = '1';
+  name.addEventListener('input', () => { if (slug.dataset.auto) slug.value = slugify(name.value); });
+  slug.addEventListener('input', () => { slug.dataset.auto = ''; slug.value = slugify(slug.value) || slug.value.toLowerCase(); });
+};
+autoSlug(form);
+autoSlug($<HTMLFormElement>('#category-form'));
+
+$('#search').addEventListener('input', renderProducts);
+$('#category-filter').addEventListener('change', renderProducts);
+$('#clear').addEventListener('click', () => clearForm());
+$('#new-product').addEventListener('click', () => { switchTab('products'); clearForm(); });
+$('#clear-category').addEventListener('click', clearCategoryForm);
+$('#add-variant').addEventListener('click', () => { readVariants(); variants.push({ name: '', sku: '', price: '', sale_price: '', stock_quantity: 0 }); renderVariants(); ($('#variant-list').lastElementChild?.querySelector('input') as HTMLInputElement | null)?.focus(); });
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const msg = $('#product-msg');
+  if (!form.reportValidity()) return;
+  const fd = new FormData(form);
+  const id = String(fd.get('id') || '');
+  const name = String(fd.get('name') || '').trim();
+  const price = num(fd.get('price'), 0) ?? 0;
+  const salePrice = num(fd.get('sale_price'));
+  if (salePrice !== null && salePrice >= price) { msg.textContent = 'Sale price must be lower than the regular price.'; return; }
+  const selected = fd.getAll('category_ids').map(String);
+  const data = { name, slug: slugify(fd.get('slug') || name), sku: String(fd.get('sku') || '').trim() || null, category_id: selected[0] || null, price, sale_price: salePrice, stock_quantity: int(fd.get('stock_quantity'), 0), age_min: int(fd.get('age_min')), age_max: int(fd.get('age_max')), brand: String(fd.get('brand') || '').trim() || null, short_description: String(fd.get('short_description') || ''), description: String(fd.get('description') || ''), seo_title: String(fd.get('seo_title') || '').trim() || null, seo_description: String(fd.get('seo_description') || '').trim() || null, is_featured: fd.get('is_featured') === 'on', is_active: fd.get('is_active') === 'on', updated_at: new Date().toISOString() };
+  const button = $<HTMLButtonElement>('#save-product');
+  button.disabled = true; msg.textContent = 'Saving…';
+  try {
+    const r = id ? await supabase.from('products').update(data).eq('id', id).select().single() : await supabase.from('products').insert(data).select().single();
+    if (r.error) throw new Error(friendly(r.error.message));
+    const saved = r.data as Row;
+    await saveProductCategories(saved.id, selected);
+    products = products.map((p) => (p.id === saved.id ? { ...p, ...saved } : p));
+    if (!id) products.unshift(saved);
+    const files = [...($<HTMLInputElement>('#image-files').files ?? [])];
+    if (files.length) { msg.textContent = `Uploading ${files.length} image${files.length === 1 ? '' : 's'}…`; await uploadImages(saved.id, files); }
+    await saveVariants(saved.id);
+    await load();
+    toast(`${name} saved.`);
+    msg.textContent = '';
+    await editProduct(saved.id);
+  } catch (error) {
+    msg.textContent = error instanceof Error ? error.message : 'Save failed.';
+    toast('Could not save the product.', 'error');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$<HTMLFormElement>('#category-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const f = event.currentTarget as HTMLFormElement;
+  const fd = new FormData(f);
+  const id = String(fd.get('id') || '');
+  const name = String(fd.get('name') || '').trim();
+  const data: Row = { name, slug: slugify(fd.get('slug') || name), description: String(fd.get('description') || ''), seo_title: String(fd.get('seo_title') || '').trim() || null, seo_description: String(fd.get('seo_description') || '').trim() || null, is_active: fd.get('is_active') === 'on' };
+  if (!id) data.sort_order = categories.length;
+  const r = id ? await supabase.from('categories').update(data).eq('id', id) : await supabase.from('categories').insert(data);
+  if (r.error) { $('#category-msg').textContent = friendly(r.error.message); return; }
+  clearCategoryForm();
+  await load();
+  toast(id ? 'Category updated.' : 'Category added.');
+});
+
+$('#template').addEventListener('click', () => {
+  const XLSX = (window as any).XLSX;
+  if (!XLSX) { toast('Excel tools are still loading. Try again in a moment.', 'error'); return; }
+  const h = ['name', 'slug', 'sku', 'categories', 'price', 'sale_price', 'stock_quantity', 'age_min', 'age_max', 'brand', 'short_description', 'description', 'primary_image_url', 'seo_title', 'seo_description', 'is_active', 'is_featured'];
+  const ws = XLSX.utils.aoa_to_sheet([h, ['Example Toy', 'example-toy', 'CT-001', 'Educational Toys, Outdoor Toys', 9.99, '', 10, 3, 8, 'Clever Toys', 'Short description', 'Description', '', 'Example Toy | Clever Toys', 'Shop toys in Lebanon.', true, false]]);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Products'); XLSX.writeFile(wb, 'Clever_Toys_Product_Import_Template.xlsx');
+});
+
+$('#import').addEventListener('click', async () => {
+  const XLSX = (window as any).XLSX;
+  const file = $<HTMLInputElement>('#file').files?.[0];
+  const msg = $('#msg'), errBox = $('#errors');
+  if (!file) { msg.textContent = 'Choose a file first.'; return; }
+  if (!XLSX) { msg.textContent = 'Excel tools are still loading. Try again in a moment.'; return; }
+  msg.textContent = 'Importing…';
+  const errors: string[] = [];
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' }) as Row[];
+    let created = 0, updated = 0;
+    for (let i = 0; i < rows.length; i++) {
+      try {
+        const row = rows[i];
+        const name = String(row.name || row.Name || '').trim();
+        if (!name) throw new Error('Missing name');
+        const slug = slugify(row.slug || name);
+        const price = num(row.price, null);
+        if (price === null || price < 0) throw new Error('Invalid price');
+        const matched = String(row.categories || row.category || '').split(',').map((x) => x.trim()).filter(Boolean).map((n) => categories.find((c) => c.name.toLowerCase() === n.toLowerCase() || c.slug === slugify(n))).filter(Boolean) as Row[];
+        const payload = { name, slug, sku: String(row.sku || '').trim() || null, category_id: matched[0]?.id || null, price, sale_price: num(row.sale_price), stock_quantity: int(row.stock_quantity, 0), age_min: int(row.age_min), age_max: int(row.age_max), brand: String(row.brand || '').trim() || null, short_description: String(row.short_description || ''), description: String(row.description || ''), primary_image_url: String(row.primary_image_url || '').trim() || null, seo_title: String(row.seo_title || '').trim() || null, seo_description: String(row.seo_description || '').trim() || null, is_active: String(row.is_active).toLowerCase() !== 'false', is_featured: String(row.is_featured).toLowerCase() === 'true', updated_at: new Date().toISOString() };
+        const existing = products.find((p) => p.slug === slug) || (payload.sku ? products.find((p) => p.sku === payload.sku) : undefined);
+        const r = existing ? await supabase.from('products').update(payload).eq('id', existing.id).select().single() : await supabase.from('products').insert(payload).select().single();
+        if (r.error) throw new Error(friendly(r.error.message));
+        await saveProductCategories((r.data as Row).id, matched.map((c) => c.id));
+        if (existing) updated++; else created++;
+      } catch (error) { errors.push(`Row ${i + 2}: ${error instanceof Error ? error.message : 'Unknown error'}`); }
+    }
+    msg.textContent = `Import complete: ${created} created, ${updated} updated, ${errors.length} failed.`;
+    errBox.hidden = errors.length === 0;
+    errBox.innerHTML = errors.length ? '<strong>Import errors</strong>' + errors.slice(0, 50).map((x) => `<p>${esc(x)}</p>`).join('') : '';
+    await load();
+  } catch (error) { msg.textContent = error instanceof Error ? error.message : 'Import failed.'; }
+});
+
+async function init() {
+  const guard = $('#guard');
+  try {
+    const cfg = $('#cfg');
+    const url = cfg.dataset.url, key = cfg.dataset.key;
+    if (!url || !key) throw new Error('Supabase browser configuration is missing.');
+    supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) { location.href = '/login?next=%2Fadmin'; return; }
+    const { data: isAdmin, error } = await supabase.rpc('is_admin');
+    if (error) throw new Error(error.message);
+    if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><p>This account is not an administrator.</p>'; return; }
+    guard.hidden = true;
+    $('#app').hidden = false;
+    await load();
+    const editId = params.get('edit');
+    if (editId) editProduct(editId);
+    else if (params.get('new')) clearForm();
+  } catch (error) {
+    guard.hidden = false;
+    guard.innerHTML = `<h2>Admin could not load</h2><p>${esc(error instanceof Error ? error.message : 'Unknown error')}</p><button class="button" type="button" onclick="location.reload()">Try again</button>`;
+  }
+}
 init();
 </script>
-<style>.admin-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}.import-card{display:grid;gap:14px;margin-bottom:24px;padding:22px;border:1px solid var(--line);border-radius:16px;background:#fff}.import-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.import-errors{padding:14px;border-radius:12px;background:var(--danger-soft);color:var(--danger)}.import-errors p{margin:6px 0}.admin-tabs{display:flex;gap:8px;margin:20px 0}.tab{border:1px solid #ddd;background:#fff;padding:10px 16px;border-radius:10px;cursor:pointer}.tab.active{font-weight:700}.variant-row{display:grid;grid-template-columns:1.4fr 1fr .8fr .8fr .8fr auto;gap:8px;margin:8px 0}.variant-row input{min-width:0}.item-actions{display:flex;gap:8px}.field-help{display:block;color:var(--muted);font-size:.8rem;margin-top:-2px}@media(max-width:800px){.variant-row{grid-template-columns:1fr 1fr}.admin-head{flex-direction:column}}</style>
+<style is:global>
+.quick-actions{display:flex;gap:10px;flex-wrap:wrap}
+html[data-area=admin] .admin-tabs{margin-bottom:18px}
+.catalog-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr);gap:18px;align-items:start}
+.catalog-layout[hidden]{display:none}
+.list-toolbar{display:grid;grid-template-columns:1fr 200px;gap:10px;margin-bottom:12px}
+#product-filters{margin-bottom:12px}
+.product-rows,.category-rows{display:grid;gap:8px}
+.product-row,.category-row{display:grid;grid-template-columns:52px 84px 48px minmax(0,1fr);grid-template-areas:"thumb main main main" "thumb stock toggle actions";gap:6px 12px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);transition:border-color .15s}
+.category-row{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:none}
+.product-row>.product-thumb{grid-area:thumb;align-self:start}.product-row>.product-main{grid-area:main}.product-row>.stock-edit{grid-area:stock}.product-row>.row-toggle{grid-area:toggle}.product-row>.item-actions{grid-area:actions}
+.product-row.editing{border-color:var(--brand-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand-primary) 12%,transparent)}
+.product-row.is-hidden,.category-row.is-hidden{background:var(--surface-2)}
+.product-row.is-hidden .product-thumb{opacity:.5}
+.product-thumb{display:grid;place-items:center;width:52px;height:52px;overflow:hidden;border-radius:12px;background:var(--surface-2);font-size:24px}
+.product-thumb img{width:100%;height:100%;object-fit:cover}
+.product-main{min-width:0}
+.product-name{display:block;max-width:100%;padding:0;border:0;background:none;color:var(--ink);font-weight:800;text-align:left;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.product-name:hover{color:var(--primary-strong);text-decoration:underline}
+.product-main small{display:block;color:var(--muted);font-size:.8rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stock-edit{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.66rem;font-weight:900;text-transform:uppercase}
+.stock-edit input{width:62px;min-height:34px;padding:4px 8px;border:1.5px solid var(--line-strong);border-radius:10px;font-weight:800}
+.stock-edit.low input{border-color:#f0b429;background:#fff9e8}
+.stock-edit.out input{border-color:var(--danger);background:var(--danger-soft)}
+.row-toggle{display:grid;place-items:center}
+.item-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.item-actions .small-button{min-height:34px;padding:0 11px}
+.order-buttons{display:flex;gap:4px}
+.order-buttons .small-button{width:34px;min-height:34px;padding:0}
+.order-buttons .small-button:disabled{opacity:.35;cursor:default;transform:none}
+.product-editor{position:sticky;top:20px;max-height:calc(100vh - 40px);overflow-y:auto;scrollbar-width:thin}
+.editor-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.editor-head h2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.field-row.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.category-picker{margin:0;padding:12px;border:1.5px solid var(--line);border-radius:14px}
+.category-picker legend{padding:0 6px;font-weight:800;font-size:.93rem}
+.check-grid{display:flex;flex-wrap:wrap;gap:6px}
+.form-card label.check-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1.5px solid var(--line);border-radius:99px;font-size:.85rem;cursor:pointer}
+.check-pill:has(input:checked){border-color:var(--brand-primary);background:var(--brand-soft)}
+.variant-box,.image-box{display:grid;gap:8px;padding:12px;border:1.5px solid var(--line);border-radius:14px}
+.variant-box h3,.image-box h3{margin:0;font-size:1rem}
+.variant-head,.variant-row{display:grid;grid-template-columns:1.4fr 1fr .8fr .8fr .7fr 34px;gap:6px}
+.variant-head span{color:var(--muted);font-size:.7rem;font-weight:900;text-transform:uppercase}
+.form-card .variant-row input{min-height:38px;padding:6px 8px;border-radius:10px;font-size:.88rem}
+.image-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
+.image-item{position:relative;margin:0;overflow:hidden;border:2px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.image-item.primary{border-color:var(--brand-primary)}
+.image-item img{width:100%;aspect-ratio:1;object-fit:cover}
+.image-item figcaption{display:flex;justify-content:space-between;gap:4px;padding:4px}
+.image-item .small-button{min-height:28px;padding:0 8px;font-size:.72rem}
+.main-tag{padding:4px 8px;border-radius:99px;background:var(--brand-primary);color:var(--brand-text-on-primary);font-size:.7rem;font-weight:900}
+.more-fields{padding:10px 12px;border:1.5px solid var(--line);border-radius:14px}
+.more-fields summary{font-weight:800;cursor:pointer}
+.more-fields[open]{display:grid;gap:14px}
+.switch-line{display:flex;gap:18px;flex-wrap:wrap}
+.form-card .switch-line label{display:flex;align-items:center;gap:8px;padding-left:0}
+.field-help{display:block;color:var(--muted);font-size:.8rem}
+.import-card{display:grid;gap:14px}
+.import-card h2,.import-card p{margin:0}
+.import-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.import-errors{padding:14px;border-radius:12px;background:var(--danger-soft);color:var(--danger)}
+.import-errors p{margin:6px 0}
+@media(max-width:1100px){.catalog-layout{grid-template-columns:1fr}.product-editor{position:static;max-height:none}}
+@media(max-width:640px){.product-row{grid-template-columns:44px auto 44px;grid-template-areas:"thumb main main" "stock stock toggle" "actions actions actions"}.product-row>.product-thumb{width:44px;height:44px}.product-row>.item-actions{justify-content:flex-start}.list-toolbar,.field-row,.field-row.three{grid-template-columns:1fr}.variant-head{display:none}.variant-row{grid-template-columns:1fr 1fr 34px}}
+</style>
