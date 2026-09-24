@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'astro';
 import { supabaseConfig } from './lib/config';
+import { PRIVATE_PATH, fillTemplate, parseSeoSettings } from './lib/seo';
 
 const safeHex = (value: unknown) => {
   const match = String(value ?? '').match(/^#[0-9a-fA-F]{6}$/);
@@ -127,30 +128,16 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const loadSeo = async (): Promise<any> => {
     if (path.startsWith('/admin') || path.startsWith('/api') || !base || !publishableKey) return null;
     try {
-      const encodedPath = encodeURIComponent(path);
-      const encodedProduct = encodeURIComponent('/product/*');
-      const encodedCategory = encodeURIComponent('/category/*');
-      const query = `select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedPath}&limit=1`;
-      const exactResponse = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?${query}`, {
+      // One request for the exact page and, on product/category pages, the fallback template; the exact page wins.
+      const wildcard = path.startsWith('/product/') ? '/product/*' : path.startsWith('/category/') ? '/category/*' : '';
+      const keys = [path, ...(wildcard ? [wildcard] : [])].map((key) => `"${key.replace(/["\\]/g, '')}"`).join(',');
+      const r = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?select=*&path_key=in.(${encodeURIComponent(keys)})`, {
         headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
         cf: { cacheTtl: 0, cacheEverything: false }
       });
-      let seo: any = exactResponse.ok ? (await exactResponse.json())?.[0] || null : null;
-      if (!seo && path.startsWith('/product/')) {
-        const r = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedProduct}&limit=1`, {
-          headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
-          cf: { cacheTtl: 0, cacheEverything: false }
-        });
-        if (r.ok) seo = (await r.json())?.[0] || null;
-      }
-      if (!seo && path.startsWith('/category/')) {
-        const r = await fetch(`${base.replace(/\/$/, '')}/rest/v1/seo_pages?select=path_key,title,description,cover_image_url,keywords&path_key=eq.${encodedCategory}&limit=1`, {
-          headers: { apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
-          cf: { cacheTtl: 0, cacheEverything: false }
-        });
-        if (r.ok) seo = (await r.json())?.[0] || null;
-      }
-      return seo;
+      if (!r.ok) return null;
+      const rows: any[] = await r.json();
+      return rows.find((row) => row.path_key === path) || rows.find((row) => row.path_key === wildcard) || null;
     } catch {
       return null;
     }
@@ -202,7 +189,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   if (!/<html[\s>]/i.test(output)) output = /<!doctype html>/i.test(output) ? output.replace(/<!doctype html>/i, (match) => `${match}<html lang="en"${htmlArea}>`) : `<html lang="en"${htmlArea}>${output}`;
 
   // SEO defaults for pages that do not set their own tags.
-  const isPrivatePage = /^\/(admin|account|cart|checkout|login|register|forgot-password|reset-password|order-success)(\/|$)/.test(path);
+  const isPrivatePage = PRIVATE_PATH.test(path);
   const headTags: string[] = [];
   if (isPrivatePage && !/<meta\s+name=["']robots["']/i.test(output)) headTags.push('<meta name="robots" content="noindex, nofollow" />');
   if (!/<meta\s+name=["']description["']/i.test(output)) headTags.push('<meta name="description" content="Clever Toys Lebanon: fun, educational and exciting toys for every stage of childhood, with cash on delivery." />');
@@ -220,22 +207,61 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   }
   output = output.replace(/<meta\s+name=["']theme-color["'][^>]*>/i, `<meta name="theme-color" content="${published.theme?.primary || '#2563eb'}" />`);
 
+  // Product and category pages describe themselves with hint tags: the name for {name} templates, and which fields they set on purpose.
+  const hint = (name: string) => output.match(new RegExp(`<meta\\s+name="${name}"\\s+content="([^"]*)"[^>]*>`, 'i'))?.[1] ?? '';
+  const decodeAttr = (value: string) => value.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  const seoName = decodeAttr(hint('clever-seo-name'));
+  const seoCustom = new Set(hint('clever-seo-custom').split(',').map((v) => v.trim()).filter(Boolean));
+  output = output.replace(/<meta\s+name=["']clever-seo-(name|custom)["'][^>]*>/gi, '');
+
   if (seo) {
-    const title = String(seo.title || '').trim();
-    const description = String(seo.description || '').trim();
-    const keywords = String(seo.keywords || '').trim();
-    const cover = String(seo.cover_image_url || '').trim();
-    output = output.replace(/<title>[\s\S]*?<\/title>/i, '');
-    output = output.replace(/<meta\s+name=[\"']description[\"'][^>]*>\s*/gi, '');
-    output = output.replace(/<meta\s+name=[\"']keywords[\"'][^>]*>\s*/gi, '');
-    output = output.replace(/<meta\s+name=[\"']twitter:title[\"'][^>]*>\s*/gi, '');
-    output = output.replace(/<meta\s+name=[\"']twitter:description[\"'][^>]*>\s*/gi, '');
-    output = output.replace(/<meta\s+name=[\"']twitter:image[\"'][^>]*>\s*/gi, '');
-    output = output.replace(/<meta\s+property=[\"']og:title[\"'][^>]*>\s*/gi, '');
-    output = output.replace(/<meta\s+property=[\"']og:description[\"'][^>]*>\s*/gi, '');
-    output = output.replace(/<meta\s+property=[\"']og:image[\"'][^>]*>\s*/gi, '');
-    const seoTags = `${title ? `<title>${escapeHtml(title)}</title><meta name="title" content="${escapeAttr(title)}" />` : ''}${description ? `<meta name="description" content="${escapeAttr(description)}" />` : ''}${keywords ? `<meta name="keywords" content="${escapeAttr(keywords)}" />` : ''}${title ? `<meta property="og:title" content="${escapeAttr(title)}" /><meta name="twitter:title" content="${escapeAttr(title)}" />` : ''}${description ? `<meta property="og:description" content="${escapeAttr(description)}" /><meta name="twitter:description" content="${escapeAttr(description)}" />` : ''}${cover ? `<meta property="og:image" content="${escapeAttr(cover)}" /><meta name="twitter:image" content="${escapeAttr(cover)}" /><meta name="twitter:card" content="summary_large_image" />` : ''}`;
+    const isTemplate = String(seo.path_key || '').endsWith('/*');
+    // A template only applies when the page did not set its own value and the template uses {name}.
+    const pick = (field: 'title' | 'description', value: unknown) => isTemplate ? (seoCustom.has(field) ? '' : fillTemplate(value, seoName)) : String(value || '').trim();
+    const title = pick('title', seo.title);
+    const description = pick('description', seo.description);
+    const keywords = String(seo.keywords || '').trim().replace(/\{name\}/g, seoName);
+    const hasPageImage = /<meta\s+property=["']og:image["']/i.test(output);
+    const cover = isTemplate && hasPageImage ? '' : String(seo.cover_image_url || '').trim();
+    const drop = (pattern: RegExp) => { output = output.replace(pattern, ''); };
+    if (title) {
+      drop(/<title>[\s\S]*?<\/title>/i);
+      drop(/<meta\s+(name=["'](title|twitter:title)["']|property=["']og:title["'])[^>]*>\s*/gi);
+    }
+    if (description) drop(/<meta\s+(name=["'](description|twitter:description)["']|property=["']og:description["'])[^>]*>\s*/gi);
+    if (keywords) drop(/<meta\s+name=["']keywords["'][^>]*>\s*/gi);
+    if (cover) drop(/<meta\s+(name=["']twitter:image["']|property=["']og:image["'])[^>]*>\s*/gi);
+    const seoTags = `${title ? `<title>${escapeHtml(title)}</title><meta property="og:title" content="${escapeAttr(title)}" /><meta name="twitter:title" content="${escapeAttr(title)}" />` : ''}${description ? `<meta name="description" content="${escapeAttr(description)}" /><meta property="og:description" content="${escapeAttr(description)}" /><meta name="twitter:description" content="${escapeAttr(description)}" />` : ''}${keywords ? `<meta name="keywords" content="${escapeAttr(keywords)}" />` : ''}${cover ? `<meta property="og:image" content="${escapeAttr(cover)}" /><meta name="twitter:image" content="${escapeAttr(cover)}" />` : ''}`;
     output = output.replace('</head>', `${seoTags}</head>`);
+    if (seo.noindex === true && !isTemplate) {
+      drop(/<meta\s+name=["']robots["'][^>]*>\s*/gi);
+      output = output.replace('</head>', '<meta name="robots" content="noindex, follow" /></head>');
+    }
+  }
+
+  // Site-wide SEO from Admin → SEO → Settings.
+  if (!isAdmin) {
+    const seoSettings = parseSeoSettings(storeSettings.seo);
+    const extra: string[] = [];
+    if (seoSettings.google_verification) extra.push(`<meta name="google-site-verification" content="${escapeAttr(seoSettings.google_verification)}" />`);
+    if (seoSettings.bing_verification) extra.push(`<meta name="msvalidate.01" content="${escapeAttr(seoSettings.bing_verification)}" />`);
+    if (seoSettings.default_image && !/<meta\s+property=["']og:image["']/i.test(output)) extra.push(`<meta property="og:image" content="${escapeAttr(seoSettings.default_image)}" /><meta name="twitter:image" content="${escapeAttr(seoSettings.default_image)}" />`);
+    if (!/<meta\s+name=["']twitter:card["']/i.test(output)) extra.push('<meta name="twitter:card" content="summary_large_image" />');
+    const canonical = output.match(/<link\s+rel=["']canonical["']\s+href=["']([^"']+)["']/i)?.[1];
+    if (canonical && !/<meta\s+property=["']og:url["']/i.test(output)) extra.push(`<meta property="og:url" content="${canonical}" />`);
+    if (path === '/') {
+      const origin = new URL('/', context.site ?? context.url.origin).href;
+      const sameAs = [instagramUrl, seoSettings.facebook_url, seoSettings.tiktok_url].filter((u) => u && !/instagram\.com\/?$/.test(u));
+      const org = {
+        '@context': 'https://schema.org', '@type': 'Store', '@id': `${origin}#store`, name: seoSettings.site_name, url: origin,
+        logo: logoUrl || undefined, image: seoSettings.default_image || logoUrl || undefined,
+        telephone: seoSettings.org_phone || undefined, email: seoSettings.org_email || undefined,
+        address: { '@type': 'PostalAddress', addressLocality: seoSettings.org_city || undefined, addressCountry: 'LB' },
+        currenciesAccepted: 'USD', paymentAccepted: 'Cash on delivery', sameAs: sameAs.length ? sameAs : undefined
+      };
+      extra.push(`<script type="application/ld+json">${JSON.stringify(org).replace(/</g, '\\u003c')}</script>`);
+    }
+    if (extra.length) output = output.replace('</head>', `${extra.join('')}</head>`);
   }
 
   if (!output.includes('/store-ui.js')) output = output.replace('</head>', `${fontLinks}${earlyTheme}${storeConfig}${storeScript}</head>`);

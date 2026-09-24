@@ -3,54 +3,1046 @@ import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
-<header class="site-header"><div class="container header-inner"><a class="logo" href="/admin">Clever Toys Admin</a><nav class="main-nav"><a href="/admin">Products</a><a href="/admin/dashboard">Dashboard</a><a href="/admin/orders">Orders</a><a href="/admin/branding">Branding</a><a href="/">Store</a></nav></div></header>
-<main class="section"><div class="container seo-page">
-  <div class="admin-head"><div><p class="eyebrow">Search visibility</p><h1>SEO Settings</h1><p>Edit the SEO title, description, cover image and keywords for every public page.</p></div><button id="logout" class="button secondary-button" type="button">Sign Out</button></div>
-  <div id="cfg" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
-  <div id="auth-status" class="status" role="status">Checking admin access…</div>
-  <div id="app" hidden>
-    <div class="seo-layout">
-      <aside class="form-card page-list-card"><div class="panel-title"><div><h2>Pages</h2><small>Select a page to edit.</small></div><button id="new-page" class="small-button" type="button">+ Add</button></div><input id="page-search" class="page-search" placeholder="Search pages…"/><div id="page-list" class="page-list"></div></aside>
-      <section class="form-card editor-card">
-        <div class="section-heading"><div><p class="eyebrow">SEO editor</p><h2 id="editor-heading">Select a page</h2><p id="editor-path" class="muted"></p></div><button id="delete-page" class="small-button danger-button" type="button" hidden>Delete</button></div>
-        <form id="seo-form" hidden>
-          <label>Page path<input id="path_key" name="path_key" required placeholder="/about or /product/*"/><small>Use an exact path for one page, or <code>*</code> for a dynamic fallback such as <code>/product/*</code>.</small></label>
-          <label>SEO title<input id="title" name="title" required maxlength="70"/><small><span id="title-count">0</span>/70 characters</small></label>
-          <label>Meta description<textarea id="description" name="description" rows="4" required maxlength="170"></textarea><small><span id="description-count">0</span>/170 characters</small></label>
-          <label>Keywords<input id="keywords" name="keywords" placeholder="toys Lebanon, educational toys, kids toys"/><small>Separate keywords with commas.</small></label>
-          <label>SEO cover image<input id="cover-file" type="file" accept="image/jpeg,image/png,image/webp"/><small>Used for social sharing (Open Graph/Twitter). Images are converted to WebP automatically.</small></label>
-          <div id="cover-preview-wrap" class="cover-preview-wrap" hidden><img id="cover-preview" alt="SEO cover preview"/><button id="remove-cover" class="small-button secondary-button" type="button">Remove cover image</button></div>
-          <div class="search-preview"><p class="eyebrow">Search preview</p><strong id="preview-title">Your SEO title</strong><span id="preview-url"></span><p id="preview-description">Your meta description will appear here.</p></div>
-          <div class="form-actions"><button id="save" class="button" type="submit">Save SEO</button><button id="reset" class="button secondary-button" type="button">Reset</button></div>
-          <p id="message" role="status"></p>
+<head>
+  <title>SEO | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Search visibility</p>
+        <h1>SEO</h1>
+        <p>Titles, descriptions, sitemap, robots.txt and search engine settings for the whole store.</p>
+      </div>
+      <div class="seo-head-actions">
+        <a class="small-button" href="/sitemap.xml" target="_blank" rel="noopener">sitemap.xml ↗</a>
+        <a class="small-button" href="/robots.txt" target="_blank" rel="noopener">robots.txt ↗</a>
+      </div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+
+    <div id="app" hidden>
+      <div id="setup-notice" class="seo-notice" hidden>
+        Some SEO options (hide from Google, sitemap priority, verification codes, business details) need one database update. In Supabase, open <strong>SQL Editor</strong>, paste <code>supabase/seo_advanced.sql</code> and press <strong>Run</strong>, then reload this page.
+      </div>
+
+      <div class="admin-tabs" role="tablist" aria-label="SEO sections">
+        <button class="tab active" data-tab="overview" role="tab" aria-selected="true" type="button">Overview</button>
+        <button class="tab" data-tab="pages" role="tab" aria-selected="false" type="button">Pages</button>
+        <button class="tab" data-tab="products" role="tab" aria-selected="false" type="button">Products</button>
+        <button class="tab" data-tab="categories" role="tab" aria-selected="false" type="button">Categories</button>
+        <button class="tab" data-tab="sitemap" role="tab" aria-selected="false" type="button">Sitemap &amp; robots</button>
+        <button class="tab" data-tab="settings" role="tab" aria-selected="false" type="button">Settings</button>
+      </div>
+
+      <!-- Overview -->
+      <section id="tab-overview" class="seo-tab">
+        <div class="seo-overview">
+          <article class="admin-panel seo-score-card">
+            <div class="seo-score" id="score-ring" style="--score:0"><strong id="score-value">0</strong><span>/100</span></div>
+            <div>
+              <h2>SEO health</h2>
+              <p id="score-text" class="muted">Checking your store…</p>
+            </div>
+          </article>
+          <div class="seo-kpis">
+            <article class="seo-kpi"><span>Pages in sitemap</span><strong id="k-sitemap">–</strong><small>Sent to Google</small></article>
+            <article class="seo-kpi"><span>Products</span><strong id="k-products">0</strong><small id="k-products-issues"></small></article>
+            <article class="seo-kpi"><span>Categories</span><strong id="k-categories">0</strong><small id="k-categories-issues"></small></article>
+            <article class="seo-kpi"><span>Search engines</span><strong id="k-verify">–</strong><small id="k-verify-text"></small></article>
+          </div>
+        </div>
+
+        <section class="admin-panel">
+          <div class="seo-section-head"><div><h2>Things to fix</h2><p class="muted">The most important items come first. Click one to fix it.</p></div></div>
+          <div id="issue-list" class="seo-issues"></div>
+        </section>
+
+        <section class="admin-panel">
+          <div class="seo-section-head">
+            <div><h2>Live site check</h2><p class="muted">Opens every page in your sitemap and checks what Google actually sees: title, description, canonical link, headings, share image, structured data and image alt text.</p></div>
+            <div class="seo-actions">
+              <button id="audit-run" class="button" type="button">Run live check</button>
+              <button id="audit-xlsx" class="small-button" type="button" hidden>Excel</button>
+              <button id="audit-pdf" class="small-button" type="button" hidden>PDF</button>
+            </div>
+          </div>
+          <div id="audit-progress" class="seo-progress" hidden><span id="audit-bar"></span></div>
+          <p id="audit-summary" class="seo-audit-summary" role="status"></p>
+          <div id="audit-wrap" class="table-wrap" hidden>
+            <table class="seo-table"><thead><tr><th>Page</th><th>Status</th><th>Title</th><th>Description</th><th>H1</th><th>Canonical</th><th>Share image</th><th>Schema</th><th>Alt text</th></tr></thead><tbody id="audit-body"></tbody></table>
+          </div>
+        </section>
+      </section>
+
+      <!-- Pages -->
+      <section id="tab-pages" class="seo-tab" hidden>
+        <div class="seo-layout">
+          <aside class="admin-panel seo-page-list-card">
+            <div class="seo-section-head"><h2>Pages</h2><button id="new-page" class="small-button" type="button">+ Add page</button></div>
+            <input id="page-search" class="admin-input seo-search" type="search" placeholder="Search pages…" aria-label="Search pages" />
+            <div id="page-list" class="seo-page-list"></div>
+          </aside>
+          <section class="admin-panel seo-editor">
+            <div id="page-empty" class="empty-state"><h2>Choose a page</h2><p>Pick a page from the list to edit how it appears on Google and when shared.</p></div>
+            <form id="page-form" hidden>
+              <div class="seo-section-head">
+                <div><p class="eyebrow" id="page-kind">Page</p><h2 id="page-heading">New page</h2></div>
+                <div class="seo-actions"><a id="page-open" class="small-button" target="_blank" rel="noopener">Open ↗</a><button id="page-delete" class="small-button danger-button" type="button">Delete</button></div>
+              </div>
+              <div id="template-help" class="seo-template-help" hidden>This is the default for every <strong id="template-kind">product</strong> that has no SEO title of its own. Write <code>{'{name}'}</code> where the name should go, for example <code>{'{name} | Clever Toys Lebanon'}</code>. Without <code>{'{name}'}</code> the page's own title is kept, so pages never share one title.</div>
+              <label class="seo-field">Page path<input id="p-path" class="admin-input" required placeholder="/about" /><small>Starts with <code>/</code>. Use <code>/product/*</code> or <code>/category/*</code> for the defaults of all products or categories.</small></label>
+              <label class="seo-field">SEO title<input id="p-title" class="admin-input" maxlength="80" required /><span class="seo-meter" data-for="p-title"></span></label>
+              <label class="seo-field">Meta description<textarea id="p-description" class="admin-input" rows="3" maxlength="200" required></textarea><span class="seo-meter" data-for="p-description"></span></label>
+              <label class="seo-field">Keywords<input id="p-keywords" class="admin-input" placeholder="toys Lebanon, educational toys" /><small>Optional. Google ignores keywords, but some other search engines still read them.</small></label>
+              <div class="seo-field"><span class="seo-label">Share image</span>
+                <div class="seo-image-row"><img id="p-cover-preview" alt="" hidden /><div class="seo-actions"><label class="small-button seo-file">Upload image<input id="p-cover-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" /></label><button id="p-cover-remove" class="small-button" type="button" hidden>Remove</button></div></div>
+                <small>Shown on WhatsApp, Facebook and X when the link is shared. Best size: 1200 × 630.</small>
+              </div>
+              <div class="seo-advanced" data-advanced>
+                <label class="seo-check"><input id="p-noindex" class="toggle" type="checkbox" /> Hide from Google <small>(adds noindex and removes it from the sitemap)</small></label>
+                <label class="seo-check"><input id="p-in-sitemap" class="toggle" type="checkbox" checked /> Include in sitemap</label>
+                <div class="seo-inline">
+                  <label class="seo-field">Sitemap priority<select id="p-priority" class="admin-input"><option value="">Automatic</option><option>1.0</option><option>0.9</option><option>0.8</option><option>0.7</option><option>0.6</option><option>0.5</option><option>0.4</option><option>0.3</option><option>0.2</option><option>0.1</option></select></label>
+                  <label class="seo-field">How often it changes<select id="p-changefreq" class="admin-input"><option value="">Automatic</option><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select></label>
+                </div>
+              </div>
+              <div class="seo-previews" id="page-previews"></div>
+              <div class="form-actions"><button class="button" type="submit" id="page-save">Save page</button></div>
+            </form>
+          </section>
+        </div>
+      </section>
+
+      <!-- Products -->
+      <section id="tab-products" class="seo-tab" hidden>
+        <div class="admin-panel seo-toolbar">
+          <input id="product-search" class="admin-input seo-search" type="search" placeholder="Search products…" aria-label="Search products" />
+          <div class="chip-row" id="product-filters">
+            <button type="button" class="chip active" data-filter="all">All</button>
+            <button type="button" class="chip" data-filter="issues">Needs work <b id="pf-issues">0</b></button>
+            <button type="button" class="chip" data-filter="no-title">No SEO title <b id="pf-title">0</b></button>
+            <button type="button" class="chip" data-filter="no-desc">No description <b id="pf-desc">0</b></button>
+            <button type="button" class="chip" data-filter="no-image">No image <b id="pf-image">0</b></button>
+            <button type="button" class="chip" data-filter="no-alt">Missing alt text <b id="pf-alt">0</b></button>
+          </div>
+          <div class="seo-actions"><button id="products-autofill" class="small-button" type="button">Auto-fill missing</button><button id="products-xlsx" class="small-button" type="button">Excel report</button></div>
+        </div>
+        <div class="table-wrap"><table class="seo-table"><thead><tr><th>Product</th><th>Title on Google</th><th>Description on Google</th><th>Checks</th><th></th></tr></thead><tbody id="products-body"></tbody></table></div>
+      </section>
+
+      <!-- Categories -->
+      <section id="tab-categories" class="seo-tab" hidden>
+        <div class="admin-panel seo-toolbar">
+          <input id="category-search" class="admin-input seo-search" type="search" placeholder="Search categories…" aria-label="Search categories" />
+          <div class="seo-actions"><button id="categories-autofill" class="small-button" type="button">Auto-fill missing</button></div>
+        </div>
+        <div class="table-wrap"><table class="seo-table"><thead><tr><th>Category</th><th>Title on Google</th><th>Description on Google</th><th>Checks</th><th></th></tr></thead><tbody id="categories-body"></tbody></table></div>
+      </section>
+
+      <!-- Sitemap & robots -->
+      <section id="tab-sitemap" class="seo-tab" hidden>
+        <div class="seo-two">
+          <section class="admin-panel">
+            <h2>Sitemap</h2>
+            <p class="muted">Your sitemap lists every public page so Google can find it. It updates on its own when you add products or categories.</p>
+            <div class="seo-copy"><code id="sitemap-url"></code><button class="small-button" type="button" data-copy="sitemap-url">Copy</button></div>
+            <div class="seo-checks">
+              <label class="seo-check"><input id="s-products" class="toggle" type="checkbox" /> Include products</label>
+              <label class="seo-check"><input id="s-categories" class="toggle" type="checkbox" /> Include categories</label>
+              <label class="seo-check"><input id="s-images" class="toggle" type="checkbox" /> Include product images (helps Google Images)</label>
+            </div>
+            <p class="muted small">Priority and update frequency for all products or categories are set on the <code>/product/*</code> and <code>/category/*</code> rows in the Pages tab. Pages marked "Hide from Google" are left out automatically.</p>
+            <h3>Submit it once</h3>
+            <ol class="seo-steps">
+              <li>Open <a href="https://search.google.com/search-console" target="_blank" rel="noopener">Google Search Console ↗</a>, add your site and verify it with the code in the Settings tab.</li>
+              <li>Go to <strong>Sitemaps</strong>, paste <code>sitemap.xml</code> and press <strong>Submit</strong>.</li>
+              <li>Do the same in <a href="https://www.bing.com/webmasters" target="_blank" rel="noopener">Bing Webmaster Tools ↗</a> (it also feeds DuckDuckGo and Yahoo).</li>
+            </ol>
+          </section>
+          <section class="admin-panel">
+            <h2>robots.txt</h2>
+            <p class="muted">Tells search engines which parts of the store to skip. Admin, account, cart and checkout pages are always blocked.</p>
+            <label class="seo-field">Extra rules <small>(optional, one per line)</small><textarea id="s-robots" class="admin-input seo-mono" rows="4" placeholder="User-agent: GPTBot&#10;Disallow: /"></textarea><small>Only <code>User-agent</code>, <code>Allow</code>, <code>Disallow</code>, <code>Crawl-delay</code>, <code>Sitemap</code> and <code>#</code> comment lines are kept.</small></label>
+            <pre id="robots-preview" class="seo-pre">Loading…</pre>
+          </section>
+        </div>
+        <div class="form-actions seo-save-row"><button id="sitemap-save" class="button" type="button">Save sitemap &amp; robots</button></div>
+        <section class="admin-panel">
+          <div class="seo-section-head">
+            <div><h2>What's in your sitemap</h2><p id="sitemap-summary" class="muted">Loading…</p></div>
+            <div class="seo-actions"><input id="sitemap-search" class="admin-input" type="search" placeholder="Filter URLs…" aria-label="Filter sitemap URLs" /><button id="sitemap-refresh" class="small-button" type="button">Refresh</button></div>
+          </div>
+          <div class="table-wrap"><table class="seo-table"><thead><tr><th>URL</th><th>Type</th><th>Last updated</th><th>Priority</th><th>Changes</th><th>Images</th></tr></thead><tbody id="sitemap-body"></tbody></table></div>
+        </section>
+      </section>
+
+      <!-- Settings -->
+      <section id="tab-settings" class="seo-tab" hidden>
+        <form id="settings-form" class="seo-two">
+          <section class="admin-panel">
+            <h2>Search engine verification</h2>
+            <p class="muted">Proves to Google and Bing that you own the site, so you can see search data and submit your sitemap.</p>
+            <label class="seo-field">Google Search Console code<input id="g-verify" class="admin-input" placeholder="Paste the code or the whole meta tag" /><small>In Search Console choose <strong>HTML tag</strong> and paste it here.</small></label>
+            <label class="seo-field">Bing Webmaster code<input id="b-verify" class="admin-input" placeholder="Paste the code or the whole meta tag" /></label>
+            <h2 class="seo-gap">Default share image</h2>
+            <p class="muted">Used when a page without its own image is shared.</p>
+            <div class="seo-image-row"><img id="default-image-preview" alt="" hidden /><div class="seo-actions"><label class="small-button seo-file">Upload image<input id="default-image-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" /></label><button id="default-image-remove" class="small-button" type="button" hidden>Remove</button></div></div>
+          </section>
+          <section class="admin-panel">
+            <h2>Business details</h2>
+            <p class="muted">Added to your home page as structured data, so Google can show your store's name, logo and contact details.</p>
+            <label class="seo-field">Store name<input id="o-name" class="admin-input" maxlength="80" /></label>
+            <div class="seo-inline">
+              <label class="seo-field">Phone<input id="o-phone" class="admin-input" type="tel" placeholder="+961 71 220 251" /></label>
+              <label class="seo-field">Email<input id="o-email" class="admin-input" type="email" /></label>
+            </div>
+            <label class="seo-field">City<input id="o-city" class="admin-input" placeholder="Beirut" /></label>
+            <label class="seo-field">Facebook page<input id="o-facebook" class="admin-input" type="text" inputmode="url" autocomplete="off" placeholder="https://facebook.com/…" /></label>
+            <label class="seo-field">TikTok<input id="o-tiktok" class="admin-input" type="text" inputmode="url" autocomplete="off" placeholder="https://tiktok.com/@…" /></label>
+            <small class="muted">Instagram comes from Branding &amp; settings.</small>
+          </section>
+          <div class="form-actions seo-save-row"><button id="settings-save" class="button" type="submit">Save settings</button></div>
         </form>
-        <div id="empty" class="empty-state"><h2>Choose a page</h2><p>Pick a page from the list to edit its SEO settings.</p></div>
       </section>
     </div>
   </div>
-</div></main>
+
+  <dialog id="item-dialog" class="seo-dialog" aria-labelledby="item-title">
+    <form id="item-form" method="dialog">
+      <div class="seo-section-head"><div><p class="eyebrow" id="item-kind">Product</p><h2 id="item-title">Edit</h2></div><button type="button" class="small-button" id="item-close" aria-label="Close">✕</button></div>
+      <label class="seo-field">SEO title<input id="i-title" class="admin-input" maxlength="80" /><span class="seo-meter" data-for="i-title"></span><small id="i-title-fallback"></small></label>
+      <label class="seo-field">SEO description<textarea id="i-description" class="admin-input" rows="3" maxlength="200"></textarea><span class="seo-meter" data-for="i-description"></span><small id="i-description-fallback"></small></label>
+      <div id="i-images" class="seo-field" hidden><span class="seo-label">Image alt text</span><small>Describe each photo for Google Images and screen readers.</small><div id="i-image-list" class="seo-alt-list"></div></div>
+      <div class="seo-previews" id="item-previews"></div>
+      <div class="form-actions"><button class="button" type="submit" id="item-save">Save</button><button class="small-button" type="button" id="item-autofill">Auto-fill</button><a class="small-button" id="item-open" target="_blank" rel="noopener">Open page ↗</a></div>
+    </form>
+  </dialog>
+</main>
+
 <script>
 import { createClient } from '@supabase/supabase-js';
-const cfg=document.querySelector('#cfg');const url=cfg?.dataset.url||'',key=cfg?.dataset.key||'';let supabase=null,pages=[],selectedId=null,originalCover='';
-const authStatus=document.querySelector('#auth-status'),app=document.querySelector('#app'),pageList=document.querySelector('#page-list'),form=document.querySelector('#seo-form'),empty=document.querySelector('#empty'),message=document.querySelector('#message'),coverPreviewWrap=document.querySelector('#cover-preview-wrap'),coverPreview=document.querySelector('#cover-preview');
-const $=id=>document.getElementById(id);
-const esc=v=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
-const labelPath=p=>p==='/'?'Home':p.replace(/^\//,'').replace(/\/$/,'').replace(/[-_*]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase());
-function updateCounts(){ $('title-count').textContent=$('title').value.length; $('description-count').textContent=$('description').value.length; const t=$('title').value.trim()||'Your SEO title'; const d=$('description').value.trim()||'Your meta description will appear here.'; $('preview-title').textContent=t; $('preview-description').textContent=d; $('preview-url').textContent=new URL($('path_key').value||'/',location.origin).href; }
-function renderList(){const q=$('page-search').value.toLowerCase().trim();const list=pages.filter(p=>(p.path_key+' '+labelPath(p.path_key)+' '+p.title).toLowerCase().includes(q));pageList.innerHTML=list.map(p=>`<button type="button" class="page-choice ${p.id===selectedId?'selected':''}" data-id="${p.id}"><strong>${esc(labelPath(p.path_key))}</strong><span>${esc(p.path_key)}</span><small>${esc(p.title||'No title')}</small></button>`).join('')||'<p class="muted">No pages found.</p>';pageList.querySelectorAll('.page-choice').forEach(b=>b.onclick=()=>selectPage(b.dataset.id));}
-function showEditor(page){selectedId=page?.id||null;form.hidden=!page;empty.hidden=Boolean(page);$('delete-page').hidden=!page||page.path_key==='/'||page.path_key==='/product/*'||page.path_key==='/category/*';if(!page)return;$('editor-heading').textContent=labelPath(page.path_key);$('editor-path').textContent=page.path_key;$('path_key').value=page.path_key;$('title').value=page.title||'';$('description').value=page.description||'';$('keywords').value=page.keywords||'';originalCover=page.cover_image_url||'';$('cover-file').value='';if(originalCover){coverPreview.src=originalCover+'?v='+Date.now();coverPreviewWrap.hidden=false}else coverPreviewWrap.hidden=true;message.textContent='';updateCounts();renderList();window.scrollTo({top:0,behavior:'smooth'});}
-function selectPage(id){const p=pages.find(x=>x.id===id);if(p)showEditor(p)}
-function resetForm(){if(selectedId)showEditor(pages.find(x=>x.id===selectedId));else{$('path_key').value='';$('title').value='';$('description').value='';$('keywords').value='';$('cover-file').value='';originalCover='';coverPreviewWrap.hidden=true;updateCounts();}}
-async function init(){try{if(!url||!key)throw new Error('Supabase browser configuration is missing.');supabase=createClient(url,key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});const s=await supabase.auth.getSession();if(s.error)throw new Error(s.error.message);if(!s.data.session?.user){location.href='/login?next=%2Fadmin%2Fseo';return;}const a=await supabase.rpc('is_admin');if(a.error)throw new Error(a.error.message);if(!a.data){authStatus.textContent='Access denied.';return;}const r=await supabase.from('seo_pages').select('*').order('path_key');if(r.error)throw new Error(r.error.message);pages=r.data||[];authStatus.textContent='Admin access verified';app.hidden=false;renderList();if(pages[0])showEditor(pages[0]);}catch(e){authStatus.textContent=e?.message||'Unable to load SEO settings.';}}
-async function toWebp(file){const bmp=await createImageBitmap(file),max=1800,scale=Math.min(1,max/Math.max(bmp.width,bmp.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bmp.width*scale));canvas.height=Math.max(1,Math.round(bmp.height*scale));const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Could not prepare the image.');ctx.drawImage(bmp,0,0,canvas.width,canvas.height);return await new Promise((res,rej)=>canvas.toBlob(b=>b?res(b):rej(new Error('WebP conversion failed')),'image/webp',.86));}
-async function uploadCover(file){const blob=await toWebp(file);const safe=String($('path_key').value).replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'')||'page';const path=`branding/seo/${safe}-${Date.now()}.webp`;const up=await supabase.storage.from('product-images').upload(path,blob,{contentType:'image/webp',upsert:false});if(up.error)throw new Error(up.error.message);return supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;}
-form.onsubmit=async e=>{e.preventDefault();if(!supabase)return;message.textContent='Saving…';const path=$('path_key').value.trim();if(!path.startsWith('/')){message.textContent='Page path must start with /.';return;}let cover=originalCover;try{const file=$('cover-file').files?.[0];if(file){message.textContent='Uploading cover image…';cover=await uploadCover(file);}const payload={path_key:path,title:$('title').value.trim(),description:$('description').value.trim(),keywords:$('keywords').value.trim(),cover_image_url:cover||null,updated_at:new Date().toISOString()};let r;if(selectedId){r=await supabase.from('seo_pages').update(payload).eq('id',selectedId).select().single();}else{r=await supabase.from('seo_pages').insert(payload).select().single();}if(r.error)throw new Error(r.error.message);if(!selectedId)selectedId=r.data.id;pages=pages.filter(p=>p.id!==r.data.id);pages.push(r.data);pages.sort((a,b)=>a.path_key.localeCompare(b.path_key));showEditor(r.data);message.textContent='SEO settings saved successfully.';}catch(err){message.textContent=err?.message||'Could not save SEO settings.';}};
-$('new-page').onclick=()=>{selectedId=null;form.hidden=false;empty.hidden=true;$('delete-page').hidden=true;$('editor-heading').textContent='New SEO page';$('editor-path').textContent='';$('path_key').value='';$('title').value='';$('description').value='';$('keywords').value='';$('cover-file').value='';originalCover='';coverPreviewWrap.hidden=true;message.textContent='';updateCounts();renderList();$('path_key').focus();};
-$('delete-page').onclick=async()=>{if(!selectedId||!confirm('Delete this SEO entry?'))return;const r=await supabase.from('seo_pages').delete().eq('id',selectedId);if(r.error){message.textContent=r.error.message;return;}pages=pages.filter(p=>p.id!==selectedId);selectedId=null;renderList();pages[0]?showEditor(pages[0]):showEditor(null);};
-$('remove-cover').onclick=()=>{originalCover='';coverPreviewWrap.hidden=true;coverPreview.src='';$('cover-file').value='';};
-$('reset').onclick=resetForm;$('page-search').oninput=renderList;$('title').oninput=updateCounts;$('description').oninput=updateCounts;$('path_key').oninput=()=>{$('preview-url').textContent=new URL($('path_key').value||'/',location.origin).href;};$('logout').onclick=async()=>{if(supabase)await supabase.auth.signOut();location.href='/login';};
+import { exportPdf, exportXlsx } from '../../scripts/table-export';
+
+type Row = Record<string, any>;
+type Level = 'error' | 'warn' | 'info';
+type Issue = { level: Level; text: string; tab: string; filter?: string; count?: number };
+
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+const toast = (message: string, tone = 'success') => (window as any).adminToast?.(message, tone);
+const plain = (v: unknown) => String(v ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+const clip = (v: string, max: number) => v.length <= max ? v : `${v.slice(0, max - 1).replace(/\s+\S*$/, '')}…`;
+const fill = (template: unknown, name: string) => { const t = String(template ?? '').trim(); return name && t.includes('{name}') ? t.replace(/\{name\}/g, name) : ''; };
+const PRIVATE = /^\/(admin|account|cart|checkout|login|register|forgot-password|reset-password|order-success|api)(\/|$)/;
+const LIMITS = { title: [30, 60], description: [70, 160] } as const;
+const lengthState = (kind: 'title' | 'description', value: string): Level | 'ok' => {
+  const [min, max] = LIMITS[kind];
+  if (!value) return 'error';
+  return value.length > max || value.length < min ? 'warn' : 'ok';
+};
+
+let supabase: ReturnType<typeof createClient>;
+let pages: Row[] = [];
+let products: Row[] = [];
+let categories: Row[] = [];
+let settingsRow: Row | null = null;
+let seo: Row = {};
+let hasAdvancedPages = false;
+let hasSeoSettings = false;
+let selectedPage: Row | null = null;
+let pageCover = '';
+let pendingCover: File | null = null;
+let defaultImage = '';
+let productFilter = 'all';
+let sitemapRows: Array<{ loc: string; path: string; type: string; lastmod: string; priority: string; changefreq: string; images: number }> = [];
+let auditRows: Row[] = [];
+
+// ---------- Effective SEO (mirrors what the storefront renders) ----------
+const template = (key: string) => pages.find((p) => p.path_key === key) || null;
+function productSeo(p: Row) {
+  const t = template('/product/*');
+  const title = p.seo_title?.trim() || fill(t?.title, p.name) || `${p.name} | Clever Toys`;
+  const ownDescription = p.seo_description?.trim() || plain(p.short_description);
+  const description = ownDescription || fill(t?.description, p.name) || `Shop ${p.name} at Clever Toys.`;
+  const images = [...(p.primary_image_url ? [{ image_url: p.primary_image_url, alt_text: p.name, primary: true }] : []), ...(p.product_images ?? [])];
+  const missingAlt = (p.product_images ?? []).filter((img: Row) => !String(img.alt_text || '').trim()).length;
+  return { title, description, hasOwnTitle: Boolean(p.seo_title?.trim()), hasOwnDescription: Boolean(ownDescription), images, missingAlt };
+}
+function categorySeo(c: Row) {
+  const t = template('/category/*');
+  const title = c.seo_title?.trim() || fill(t?.title, c.name) || `${c.name} Toys | Clever Toys`;
+  const ownDescription = c.seo_description?.trim() || plain(c.description);
+  const description = ownDescription || fill(t?.description, c.name) || `Shop ${String(c.name).toLowerCase()} toys at Clever Toys.`;
+  return { title, description, hasOwnTitle: Boolean(c.seo_title?.trim()), hasOwnDescription: Boolean(ownDescription) };
+}
+function itemChecks(kind: 'product' | 'category', item: Row, duplicates: Set<string>) {
+  const s = kind === 'product' ? productSeo(item) : categorySeo(item);
+  const checks: Array<{ level: Level; text: string; key: string }> = [];
+  if (!s.hasOwnTitle) checks.push({ level: 'info', text: 'Uses default title', key: 'no-title' });
+  const tl = lengthState('title', s.title);
+  if (tl === 'warn') checks.push({ level: 'warn', text: s.title.length > 60 ? `Title long (${s.title.length})` : `Title short (${s.title.length})`, key: 'title-length' });
+  if (duplicates.has(s.title.toLowerCase())) checks.push({ level: 'error', text: 'Duplicate title', key: 'duplicate' });
+  if (!s.hasOwnDescription) checks.push({ level: 'warn', text: 'No description', key: 'no-desc' });
+  else if (lengthState('description', s.description) === 'warn') checks.push({ level: 'info', text: s.description.length > 160 ? `Description long (${s.description.length})` : `Description short (${s.description.length})`, key: 'desc-length' });
+  if (kind === 'product') {
+    const ps = s as ReturnType<typeof productSeo>;
+    if (!ps.images.length) checks.push({ level: 'error', text: 'No image', key: 'no-image' });
+    if (ps.missingAlt) checks.push({ level: 'warn', text: `${ps.missingAlt} image${ps.missingAlt > 1 ? 's' : ''} without alt text`, key: 'no-alt' });
+  } else if (!item.image_url) checks.push({ level: 'info', text: 'No image', key: 'no-image' });
+  return { seo: s, checks };
+}
+const duplicateTitles = (titles: string[]) => {
+  const seen = new Map<string, number>();
+  for (const t of titles) seen.set(t.toLowerCase(), (seen.get(t.toLowerCase()) || 0) + 1);
+  return new Set([...seen].filter(([, n]) => n > 1).map(([t]) => t));
+};
+
+// ---------- Overview ----------
+const singular = (t: string) => t.replace(/^(product|categor|page)(s|ies) (share|have|use)\b/, (_, n, __, v) => `${n === 'categor' ? 'category' : n} ${v === 'have' ? 'has' : `${v}s`}`).replace(/^(\w+) titles are/, '$1 title is').replace(/^(\w+) descriptions are/, '$1 description is').replace(/^(\w+) (\w+) titles are/, '$1 $2 title is');
+function renderOverview() {
+  const activeProducts = products.filter((p) => p.is_active !== false);
+  const activeCategories = categories.filter((c) => c.is_active !== false);
+  const productDup = duplicateTitles(activeProducts.map((p) => productSeo(p).title));
+  const categoryDup = duplicateTitles(activeCategories.map((c) => categorySeo(c).title));
+  const productResults = activeProducts.map((p) => itemChecks('product', p, productDup));
+  const categoryResults = activeCategories.map((c) => itemChecks('category', c, categoryDup));
+  const count = (results: ReturnType<typeof itemChecks>[], key: string) => results.filter((r) => r.checks.some((c) => c.key === key)).length;
+  const issues: Issue[] = [];
+  const push = (level: Level, n: number, text: string, tab: string, filter?: string) => { if (n > 0) issues.push({ level, text, tab, filter, count: n }); };
+
+  const productTemplate = template('/product/*');
+  const categoryTemplate = template('/category/*');
+  if (productTemplate && !String(productTemplate.title || '').includes('{name}')) push('warn', 1, 'The /product/* default title has no {name}, so products without their own SEO title fall back to "Name | Clever Toys".', 'pages', '/product/*');
+  if (categoryTemplate && !String(categoryTemplate.title || '').includes('{name}')) push('warn', 1, 'The /category/* default title has no {name}, so categories without their own SEO title fall back to "Name Toys | Clever Toys".', 'pages', '/category/*');
+  push('error', count(productResults, 'duplicate'), 'products share the same title on Google. Give each one a unique title.', 'products', 'issues');
+  push('error', count(productResults, 'no-image'), 'products have no image. Products without photos rarely rank or get clicked.', 'products', 'no-image');
+  push('warn', count(productResults, 'no-desc'), 'products have no description. Google will pick random text from the page.', 'products', 'no-desc');
+  push('warn', count(productResults, 'title-length'), 'product titles are too long or too short (best: 30–60 characters).', 'products', 'issues');
+  push('warn', count(productResults, 'no-alt'), 'products have photos without alt text.', 'products', 'no-alt');
+  push('info', count(productResults, 'no-title'), 'products use the default title. That works, but a hand-written title converts better.', 'products', 'no-title');
+  push('error', count(categoryResults, 'duplicate'), 'categories share the same title.', 'categories');
+  push('warn', count(categoryResults, 'no-desc'), 'categories have no description.', 'categories');
+  push('info', count(categoryResults, 'no-image'), 'categories have no image.', 'categories');
+
+  const publicPages = pages.filter((p) => !PRIVATE.test(p.path_key) && !String(p.path_key).includes('*') && p.path_key !== '/404');
+  const pageDup = duplicateTitles(publicPages.map((p) => String(p.title || '')));
+  push('error', publicPages.filter((p) => pageDup.has(String(p.title || '').toLowerCase())).length, 'pages share the same title.', 'pages');
+  push('warn', publicPages.filter((p) => lengthState('title', String(p.title || '')) !== 'ok').length, 'page titles are missing, too long or too short.', 'pages');
+  push('warn', publicPages.filter((p) => lengthState('description', String(p.description || '')) !== 'ok').length, 'page descriptions are missing, too long or too short.', 'pages');
+  const home = pages.find((p) => p.path_key === '/');
+  if (!home?.cover_image_url && !defaultImage) push('warn', 1, 'No share image is set. Links shared on WhatsApp and Facebook show no picture.', 'settings');
+  if (hasSeoSettings && !seo.google_verification) push('warn', 1, 'Google Search Console is not connected. Add your verification code to see how people find you.', 'settings');
+  if (hasSeoSettings && !seo.org_phone) push('info', 1, 'Add your phone number to business details so Google can show it.', 'settings');
+  if (!hasSeoSettings || !hasAdvancedPages) push('warn', 1, 'Run supabase/seo_advanced.sql to unlock verification, sitemap and indexing options.', 'settings');
+
+  const order: Record<Level, number> = { error: 0, warn: 1, info: 2 };
+  issues.sort((a, b) => order[a.level] - order[b.level]);
+  $('#issue-list').innerHTML = issues.length ? issues.map((issue, i) => `<button type="button" class="seo-issue seo-${issue.level}" data-issue="${i}"><span class="seo-dot" aria-hidden="true"></span><span>${/^(products|categories|pages|product titles|product descriptions|page titles|page descriptions) /.test(issue.text) ? `<strong>${issue.count}</strong> ` : ''}${esc(issue.count === 1 ? singular(issue.text) : issue.text)}</span><span class="seo-issue-go">Fix →</span></button>`).join('') : '<p class="seo-all-good">Everything looks great. No SEO problems found.</p>';
+  document.querySelectorAll<HTMLButtonElement>('[data-issue]').forEach((b) => b.onclick = () => {
+    const issue = issues[Number(b.dataset.issue)];
+    showTab(issue.tab);
+    if (issue.tab === 'products' && issue.filter) setProductFilter(issue.filter);
+    if (issue.tab === 'pages' && issue.filter) { const p = template(issue.filter); if (p) selectPage(p); }
+  });
+
+  // Score: share of passed checks, with errors weighing more than warnings.
+  const all = [...productResults, ...categoryResults];
+  const maxPoints = all.length * 4 + publicPages.length * 2 + 4;
+  let lost = 0;
+  for (const r of all) for (const c of r.checks) lost += c.level === 'error' ? 2 : c.level === 'warn' ? 1 : 0.25;
+  for (const p of publicPages) { if (lengthState('title', String(p.title || '')) !== 'ok') lost += 1; if (lengthState('description', String(p.description || '')) !== 'ok') lost += 1; }
+  if (!seo.google_verification) lost += 2;
+  if (!home?.cover_image_url && !defaultImage) lost += 2;
+  const score = Math.max(0, Math.min(100, Math.round(100 * (1 - lost / Math.max(1, maxPoints)))));
+  $('#score-value').textContent = String(score);
+  $('#score-ring').style.setProperty('--score', String(score));
+  $('#score-ring').dataset.level = score >= 85 ? 'good' : score >= 60 ? 'ok' : 'bad';
+  const errors = issues.filter((i) => i.level === 'error').length, warns = issues.filter((i) => i.level === 'warn').length;
+  $('#score-text').textContent = score >= 85 ? `Your store is in great shape.${warns ? ` ${warns} small improvement${warns > 1 ? 's' : ''} left.` : ''}` : `${errors} important and ${warns} recommended fix${errors + warns === 1 ? '' : 'es'} below.`;
+  $('#k-products').textContent = String(activeProducts.length);
+  const pBad = productResults.filter((r) => r.checks.some((c) => c.level !== 'info')).length;
+  $('#k-products-issues').textContent = pBad ? `${pBad} need work` : 'All good';
+  $('#k-categories').textContent = String(activeCategories.length);
+  const cBad = categoryResults.filter((r) => r.checks.some((c) => c.level !== 'info')).length;
+  $('#k-categories-issues').textContent = cBad ? `${cBad} need work` : 'All good';
+  const verified = [seo.google_verification && 'Google', seo.bing_verification && 'Bing'].filter(Boolean);
+  $('#k-verify').textContent = verified.length ? `${verified.length}/2` : '0/2';
+  $('#k-verify-text').textContent = verified.length ? `${verified.join(' & ')} connected` : 'Not connected';
+}
+
+// ---------- Previews ----------
+function previews(title: string, description: string, path: string, image: string) {
+  const host = location.host;
+  const crumbs = [host, ...path.split('/').filter(Boolean).map((p) => decodeURIComponent(p))].join(' › ');
+  return `<div class="seo-serp" aria-label="Google preview"><p class="eyebrow">Google</p><div class="seo-serp-site"><span class="seo-serp-icon">🧸</span><span><b>Clever Toys</b><small>${esc(crumbs)}</small></span></div><strong>${esc(clip(title || 'Page title', 62))}</strong><p>${esc(clip(description || 'Page description', 160))}</p></div>
+  <div class="seo-social" aria-label="Share preview"><p class="eyebrow">WhatsApp / Facebook</p><div class="seo-social-card">${image ? `<img src="${esc(image)}" alt="" loading="lazy" />` : '<div class="seo-social-empty">No share image</div>'}<div><small>${esc(host.toUpperCase())}</small><strong>${esc(clip(title || 'Page title', 70))}</strong><p>${esc(clip(description || '', 110))}</p></div></div></div>`;
+}
+function meter(el: HTMLInputElement | HTMLTextAreaElement, kind: 'title' | 'description') {
+  const out = document.querySelector<HTMLElement>(`.seo-meter[data-for="${el.id}"]`);
+  if (!out) return;
+  const value = el.value.trim();
+  const [min, max] = LIMITS[kind];
+  const state = value ? lengthState(kind, value) : (el.placeholder ? 'ok' : 'error');
+  out.dataset.state = state;
+  out.style.setProperty('--fill', `${Math.min(100, (value.length / max) * 100)}%`);
+  out.textContent = value ? `${value.length} characters · best ${min}–${max}${value.length > max ? ' · Google will cut it off' : ''}` : (el.placeholder ? 'Empty: the default shown in grey is used' : 'Required');
+}
+
+// ---------- Pages ----------
+const pageLabel = (p: string) => p === '/' ? 'Home' : p === '/product/*' ? 'All products (default)' : p === '/category/*' ? 'All categories (default)' : p.replace(/^\//, '').replace(/[-_/]+/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase());
+function renderPageList() {
+  const q = $<HTMLInputElement>('#page-search').value.toLowerCase().trim();
+  const sorted = [...pages].sort((a, b) => (a.path_key === '/' ? -1 : b.path_key === '/' ? 1 : Number(a.path_key.includes('*')) - Number(b.path_key.includes('*')) || a.path_key.localeCompare(b.path_key)));
+  const list = sorted.filter((p) => `${p.path_key} ${pageLabel(p.path_key)} ${p.title}`.toLowerCase().includes(q));
+  $('#page-list').innerHTML = list.map((p) => {
+    const bad = !PRIVATE.test(p.path_key) && (lengthState('title', String(p.title || '')) !== 'ok' || lengthState('description', String(p.description || '')) !== 'ok');
+    const hidden = p.noindex === true || PRIVATE.test(p.path_key);
+    return `<button type="button" class="seo-page-choice${selectedPage?.id === p.id ? ' selected' : ''}" data-page="${esc(p.id)}"><strong>${esc(pageLabel(p.path_key))}</strong><span>${esc(p.path_key)}</span><span class="seo-tags">${hidden ? '<em class="seo-tag">Hidden from Google</em>' : ''}${p.path_key.includes('*') ? '<em class="seo-tag">Template</em>' : ''}${bad ? '<em class="seo-tag seo-tag-warn">Check length</em>' : ''}</span></button>`;
+  }).join('') || '<p class="muted">No pages found.</p>';
+  document.querySelectorAll<HTMLButtonElement>('[data-page]').forEach((b) => b.onclick = () => { const p = pages.find((x) => x.id === b.dataset.page); if (p) selectPage(p); });
+}
+function updatePagePreview() {
+  const path = $<HTMLInputElement>('#p-path').value.trim() || '/';
+  const sample = path === '/product/*' ? products[0]?.name : path === '/category/*' ? categories[0]?.name : '';
+  const t = $<HTMLInputElement>('#p-title').value.trim(), d = $<HTMLTextAreaElement>('#p-description').value.trim();
+  const title = sample ? fill(t, sample) || t : t, description = sample ? fill(d, sample) || d : d;
+  const image = pendingCover ? URL.createObjectURL(pendingCover) : pageCover || defaultImage;
+  $('#page-previews').innerHTML = previews(title, description, sample ? path.replace('*', 'example') : path, image);
+  meter($('#p-title') as HTMLInputElement, 'title');
+  meter($('#p-description') as HTMLTextAreaElement, 'description');
+  const noindex = $<HTMLInputElement>('#p-noindex');
+  $<HTMLInputElement>('#p-in-sitemap').disabled = noindex.checked;
+}
+function selectPage(page: Row | null) {
+  selectedPage = page;
+  $('#page-empty').hidden = true;
+  $('#page-form').hidden = false;
+  const path = page?.path_key || '';
+  const isTemplate = path.endsWith('/*');
+  $('#page-heading').textContent = page ? pageLabel(path) : 'New page';
+  $('#page-kind').textContent = isTemplate ? 'Default for all' : page ? 'Page' : 'Add a page';
+  $('#template-help').hidden = !isTemplate;
+  $('#template-kind').textContent = path.startsWith('/category') ? 'category' : 'product';
+  $<HTMLInputElement>('#p-path').value = path;
+  $<HTMLInputElement>('#p-path').readOnly = ['/', '/product/*', '/category/*'].includes(path);
+  $<HTMLInputElement>('#p-title').value = page?.title || '';
+  $<HTMLTextAreaElement>('#p-description').value = page?.description || '';
+  $<HTMLInputElement>('#p-keywords').value = page?.keywords || '';
+  $<HTMLInputElement>('#p-noindex').checked = page?.noindex === true;
+  $<HTMLInputElement>('#p-in-sitemap').checked = page?.in_sitemap !== false;
+  $<HTMLSelectElement>('#p-priority').value = page?.priority != null ? Number(page.priority).toFixed(1) : '';
+  $<HTMLSelectElement>('#p-changefreq').value = page?.changefreq || '';
+  pageCover = page?.cover_image_url || '';
+  pendingCover = null;
+  $<HTMLInputElement>('#p-cover-file').value = '';
+  showCover();
+  const open = $<HTMLAnchorElement>('#page-open');
+  open.hidden = !page || isTemplate;
+  open.href = path || '/';
+  $('#page-delete').hidden = !page || ['/', '/product/*', '/category/*'].includes(path);
+  renderPageList();
+  updatePagePreview();
+}
+function showCover() {
+  const img = $<HTMLImageElement>('#p-cover-preview');
+  const src = pendingCover ? URL.createObjectURL(pendingCover) : pageCover;
+  img.hidden = !src;
+  if (src) img.src = src;
+  $('#p-cover-remove').hidden = !src;
+}
+async function toWebp(file: File) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bmp.width * scale));
+  canvas.height = Math.max(1, Math.round(bmp.height * scale));
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  return new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Could not convert the image.')), 'image/webp', 0.86));
+}
+async function uploadImage(file: File, name: string) {
+  const blob = await toWebp(file);
+  const path = `branding/seo/${name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'page'}-${Date.now()}.webp`;
+  const up = await supabase.storage.from('product-images').upload(path, blob, { contentType: 'image/webp', upsert: false });
+  if (up.error) throw new Error(up.error.message);
+  return supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+}
+async function savePage(event: Event) {
+  event.preventDefault();
+  const path = $<HTMLInputElement>('#p-path').value.trim();
+  if (!/^\/[^\s?#]*$/.test(path)) { toast('The path must start with / and have no spaces.', 'error'); return; }
+  if (pages.some((p) => p.path_key === path && p.id !== selectedPage?.id)) { toast('That page already exists.', 'error'); return; }
+  const button = $<HTMLButtonElement>('#page-save');
+  button.disabled = true;
+  try {
+    let cover = pageCover;
+    if (pendingCover) cover = await uploadImage(pendingCover, path);
+    const payload: Row = { path_key: path, title: $<HTMLInputElement>('#p-title').value.trim(), description: $<HTMLTextAreaElement>('#p-description').value.trim(), keywords: $<HTMLInputElement>('#p-keywords').value.trim(), cover_image_url: cover || null, updated_at: new Date().toISOString() };
+    if (hasAdvancedPages) {
+      payload.noindex = $<HTMLInputElement>('#p-noindex').checked;
+      payload.in_sitemap = !payload.noindex && $<HTMLInputElement>('#p-in-sitemap').checked;
+      payload.priority = $<HTMLSelectElement>('#p-priority').value ? Number($<HTMLSelectElement>('#p-priority').value) : null;
+      payload.changefreq = $<HTMLSelectElement>('#p-changefreq').value || null;
+    }
+    const r = selectedPage ? await supabase.from('seo_pages').update(payload).eq('id', selectedPage.id).select().single() : await supabase.from('seo_pages').insert(payload).select().single();
+    if (r.error) throw new Error(r.error.message);
+    pages = [...pages.filter((p) => p.id !== r.data.id), r.data];
+    selectPage(r.data);
+    renderAll();
+    toast('Page SEO saved.');
+  } catch (error) {
+    toast(error instanceof Error ? error.message : 'Could not save.', 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// ---------- Products & categories ----------
+function setProductFilter(filter: string) {
+  productFilter = filter;
+  document.querySelectorAll<HTMLElement>('#product-filters .chip').forEach((c) => c.classList.toggle('active', c.dataset.filter === filter));
+  renderProducts();
+}
+const checkPills = (checks: Array<{ level: Level; text: string }>) => checks.length ? checks.map((c) => `<span class="seo-pill seo-${c.level}">${esc(c.text)}</span>`).join('') : '<span class="seo-pill seo-ok">All good</span>';
+function renderProducts() {
+  const q = $<HTMLInputElement>('#product-search').value.toLowerCase().trim();
+  const dup = duplicateTitles(products.filter((p) => p.is_active !== false).map((p) => productSeo(p).title));
+  const rows = products.map((p) => ({ p, ...itemChecks('product', p, p.is_active === false ? new Set() : dup) }));
+  const has = (r: typeof rows[number], key: string) => r.checks.some((c) => c.key === key);
+  $('#pf-issues').textContent = String(rows.filter((r) => r.checks.some((c) => c.level !== 'info')).length);
+  $('#pf-title').textContent = String(rows.filter((r) => has(r, 'no-title')).length);
+  $('#pf-desc').textContent = String(rows.filter((r) => has(r, 'no-desc')).length);
+  $('#pf-image').textContent = String(rows.filter((r) => has(r, 'no-image')).length);
+  $('#pf-alt').textContent = String(rows.filter((r) => has(r, 'no-alt')).length);
+  const filtered = rows.filter((r) => {
+    if (q && !`${r.p.name} ${r.p.slug} ${r.seo.title}`.toLowerCase().includes(q)) return false;
+    if (productFilter === 'issues') return r.checks.some((c) => c.level !== 'info');
+    return productFilter === 'all' || has(r, productFilter);
+  });
+  $('#products-body').innerHTML = filtered.map((r) => `<tr>
+    <td><div class="seo-item">${r.p.primary_image_url ? `<img src="${esc(r.p.primary_image_url)}" alt="" loading="lazy" />` : '<span class="seo-noimg">🧸</span>'}<span><strong>${esc(r.p.name)}</strong><small>/product/${esc(r.p.slug)}${r.p.is_active === false ? ' · hidden' : ''}</small></span></div></td>
+    <td class="${r.seo.hasOwnTitle ? '' : 'seo-fallback'}">${esc(r.seo.title)}<small class="seo-len">${r.seo.title.length}</small></td>
+    <td class="${r.seo.hasOwnDescription ? '' : 'seo-fallback'}">${esc(clip(r.seo.description, 120))}<small class="seo-len">${r.seo.description.length}</small></td>
+    <td class="seo-pills">${checkPills(r.checks)}</td>
+    <td><button type="button" class="small-button" data-edit-product="${esc(r.p.id)}">Edit</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">No products match.</td></tr>';
+  document.querySelectorAll<HTMLButtonElement>('[data-edit-product]').forEach((b) => b.onclick = () => openItem('product', b.dataset.editProduct || ''));
+}
+function renderCategories() {
+  const q = $<HTMLInputElement>('#category-search').value.toLowerCase().trim();
+  const dup = duplicateTitles(categories.filter((c) => c.is_active !== false).map((c) => categorySeo(c).title));
+  $('#categories-body').innerHTML = categories.filter((c) => !q || `${c.name} ${c.slug}`.toLowerCase().includes(q)).map((c) => {
+    const r = itemChecks('category', c, c.is_active === false ? new Set() : dup);
+    return `<tr>
+    <td><div class="seo-item">${c.image_url ? `<img src="${esc(c.image_url)}" alt="" loading="lazy" />` : '<span class="seo-noimg">🗂️</span>'}<span><strong>${esc(c.name)}</strong><small>/category/${esc(c.slug)}${c.is_active === false ? ' · hidden' : ''}</small></span></div></td>
+    <td class="${r.seo.hasOwnTitle ? '' : 'seo-fallback'}">${esc(r.seo.title)}<small class="seo-len">${r.seo.title.length}</small></td>
+    <td class="${r.seo.hasOwnDescription ? '' : 'seo-fallback'}">${esc(clip(r.seo.description, 120))}<small class="seo-len">${r.seo.description.length}</small></td>
+    <td class="seo-pills">${checkPills(r.checks)}</td>
+    <td><button type="button" class="small-button" data-edit-category="${esc(c.id)}">Edit</button></td></tr>`;
+  }).join('') || '<tr><td colspan="5" class="muted">No categories match.</td></tr>';
+  document.querySelectorAll<HTMLButtonElement>('[data-edit-category]').forEach((b) => b.onclick = () => openItem('category', b.dataset.editCategory || ''));
+}
+
+// Suggested SEO text built from the product or category itself.
+function suggestTitle(name: string, kind: 'product' | 'category') {
+  const base = kind === 'category' ? `${name} Toys` : name;
+  for (const t of [`${base} | Clever Toys Lebanon`, `${base} | Clever Toys`, base]) if (t.length <= 60) return t;
+  return clip(base, 60);
+}
+function suggestDescription(item: Row, kind: 'product' | 'category') {
+  const source = plain(kind === 'product' ? item.short_description || item.description : item.description);
+  const lead = kind === 'product' ? `Buy ${item.name} at Clever Toys Lebanon.` : `Shop ${item.name} toys at Clever Toys Lebanon.`;
+  const tail = 'Fast delivery across Lebanon, cash on delivery.';
+  if (source.length >= 90) return clip(source, 158);
+  return clip([lead, source && (/[.!?]$/.test(source) ? source : `${source}.`), tail].filter(Boolean).join(' '), 158);
+}
+
+let editing: { kind: 'product' | 'category'; item: Row } | null = null;
+function updateItemPreview() {
+  if (!editing) return;
+  const { kind, item } = editing;
+  const fallback = kind === 'product' ? productSeo({ ...item, seo_title: '', seo_description: '' }) : categorySeo({ ...item, seo_title: '', seo_description: '' });
+  const title = $<HTMLInputElement>('#i-title').value.trim() || fallback.title;
+  const description = $<HTMLTextAreaElement>('#i-description').value.trim() || fallback.description;
+  const image = kind === 'product' ? item.primary_image_url || item.product_images?.[0]?.image_url || defaultImage : item.image_url || defaultImage;
+  $('#item-previews').innerHTML = previews(title, description, `/${kind}/${item.slug}`, image);
+  meter($('#i-title') as HTMLInputElement, 'title');
+  meter($('#i-description') as HTMLTextAreaElement, 'description');
+}
+function openItem(kind: 'product' | 'category', id: string) {
+  const item = (kind === 'product' ? products : categories).find((x) => x.id === id);
+  if (!item) return;
+  editing = { kind, item };
+  const fallback = kind === 'product' ? productSeo({ ...item, seo_title: '', seo_description: '' }) : categorySeo({ ...item, seo_title: '', seo_description: '' });
+  $('#item-kind').textContent = kind === 'product' ? 'Product SEO' : 'Category SEO';
+  $('#item-title').textContent = item.name;
+  const title = $<HTMLInputElement>('#i-title'), description = $<HTMLTextAreaElement>('#i-description');
+  title.value = item.seo_title || '';
+  description.value = item.seo_description || '';
+  title.placeholder = fallback.title;
+  description.placeholder = fallback.description;
+  $('#i-title-fallback').textContent = `Leave empty to use: ${fallback.title}`;
+  $('#i-description-fallback').textContent = fallback.hasOwnDescription ? `Leave empty to use the ${kind === 'product' ? 'short' : 'category'} description.` : 'Leave empty to use the default description.';
+  const images: Row[] = kind === 'product' ? item.product_images ?? [] : [];
+  $('#i-images').hidden = !images.length;
+  $('#i-image-list').innerHTML = images.map((img) => `<label class="seo-alt"><img src="${esc(img.image_url)}" alt="" loading="lazy" /><input class="admin-input" data-alt="${esc(img.id)}" value="${esc(img.alt_text || '')}" placeholder="${esc(item.name)}" maxlength="125" /></label>`).join('');
+  $<HTMLAnchorElement>('#item-open').href = `/${kind}/${item.slug}`;
+  updateItemPreview();
+  $<HTMLDialogElement>('#item-dialog').showModal();
+}
+async function saveItem(event: Event) {
+  event.preventDefault();
+  if (!editing) return;
+  const { kind, item } = editing;
+  const button = $<HTMLButtonElement>('#item-save');
+  button.disabled = true;
+  try {
+    const patch = { seo_title: $<HTMLInputElement>('#i-title').value.trim() || null, seo_description: $<HTMLTextAreaElement>('#i-description').value.trim() || null };
+    const r = await supabase.from(kind === 'product' ? 'products' : 'categories').update(patch).eq('id', item.id);
+    if (r.error) throw new Error(r.error.message);
+    Object.assign(item, patch);
+    for (const input of document.querySelectorAll<HTMLInputElement>('[data-alt]')) {
+      const img = (item.product_images ?? []).find((x: Row) => x.id === input.dataset.alt);
+      const value = input.value.trim();
+      if (!img || (img.alt_text || '') === value) continue;
+      const a = await supabase.from('product_images').update({ alt_text: value || null }).eq('id', img.id);
+      if (a.error) throw new Error(a.error.message);
+      img.alt_text = value || null;
+    }
+    $<HTMLDialogElement>('#item-dialog').close();
+    renderAll();
+    toast(`${item.name} saved.`);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : 'Could not save.', 'error');
+  } finally {
+    button.disabled = false;
+  }
+}
+async function autofill(kind: 'product' | 'category', button: HTMLButtonElement) {
+  const list = (kind === 'product' ? products : categories).filter((x) => !x.seo_title?.trim() || !x.seo_description?.trim());
+  if (!list.length) { toast(`Every ${kind} already has an SEO title and description.`); return; }
+  if (!confirm(`Write SEO titles and descriptions for ${list.length} ${kind === 'product' ? 'products' : 'categories'} that are missing them? Existing text is not changed.`)) return;
+  button.disabled = true;
+  const label = button.textContent;
+  let done = 0, failed = 0;
+  const queue = [...list];
+  const worker = async () => {
+    for (let item = queue.shift(); item; item = queue.shift()) {
+      const patch = { seo_title: item.seo_title?.trim() || suggestTitle(item.name, kind), seo_description: item.seo_description?.trim() || suggestDescription(item, kind) };
+      const r = await supabase.from(kind === 'product' ? 'products' : 'categories').update(patch).eq('id', item.id);
+      if (r.error) failed++; else { Object.assign(item, patch); done++; }
+      button.textContent = `Filling… ${done + failed}/${list.length}`;
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  button.disabled = false;
+  button.textContent = label;
+  renderAll();
+  toast(failed ? `Filled ${done}, ${failed} failed.` : `Filled ${done} ${kind === 'product' ? 'products' : 'categories'}.`, failed ? 'error' : 'success');
+}
+
+// ---------- Sitemap & robots ----------
+async function loadSitemap() {
+  $('#sitemap-summary').textContent = 'Loading…';
+  try {
+    const r = await fetch(`/sitemap.xml?t=${Date.now()}`, { cache: 'no-store' });
+    const doc = new DOMParser().parseFromString(await r.text(), 'application/xml');
+    const NS = 'http://www.sitemaps.org/schemas/sitemap/0.9';
+    sitemapRows = [...doc.getElementsByTagNameNS(NS, 'url')].map((url) => {
+      const child = (name: string) => url.getElementsByTagNameNS(NS, name)[0]?.textContent || '';
+      const loc = child('loc');
+      let path = loc;
+      try { path = new URL(loc).pathname; } catch {}
+      return { loc, path, type: path.startsWith('/product/') ? 'Product' : path.startsWith('/category/') ? 'Category' : 'Page', lastmod: child('lastmod'), priority: child('priority'), changefreq: child('changefreq'), images: url.getElementsByTagNameNS('http://www.google.com/schemas/sitemap-image/1.1', 'image').length };
+    });
+    const by = (t: string) => sitemapRows.filter((x) => x.type === t).length;
+    $('#sitemap-summary').textContent = `${sitemapRows.length} URLs: ${by('Page')} pages, ${by('Category')} categories, ${by('Product')} products, ${sitemapRows.reduce((n, x) => n + x.images, 0)} images.`;
+    $('#k-sitemap').textContent = String(sitemapRows.length);
+  } catch {
+    $('#sitemap-summary').textContent = 'Could not read the sitemap.';
+  }
+  renderSitemap();
+}
+function renderSitemap() {
+  const q = $<HTMLInputElement>('#sitemap-search').value.toLowerCase().trim();
+  $('#sitemap-body').innerHTML = sitemapRows.filter((x) => !q || x.path.toLowerCase().includes(q)).map((x) => `<tr><td><a href="${esc(x.path)}" target="_blank" rel="noopener">${esc(decodeURIComponent(x.path))}</a></td><td>${x.type}</td><td>${x.lastmod ? esc(new Date(x.lastmod).toLocaleDateString()) : '–'}</td><td>${esc(x.priority || '–')}</td><td>${esc(x.changefreq || '–')}</td><td>${x.images || '–'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No URLs.</td></tr>';
+}
+async function loadRobots() {
+  try { $('#robots-preview').textContent = await (await fetch(`/robots.txt?t=${Date.now()}`, { cache: 'no-store' })).text(); } catch { $('#robots-preview').textContent = 'Could not load robots.txt.'; }
+}
+
+// ---------- Settings ----------
+async function saveSeoSettings(patch: Row, button: HTMLButtonElement) {
+  if (!hasSeoSettings) { toast('Run supabase/seo_advanced.sql first to save these settings.', 'error'); return false; }
+  button.disabled = true;
+  try {
+    const next = { ...seo, ...patch };
+    const r = await supabase.from('store_settings').upsert({ id: 'default', seo: next, updated_at: new Date().toISOString() }).select('*').single();
+    if (r.error) throw new Error(r.error.message);
+    settingsRow = r.data;
+    seo = r.data.seo || next;
+    renderAll();
+    toast('SEO settings saved.');
+    return true;
+  } catch (error) {
+    toast(error instanceof Error ? error.message : 'Could not save.', 'error');
+    return false;
+  } finally {
+    button.disabled = false;
+  }
+}
+const verification = (value: string) => { const raw = value.trim(); const code = raw.match(/content=["']([^"']+)["']/i)?.[1] ?? raw; return /^[A-Za-z0-9_\-=.]{4,120}$/.test(code) ? code : ''; };
+function fillSettings() {
+  $<HTMLInputElement>('#g-verify').value = seo.google_verification || '';
+  $<HTMLInputElement>('#b-verify').value = seo.bing_verification || '';
+  $<HTMLInputElement>('#o-name').value = seo.site_name || 'Clever Toys';
+  $<HTMLInputElement>('#o-phone').value = seo.org_phone || '';
+  $<HTMLInputElement>('#o-email').value = seo.org_email || '';
+  $<HTMLInputElement>('#o-city').value = seo.org_city || '';
+  $<HTMLInputElement>('#o-facebook').value = seo.facebook_url || '';
+  $<HTMLInputElement>('#o-tiktok').value = seo.tiktok_url || '';
+  $<HTMLInputElement>('#s-products').checked = seo.sitemap_products !== false;
+  $<HTMLInputElement>('#s-categories').checked = seo.sitemap_categories !== false;
+  $<HTMLInputElement>('#s-images').checked = seo.sitemap_images !== false;
+  $<HTMLTextAreaElement>('#s-robots').value = seo.robots_extra || '';
+  defaultImage = seo.default_image || '';
+  showDefaultImage();
+}
+function showDefaultImage() {
+  const img = $<HTMLImageElement>('#default-image-preview');
+  img.hidden = !defaultImage;
+  if (defaultImage) img.src = defaultImage;
+  $('#default-image-remove').hidden = !defaultImage;
+}
+
+// ---------- Live audit ----------
+async function runAudit() {
+  const button = $<HTMLButtonElement>('#audit-run');
+  if (!sitemapRows.length) await loadSitemap();
+  const targets = sitemapRows.map((x) => x.path);
+  if (!targets.length) { toast('The sitemap is empty.', 'error'); return; }
+  button.disabled = true;
+  $('#audit-progress').hidden = false;
+  $('#audit-wrap').hidden = false;
+  auditRows = [];
+  let done = 0;
+  const titles = new Map<string, number>();
+  const queue = [...targets];
+  const worker = async () => {
+    for (let path = queue.shift(); path; path = queue.shift()) {
+      const row: Row = { path };
+      try {
+        const r = await fetch(path, { credentials: 'omit', cache: 'no-store' });
+        row.status = r.status;
+        const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+        row.title = doc.querySelector('title')?.textContent?.trim() || '';
+        row.description = doc.querySelector('meta[name="description"]')?.getAttribute('content')?.trim() || '';
+        row.h1 = doc.querySelectorAll('h1').length;
+        row.canonical = doc.querySelector('link[rel="canonical"]')?.getAttribute('href') || '';
+        row.robots = doc.querySelector('meta[name="robots"]')?.getAttribute('content') || '';
+        row.image = Boolean(doc.querySelector('meta[property="og:image"]'));
+        row.schema = [...doc.querySelectorAll('script[type="application/ld+json"]')].map((s) => { try { const j = JSON.parse(s.textContent || '{}'); return j['@type']; } catch { return ''; } }).filter(Boolean).join(', ');
+        row.noAlt = [...doc.querySelectorAll('main img')].filter((img) => !img.hasAttribute('alt')).length;
+      } catch {
+        row.status = 0;
+      }
+      if (row.title) titles.set(row.title.toLowerCase(), (titles.get(row.title.toLowerCase()) || 0) + 1);
+      auditRows.push(row);
+      done++;
+      $('#audit-bar').style.width = `${(done / targets.length) * 100}%`;
+      $('#audit-summary').textContent = `Checking ${done} of ${targets.length} pages…`;
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  auditRows.sort((a, b) => targets.indexOf(a.path) - targets.indexOf(b.path));
+  for (const row of auditRows) {
+    const problems: string[] = [];
+    if (row.status !== 200) problems.push(`HTTP ${row.status || 'error'}`);
+    if (!row.title) problems.push('No title'); else if (row.title.length > 60) problems.push('Title too long');
+    if ((titles.get(String(row.title).toLowerCase()) || 0) > 1) problems.push('Duplicate title');
+    if (!row.description) problems.push('No description'); else if (row.description.length > 160) problems.push('Description too long');
+    if (row.h1 !== 1) problems.push(row.h1 ? `${row.h1} H1 headings` : 'No H1');
+    if (!row.canonical) problems.push('No canonical');
+    if (/noindex/i.test(row.robots || '')) problems.push('Marked noindex but in sitemap');
+    if (!row.image) problems.push('No share image');
+    if (row.noAlt) problems.push(`${row.noAlt} images without alt`);
+    row.problems = problems;
+  }
+  renderAudit();
+  button.disabled = false;
+  $('#audit-progress').hidden = true;
+  $('#audit-xlsx').hidden = false;
+  $('#audit-pdf').hidden = false;
+}
+function renderAudit() {
+  const ok = (good: boolean, text = '') => `<span class="seo-pill ${good ? 'seo-ok' : 'seo-warn'}">${good ? '✓' : '!'}${text ? ` ${esc(text)}` : ''}</span>`;
+  const perfect = auditRows.filter((r) => !r.problems.length).length;
+  $('#audit-summary').textContent = `${auditRows.length} pages checked: ${perfect} perfect, ${auditRows.length - perfect} with something to improve.`;
+  const sorted = [...auditRows].sort((a, b) => b.problems.length - a.problems.length);
+  $('#audit-body').innerHTML = sorted.map((r) => `<tr>
+    <td><a href="${esc(r.path)}" target="_blank" rel="noopener">${esc(decodeURIComponent(r.path))}</a>${r.problems.length ? `<small class="seo-problems">${esc(r.problems.join(' · '))}</small>` : ''}</td>
+    <td>${ok(r.status === 200, String(r.status || 'error'))}</td>
+    <td title="${esc(r.title)}">${ok(Boolean(r.title) && r.title.length <= 60 && !r.problems.includes('Duplicate title'), r.title ? String(r.title.length) : 'none')}</td>
+    <td title="${esc(r.description)}">${ok(Boolean(r.description) && r.description.length <= 160, r.description ? String(r.description.length) : 'none')}</td>
+    <td>${ok(r.h1 === 1, String(r.h1 ?? 0))}</td>
+    <td>${ok(Boolean(r.canonical))}</td>
+    <td>${ok(Boolean(r.image))}</td>
+    <td>${r.schema ? `<span class="seo-pill seo-ok">${esc(r.schema)}</span>` : '<span class="seo-pill">–</span>'}</td>
+    <td>${ok(!r.noAlt, r.noAlt ? String(r.noAlt) : '')}</td></tr>`).join('');
+}
+const auditColumns = [{ header: 'Page', width: 44 }, { header: 'Status', width: 8 }, { header: 'Title', width: 50 }, { header: 'Title length', width: 12 }, { header: 'Description length', width: 14 }, { header: 'H1', width: 6 }, { header: 'Canonical', width: 10 }, { header: 'Share image', width: 12 }, { header: 'Schema', width: 22 }, { header: 'Problems', width: 60 }];
+const auditExportRows = () => auditRows.map((r) => [decodeURIComponent(r.path), r.status, r.title, r.title?.length ?? 0, r.description?.length ?? 0, r.h1, r.canonical ? 'Yes' : 'No', r.image ? 'Yes' : 'No', r.schema || '', r.problems.join('; ') || 'OK']);
+
+// ---------- Tabs & wiring ----------
+function showTab(name: string) {
+  document.querySelectorAll<HTMLElement>('.tab[data-tab]').forEach((t) => { t.classList.toggle('active', t.dataset.tab === name); t.setAttribute('aria-selected', String(t.dataset.tab === name)); });
+  document.querySelectorAll<HTMLElement>('.seo-tab').forEach((s) => { s.hidden = s.id !== `tab-${name}`; });
+  if (name === 'sitemap') { loadSitemap(); loadRobots(); }
+  history.replaceState(null, '', `#${name}`);
+}
+function renderAll() {
+  renderOverview();
+  renderPageList();
+  renderProducts();
+  renderCategories();
+}
+
+function wire() {
+  document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((t) => t.onclick = () => showTab(t.dataset.tab || 'overview'));
+  $('#page-search').oninput = renderPageList;
+  $('#new-page').onclick = () => { selectPage(null); $<HTMLInputElement>('#p-path').focus(); };
+  $('#page-form').onsubmit = savePage;
+  ['#p-title', '#p-description', '#p-path', '#p-noindex'].forEach((sel) => $(sel).addEventListener('input', updatePagePreview));
+  $('#p-noindex').addEventListener('change', updatePagePreview);
+  $<HTMLInputElement>('#p-cover-file').onchange = (e) => { pendingCover = (e.target as HTMLInputElement).files?.[0] || null; showCover(); updatePagePreview(); };
+  $('#p-cover-remove').onclick = () => { pendingCover = null; pageCover = ''; $<HTMLInputElement>('#p-cover-file').value = ''; showCover(); updatePagePreview(); };
+  $('#page-delete').onclick = async () => {
+    if (!selectedPage || !confirm(`Delete the SEO settings for ${selectedPage.path_key}? The page itself is not deleted.`)) return;
+    const r = await supabase.from('seo_pages').delete().eq('id', selectedPage.id);
+    if (r.error) { toast(r.error.message, 'error'); return; }
+    pages = pages.filter((p) => p.id !== selectedPage!.id);
+    selectedPage = null;
+    $('#page-form').hidden = true;
+    $('#page-empty').hidden = false;
+    renderAll();
+    toast('Deleted.');
+  };
+  $('#product-search').oninput = renderProducts;
+  document.querySelectorAll<HTMLButtonElement>('#product-filters .chip').forEach((c) => c.onclick = () => setProductFilter(c.dataset.filter || 'all'));
+  $('#category-search').oninput = renderCategories;
+  $<HTMLButtonElement>('#products-autofill').onclick = (e) => autofill('product', e.currentTarget as HTMLButtonElement);
+  $<HTMLButtonElement>('#categories-autofill').onclick = (e) => autofill('category', e.currentTarget as HTMLButtonElement);
+  $('#products-xlsx').onclick = () => {
+    const dup = duplicateTitles(products.map((p) => productSeo(p).title));
+    exportXlsx(`clever-toys-product-seo-${new Date().toISOString().slice(0, 10)}.xlsx`, 'Product SEO',
+      [{ header: 'Product', width: 34 }, { header: 'URL', width: 40 }, { header: 'SEO title', width: 50 }, { header: 'Title length', width: 12 }, { header: 'SEO description', width: 70 }, { header: 'Description length', width: 14 }, { header: 'Checks', width: 50 }],
+      products.map((p) => { const r = itemChecks('product', p, dup); return [p.name, `${location.origin}/product/${p.slug}`, r.seo.title, r.seo.title.length, r.seo.description, r.seo.description.length, r.checks.map((c) => c.text).join('; ') || 'All good']; }));
+  };
+  $('#item-form').onsubmit = saveItem;
+  $('#item-close').onclick = () => $<HTMLDialogElement>('#item-dialog').close();
+  $('#i-title').addEventListener('input', updateItemPreview);
+  $('#i-description').addEventListener('input', updateItemPreview);
+  $('#item-autofill').onclick = () => {
+    if (!editing) return;
+    $<HTMLInputElement>('#i-title').value = suggestTitle(editing.item.name, editing.kind);
+    $<HTMLTextAreaElement>('#i-description').value = suggestDescription(editing.item, editing.kind);
+    document.querySelectorAll<HTMLInputElement>('[data-alt]').forEach((input, i) => { if (!input.value.trim()) input.value = `${editing!.item.name}${i ? ` – photo ${i + 1}` : ''}`; });
+    updateItemPreview();
+  };
+  $('#audit-run').onclick = runAudit;
+  $('#audit-xlsx').onclick = () => exportXlsx(`clever-toys-seo-check-${new Date().toISOString().slice(0, 10)}.xlsx`, 'SEO check', auditColumns, auditExportRows());
+  $('#audit-pdf').onclick = () => exportPdf(`clever-toys-seo-check-${new Date().toISOString().slice(0, 10)}.pdf`, 'SEO live check', `${auditRows.length} pages · ${new Date().toLocaleString()}`, auditColumns.filter((c) => c.header !== 'Title'), auditExportRows().map((r) => r.filter((_, i) => i !== 2)), getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim());
+  $('#sitemap-search').oninput = renderSitemap;
+  $('#sitemap-refresh').onclick = () => { loadSitemap(); loadRobots(); };
+  document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((b) => b.onclick = async () => { try { await navigator.clipboard.writeText($(`#${b.dataset.copy}`).textContent || ''); toast('Copied.'); } catch { toast('Could not copy.', 'error'); } });
+  $<HTMLButtonElement>('#sitemap-save').onclick = async (e) => {
+    const ok = await saveSeoSettings({ sitemap_products: $<HTMLInputElement>('#s-products').checked, sitemap_categories: $<HTMLInputElement>('#s-categories').checked, sitemap_images: $<HTMLInputElement>('#s-images').checked, robots_extra: $<HTMLTextAreaElement>('#s-robots').value.trim() }, e.currentTarget as HTMLButtonElement);
+    if (ok) { loadSitemap(); loadRobots(); }
+  };
+  $<HTMLInputElement>('#default-image-file').onchange = async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+    try { defaultImage = await uploadImage(file, 'default-share'); showDefaultImage(); toast('Image uploaded. Press Save settings to use it.'); } catch (error) { toast(error instanceof Error ? error.message : 'Upload failed.', 'error'); }
+  };
+  $('#default-image-remove').onclick = () => { defaultImage = ''; $<HTMLInputElement>('#default-image-file').value = ''; showDefaultImage(); };
+  $('#settings-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const g = $<HTMLInputElement>('#g-verify').value, b = $<HTMLInputElement>('#b-verify').value;
+    if (g.trim() && !verification(g)) { toast('That Google code does not look right. Paste the code from the HTML tag option.', 'error'); return; }
+    if (b.trim() && !verification(b)) { toast('That Bing code does not look right.', 'error'); return; }
+    const url = (sel: string) => { const v = $<HTMLInputElement>(sel).value.trim(); return /^https?:\/\//i.test(v) ? v : v ? `https://${v}` : ''; };
+    const saved = await saveSeoSettings({ google_verification: verification(g), bing_verification: verification(b), site_name: $<HTMLInputElement>('#o-name').value.trim() || 'Clever Toys', org_phone: $<HTMLInputElement>('#o-phone').value.trim(), org_email: $<HTMLInputElement>('#o-email').value.trim(), org_city: $<HTMLInputElement>('#o-city').value.trim(), facebook_url: url('#o-facebook'), tiktok_url: url('#o-tiktok'), default_image: defaultImage }, $<HTMLButtonElement>('#settings-save'));
+    if (saved) fillSettings();
+  };
+}
+
+async function load() {
+  const [p, pr, c, s] = await Promise.all([
+    supabase.from('seo_pages').select('*').order('path_key'),
+    supabase.from('products').select('id,name,slug,is_active,seo_title,seo_description,short_description,description,primary_image_url,product_images(id,image_url,alt_text,sort_order)').order('name'),
+    supabase.from('categories').select('id,name,slug,is_active,seo_title,seo_description,description,image_url').order('sort_order'),
+    supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle()
+  ]);
+  if (p.error) throw new Error(p.error.message);
+  if (pr.error) throw new Error(pr.error.message);
+  if (c.error) throw new Error(c.error.message);
+  pages = p.data || [];
+  products = (pr.data || []).map((x: Row) => ({ ...x, product_images: [...(x.product_images || [])].sort((a: Row, b: Row) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) }));
+  categories = c.data || [];
+  settingsRow = s.data || null;
+  hasSeoSettings = Boolean(settingsRow && 'seo' in settingsRow);
+  hasAdvancedPages = pages.length ? 'noindex' in pages[0] : hasSeoSettings;
+  seo = (settingsRow?.seo && typeof settingsRow.seo === 'object') ? settingsRow.seo : {};
+  $('#setup-notice').hidden = hasSeoSettings && hasAdvancedPages;
+  document.querySelectorAll<HTMLElement>('[data-advanced]').forEach((el) => { el.hidden = !hasAdvancedPages; });
+  $('#sitemap-url').textContent = `${location.origin}/sitemap.xml`;
+  fillSettings();
+  renderAll();
+  loadSitemap();
+}
+
+async function init() {
+  const guard = $('#guard');
+  try {
+    const cfg = $('#auth-config');
+    const url = cfg.dataset.url, key = cfg.dataset.key;
+    if (!url || !key) throw new Error('Supabase browser configuration is missing.');
+    supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) { location.href = `/login?next=${encodeURIComponent('/admin/seo')}`; return; }
+    const { data: isAdmin, error } = await supabase.rpc('is_admin');
+    if (error) throw new Error(error.message);
+    if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><a class="button" href="/">Back to store</a>'; return; }
+    wire();
+    await load();
+    guard.hidden = true;
+    $('#app').hidden = false;
+    const start = location.hash.slice(1);
+    if (['pages', 'products', 'categories', 'sitemap', 'settings'].includes(start)) showTab(start);
+  } catch (error) {
+    guard.hidden = false;
+    guard.innerHTML = `<h2>SEO could not load</h2><p>${esc(error instanceof Error ? error.message : 'Unknown error')}</p>`;
+  }
+}
 init();
 </script>
+
 <style is:global>
-.seo-page{max-width:1180px}.seo-page .admin-head{margin-bottom:22px}.seo-page .admin-head h1{margin:0 0 7px}.seo-page .admin-head p{margin:0;color:var(--muted)}.status{margin-bottom:18px;font-size:.9rem;font-weight:800;color:var(--brand-primary)}.seo-layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:20px;align-items:start}.page-list-card,.editor-card{min-width:0}.page-search{width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--line-strong);border-radius:12px;font:inherit;margin:12px 0}.page-list{display:grid;gap:7px;max-height:650px;overflow:auto}.page-choice{appearance:none;text-align:left;width:100%;display:grid;gap:2px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;cursor:pointer}.page-choice:hover,.page-choice.selected{border-color:var(--brand-primary);background:var(--brand-soft)}.page-choice strong{font-size:.92rem}.page-choice span,.page-choice small{color:var(--muted)}.page-choice span{font-size:.78rem}.page-choice small{font-size:.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.section-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px}.section-heading h2{margin:0 0 4px}.eyebrow{margin:0 0 5px;color:var(--muted);font-size:.74rem;font-weight:900;letter-spacing:.09em;text-transform:uppercase}.muted,.form-card small{color:var(--muted)}.editor-card form{display:grid;gap:15px}.editor-card label{display:grid;gap:7px;font-weight:700}.editor-card input,.editor-card textarea{width:100%;box-sizing:border-box;border:1px solid var(--line-strong);border-radius:12px;padding:12px 13px;font:inherit;background:#fff}.editor-card input{min-height:48px}.editor-card textarea{resize:vertical}.editor-card code{background:var(--surface-2);padding:2px 5px;border-radius:5px}.cover-preview-wrap{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}.cover-preview{width:100%;max-height:240px;object-fit:contain;border:1px solid var(--line);border-radius:14px;background:var(--surface-2)}.search-preview{display:grid;gap:6px;padding:18px;border:1px solid #dbeafe;border-radius:15px;background:#eff6ff}.search-preview strong{font-size:1.1rem;color:#1d4ed8}.search-preview span{font-size:.78rem;color:var(--success);word-break:break-all}.search-preview p{margin:0;color:var(--muted);line-height:1.5}.form-actions{display:flex;gap:10px;flex-wrap:wrap}.danger-button{color:var(--danger)}@media(max-width:900px){.seo-layout{grid-template-columns:1fr}.page-list{max-height:300px}.cover-preview-wrap{grid-template-columns:1fr}}
+.seo-head-actions,.seo-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seo-notice{margin-bottom:16px;padding:14px 16px;border:1.5px solid #f0b429;border-radius:14px;background:#fff9e8;color:#6b4a00;font-weight:600}
+.seo-notice code,.seo-template-help code,.seo-tab code{padding:1px 6px;border-radius:6px;background:var(--surface-2);font-size:.86em}
+.seo-tab{display:grid;gap:16px}
+.seo-tab>*,.seo-two>*,.seo-layout>*,.seo-overview>*{min-width:0}
+.seo-tab h2{margin:0 0 6px;font-size:1.15rem}
+.seo-tab h3{margin:18px 0 8px;font-size:1rem}
+.seo-tab .muted,.seo-dialog .muted{color:var(--muted)}
+.seo-tab .small{font-size:.86rem}
+.seo-section-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:12px}
+.seo-section-head p{margin:0}
+.seo-overview{display:grid;grid-template-columns:minmax(260px,.9fr) 2fr;gap:16px}
+.seo-score-card{display:flex;align-items:center;gap:20px}
+.seo-score-card p{margin:0}
+.seo-score{--c:var(--brand-primary);flex:0 0 108px;height:108px;border-radius:50%;display:grid;place-content:center;text-align:center;background:radial-gradient(closest-side,var(--surface) 78%,transparent 80% 100%),conic-gradient(var(--c) calc(var(--score)*1%),var(--surface-2) 0)}
+.seo-score[data-level=good]{--c:#16a34a}.seo-score[data-level=ok]{--c:#f59e0b}.seo-score[data-level=bad]{--c:#dc2626}
+.seo-score strong{font-size:2rem;line-height:1}
+.seo-score span{color:var(--muted);font-size:.78rem;font-weight:800}
+.seo-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.seo-kpi{display:grid;gap:4px;align-content:start;padding:18px;border:1.5px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:var(--shadow-sm)}
+.seo-kpi>span{color:var(--muted);font-size:.75rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+.seo-kpi strong{font-size:1.6rem}
+.seo-kpi small{color:var(--muted)}
+.seo-issues{display:grid;gap:8px}
+.seo-issue{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,background .15s}
+.seo-issue:hover{border-color:var(--brand-primary);background:var(--brand-soft)}
+.seo-issue>span:nth-child(2){flex:1}
+.seo-issue-go{color:var(--brand-primary);font-weight:800;white-space:nowrap}
+.seo-dot{flex:0 0 10px;height:10px;border-radius:50%;background:#94a3b8}
+.seo-error .seo-dot{background:#dc2626}.seo-warn .seo-dot{background:#f59e0b}.seo-info .seo-dot{background:#3b82f6}
+.seo-all-good{margin:0;padding:14px;border-radius:14px;background:#ecfdf5;color:#166534;font-weight:700}
+.seo-progress{height:8px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-bottom:10px}
+.seo-progress span{display:block;height:100%;width:0;background:var(--brand-gradient,var(--brand-primary));transition:width .2s}
+.seo-audit-summary{margin:0 0 12px;font-weight:700}
+.seo-table{min-width:880px}
+.seo-table td{font-size:.9rem;vertical-align:middle}
+.seo-table td small.seo-len{display:inline-block;margin-left:6px;padding:0 6px;border-radius:99px;background:var(--surface-2);color:var(--muted);font-size:.72rem;font-weight:800}
+.seo-table .seo-fallback{color:var(--muted);font-style:italic}
+.seo-problems{display:block;margin-top:3px;color:#b45309;font-size:.78rem}
+.seo-pills{display:flex;flex-wrap:wrap;gap:4px}
+td.seo-pills{display:table-cell}
+td.seo-pills .seo-pill{margin:2px}
+.seo-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:99px;background:var(--surface-2);color:var(--muted);font-size:.74rem;font-weight:800;white-space:nowrap}
+.seo-pill.seo-ok{background:#dcfce7;color:#166534}.seo-pill.seo-warn{background:#fef3c7;color:#92400e}.seo-pill.seo-error{background:#fee2e2;color:#991b1b}.seo-pill.seo-info{background:#dbeafe;color:#1e40af}
+.seo-item{display:flex;align-items:center;gap:10px;min-width:200px}
+.seo-item img,.seo-noimg{flex:0 0 44px;width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--surface-2);display:grid;place-items:center}
+.seo-item span{display:grid;gap:2px;min-width:0}
+.seo-item small{color:var(--muted);font-size:.76rem;word-break:break-all}
+.seo-toolbar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.seo-search{flex:1 1 220px;max-width:340px}
+.seo-layout{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;align-items:start}
+.seo-page-list-card .seo-section-head{align-items:center}
+.seo-page-list-card .seo-search{max-width:none;width:100%;margin-bottom:10px}
+.seo-page-list{display:grid;gap:6px;max-height:640px;overflow:auto}
+.seo-page-choice{display:grid;gap:2px;width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.seo-page-choice:hover,.seo-page-choice.selected{border-color:var(--brand-primary);background:var(--brand-soft)}
+.seo-page-choice>span{color:var(--muted);font-size:.78rem}
+.seo-tags{display:flex;flex-wrap:wrap;gap:4px}
+.seo-tags:empty{display:none}
+.seo-tag{padding:1px 7px;border-radius:99px;background:var(--surface-2);font-style:normal;font-size:.7rem;font-weight:800}
+.seo-tag-warn{background:#fef3c7;color:#92400e}
+.seo-editor form,.seo-dialog form{display:grid;gap:14px}
+.seo-field{display:grid;gap:6px;font-weight:700}
+.seo-field small,.seo-dialog small{color:var(--muted);font-weight:500}
+.seo-label{font-weight:700}
+.seo-field textarea{resize:vertical;min-height:84px;padding:10px 14px;font:inherit}
+.seo-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace!important;font-size:.88rem}
+.seo-meter{position:relative;display:block;padding-top:8px;color:var(--muted);font-size:.78rem;font-weight:700}
+.seo-meter::before{content:"";position:absolute;top:0;left:0;right:0;height:4px;border-radius:99px;background:linear-gradient(90deg,var(--meter,#16a34a) var(--fill,0%),var(--surface-2) 0)}
+.seo-meter[data-state=warn]{--meter:#f59e0b;color:#92400e}.seo-meter[data-state=error]{--meter:#dc2626;color:#b91c1c}
+.seo-template-help{padding:12px 14px;border-radius:12px;background:var(--brand-soft);line-height:1.5}
+.seo-image-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.seo-image-row img{width:180px;aspect-ratio:1.91/1;object-fit:cover;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2)}
+.seo-file{cursor:pointer}
+.seo-advanced{display:grid;gap:10px;padding:14px;border:1.5px dashed var(--line-strong);border-radius:14px}
+.seo-check{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;font-weight:700;cursor:pointer}
+.seo-check small{color:var(--muted);font-weight:500}
+@media(max-width:560px){.seo-check small{flex-basis:100%;padding-left:50px}}
+.seo-checks{display:grid;gap:10px;margin:14px 0}
+.seo-inline{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.seo-previews{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:14px}
+.seo-serp,.seo-social{padding:14px;border:1.5px solid var(--line);border-radius:14px;background:#fff;color:#202124}
+.seo-serp-site{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.seo-serp-icon{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#f1f3f4;font-size:.8rem}
+.seo-serp-site span{display:grid;line-height:1.2}
+.seo-serp-site b{font-size:.84rem;font-weight:500}
+.seo-serp-site small{color:#4d5156;font-size:.75rem;word-break:break-all}
+.seo-serp strong{display:block;color:#1a0dab;font-size:1.12rem;font-weight:400;line-height:1.3}
+.seo-serp p:last-child{margin:4px 0 0;color:#4d5156;font-size:.86rem;line-height:1.5}
+.seo-social-card{border:1px solid #dadde1;border-radius:10px;overflow:hidden;background:#f0f2f5}
+.seo-social-card img,.seo-social-empty{display:block;width:100%;aspect-ratio:1.91/1;object-fit:cover;background:#e4e6eb}
+.seo-social-empty{display:grid;place-items:center;color:#65676b;font-size:.84rem}
+.seo-social-card>div:last-child{display:grid;gap:2px;padding:10px 12px}
+.seo-social-card small{color:#65676b;font-size:.7rem}
+.seo-social-card strong{color:#050505;font-size:.92rem;line-height:1.3}
+.seo-social-card p{margin:0;color:#65676b;font-size:.8rem}
+.seo-serp .eyebrow,.seo-social .eyebrow{color:#5f6368}
+.seo-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.seo-two>.admin-panel{display:grid;gap:10px;align-content:start}
+.seo-two>.admin-panel p{margin:0}
+.seo-gap{margin-top:14px!important}
+.seo-save-row{grid-column:1/-1;margin:0}
+.seo-copy{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:var(--surface-2)}
+.seo-copy code{flex:1;min-width:0;overflow-wrap:anywhere;background:none!important}
+.seo-steps{margin:0;padding-left:20px;display:grid;gap:6px;line-height:1.5}
+.seo-pre{margin:0;padding:12px 14px;max-height:260px;overflow:auto;border-radius:12px;background:#111827;color:#e5e7eb;font-size:.82rem;line-height:1.5;white-space:pre-wrap}
+.seo-dialog{width:min(760px,calc(100vw - 24px));max-height:calc(100vh - 32px);padding:22px;border:0;border-radius:20px;background:var(--surface);color:var(--ink);box-shadow:0 30px 80px rgba(15,23,42,.35)}
+.seo-dialog::backdrop{background:rgba(15,23,42,.5)}
+.seo-dialog h2{margin:0}
+.seo-alt-list{display:grid;gap:8px}
+.seo-alt{display:flex;align-items:center;gap:10px}
+.seo-alt img{flex:0 0 48px;width:48px;height:48px;border-radius:10px;object-fit:cover}
+.seo-alt input{flex:1;min-width:0}
+@media(max-width:1100px){.seo-overview{grid-template-columns:1fr}.seo-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.seo-layout,.seo-two,.seo-previews{grid-template-columns:1fr}.seo-page-list{max-height:280px}}
+@media(max-width:560px){.seo-inline{grid-template-columns:1fr}.seo-score-card{flex-direction:column;text-align:center}.seo-search{max-width:none}.seo-dialog{padding:16px}}
 </style>
