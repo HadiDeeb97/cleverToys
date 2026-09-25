@@ -9,6 +9,7 @@
  */
 import '../styles/global.css';
 import { supabaseConfig } from '../lib/config';
+import { LEBANON_GOVERNORATES } from '../lib/lebanon';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
 <head>
@@ -38,7 +39,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
           </div>
           <h2 class="form-section-title">Delivery address</h2>
           <div class="form-grid">
-            <label>Governorate<input name="governorate" required autocomplete="address-level1" maxlength="80" /></label>
+            <label>Governorate<select name="governorate" required autocomplete="address-level1"><option value="">Choose your governorate</option>{LEBANON_GOVERNORATES.map((g) => <option value={g}>{g}</option>)}</select></label>
             <label>City<input name="city" required autocomplete="address-level2" maxlength="80" /></label>
             <label class="wide">Area <span>(optional)</span><input name="area" autocomplete="address-level3" maxlength="120" /></label>
             <label class="wide">Full address<textarea name="address" required rows="3" autocomplete="street-address" maxlength="500" placeholder="Street, building, floor"></textarea></label>
@@ -58,6 +59,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 <script>
 import { getSession, getSupabase } from '../scripts/supabase-browser';
+import { matchGovernorate } from '../lib/lebanon';
 
 type CartItem = { productId: string; variantId?: string | null; variantName?: string | null; name: string; price: number; quantity: number; image?: string };
 
@@ -113,7 +115,8 @@ async function prefill() {
   const fill = (values: Record<string, string>) => {
     for (const [name, value] of Object.entries(values)) {
       const el = form.elements.namedItem(name) as HTMLInputElement | null;
-      if (el && !el.value && value) el.value = value;
+      // Saved governorates typed before the dropdown existed ("north", "Jbeil"…) pick the matching option.
+      if (el && !el.value && value) el.value = name === 'governorate' ? matchGovernorate(value) : value;
     }
   };
   try {

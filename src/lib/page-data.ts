@@ -50,7 +50,7 @@ export const parseTheme = (d: any): PublishedTheme | null => {
 };
 
 export type MenuCategory = { name: string; slug: string; image_url: string | null };
-export type PageData = { storeSettings: Record<string, any>; published: PublishedTheme; seo: any; design: StoreDesign; categories: MenuCategory[] };
+export type PageData = { storeSettings: Record<string, any>; published: PublishedTheme; seo: any; design: StoreDesign; categories: MenuCategory[]; hasSale: boolean };
 
 /**
  * Loads the store settings (Admin → Branding), the published theme and the page's SEO row.
@@ -59,7 +59,7 @@ export type PageData = { storeSettings: Record<string, any>; published: Publishe
  */
 export async function loadPageData(path: string): Promise<PageData> {
   const { url: base, key } = supabaseConfig();
-  const data: PageData = { storeSettings: { ...defaultStoreSettings }, published: { mode: 'logo', theme: null }, seo: null, design: parseDesign(null), categories: [] };
+  const data: PageData = { storeSettings: { ...defaultStoreSettings }, published: { mode: 'logo', theme: null }, seo: null, design: parseDesign(null), categories: [], hasSale: false };
   if (!base || !key) return data;
   const rest = `${base.replace(/\/$/, '')}/rest/v1`;
   const init = { headers: { apikey: key, Authorization: `Bearer ${key}` }, cf: { cacheTtl: 0, cacheEverything: false } };
@@ -103,7 +103,19 @@ export async function loadPageData(path: string): Promise<PageData> {
     } catch {}
   };
 
-  await Promise.all([loadSettings(), loadSeo(), loadCategories()]);
+  // Is anything on sale? (a toy or one of its options has a sale price). Shows the "Sale" links in the menus.
+  const loadHasSale = async () => {
+    if (path.startsWith('/admin')) return;
+    try {
+      const found = await Promise.all(['products', 'product_variants'].map(async (table) => {
+        const r = await fetch(`${rest}/${table}?select=id&is_active=eq.true&sale_price=not.is.null&limit=1`, init);
+        return r.ok && ((await r.json()) as unknown[]).length > 0;
+      }));
+      data.hasSale = found.some(Boolean);
+    } catch {}
+  };
+
+  await Promise.all([loadSettings(), loadSeo(), loadCategories(), loadHasSale()]);
   return data;
 }
 

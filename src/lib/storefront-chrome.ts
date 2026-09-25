@@ -39,6 +39,8 @@ export type ChromeOptions = {
   logoUrl: string;
   design: StoreDesign;
   categories: MenuCategory[];
+  /** Something is on sale: show "Sale" links (they open /products?sale=1). */
+  hasSale: boolean;
   whatsappUrl: string;
   instagramUrl: string;
   showWhatsapp: boolean;
@@ -63,7 +65,7 @@ export function renderHeader(o: ChromeOptions) {
   const megaCategories = o.categories.slice(0, 8).map((c) => `<a class="mega-category" href="/category/${encodeURIComponent(c.slug)}">${tileMedia(c.name, c.image_url)}<span>${esc(c.name)}</span></a>`).join('');
   const ages = AGE_RANGES.map((a) => `<a href="/products?age_min=${a.min}${a.max != null ? `&amp;age_max=${a.max}` : ''}"><span>Ages ${a.label}</span><small>${a.icon}</small></a>`).join('');
   const mega = `<div class="mega-menu" role="region" aria-label="Shop menu"><div class="container"><div class="mega-inner">
-    <div><p class="mega-title">Shop</p><div class="mega-links"><a href="/products">All toys ${ICONS.arrow.replace('<svg', '<svg width="16" height="16"')}</a><a href="/products?sort=newest">New arrivals</a><a href="/products?sort=price-asc">Best prices</a><a href="/categories">All categories</a></div></div>
+    <div><p class="mega-title">Shop</p><div class="mega-links"><a href="/products">All toys ${ICONS.arrow.replace('<svg', '<svg width="16" height="16"')}</a><a href="/products?sort=newest">New arrivals</a>${o.hasSale ? '<a href="/products?sale=1" class="sale-link">Sale</a>' : ''}<a href="/products?sort=price-asc">Best prices</a><a href="/categories">All categories</a></div></div>
     <div><p class="mega-title">Categories</p><div class="mega-categories">${megaCategories || '<p class="muted">Categories coming soon.</p>'}</div></div>
     <div><p class="mega-title">Shop by age</p><div class="mega-links">${ages}</div></div>
   </div></div></div>`;
@@ -74,7 +76,7 @@ export function renderHeader(o: ChromeOptions) {
     <button type="button" class="icon-button menu-toggle" data-drawer-open="site-drawer" aria-controls="site-drawer" aria-expanded="false" aria-label="Open menu">${ICONS.menu}</button>
     <a href="/" class="logo" aria-label="Clever Toys home">${logoMarkup(o.logoUrl)}</a>
     <nav class="main-nav" aria-label="Main navigation">
-      <div class="nav-item"><a class="nav-link" href="/products"${current(o.path, '/products')}>Shop ${ICONS.chevron}</a>${mega}</div>
+      <div class="nav-item"><a class="nav-link" href="/products"${current(o.path, '/products')}>Shop ${ICONS.chevron}</a>${mega}</div>${o.hasSale ? '<a class="nav-sale" href="/products?sale=1">Sale</a>' : ''}
       <a href="/categories"${current(o.path, '/categories')}>Categories</a>
       <a href="/about"${current(o.path, '/about')}>About</a>
       <a href="/contact"${current(o.path, '/contact')}>Contact</a>
@@ -93,7 +95,7 @@ export function renderHeader(o: ChromeOptions) {
 
 /** Slide-in menu for phones and tablets (opened by the ☰ button). */
 export function renderMenuDrawer(o: ChromeOptions) {
-  const links: Array<[string, string]> = [['/', 'Home'], ['/products', 'Shop all toys'], ['/categories', 'Categories'], ['/track-order', 'Track your order'], ['/about', 'About us'], ['/contact', 'Contact'], ['/account', 'My account']];
+  const links: Array<[string, string]> = [['/', 'Home'], ['/products', 'Shop all toys'], ...(o.hasSale ? [['/products?sale=1', 'Sale'] as [string, string]] : []), ['/categories', 'Categories'], ['/track-order', 'Track your order'], ['/about', 'About us'], ['/contact', 'Contact'], ['/account', 'My account']];
   const categories = o.categories.map((c) => `<a href="/category/${encodeURIComponent(c.slug)}">${tileMedia(c.name, c.image_url)}<span>${esc(c.name)}</span></a>`).join('');
   return `<div class="drawer site-drawer" id="site-drawer" hidden>
   <div class="drawer-backdrop" data-drawer-close></div>
@@ -125,7 +127,7 @@ export function renderFooter(o: ChromeOptions) {
     o.showWhatsapp && `<a href="${esc(o.whatsappUrl)}" target="_blank" rel="noopener noreferrer" aria-label="WhatsApp">${ICONS.whatsapp}</a>`,
     o.showInstagram && `<a href="${esc(o.instagramUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Instagram">${ICONS.instagram}</a>`
   ].filter(Boolean).join('');
-  const shopLinks = [['/products', 'All toys'], ['/products?sort=newest', 'New arrivals'], ...o.categories.slice(0, 5).map((c) => [`/category/${encodeURIComponent(c.slug)}`, c.name])];
+  const shopLinks = [['/products', 'All toys'], ['/products?sort=newest', 'New arrivals'], ...(o.hasSale ? [['/products?sale=1', 'Sale']] : []), ...o.categories.slice(0, 5).map((c) => [`/category/${encodeURIComponent(c.slug)}`, c.name])];
   const col = (title: string, items: string[][]) => `<nav class="footer-col" aria-label="${esc(title)}"><h2>${esc(title)}</h2><ul>${items.map(([href, label]) => `<li><a href="${href}">${esc(label)}</a></li>`).join('')}</ul></nav>`;
   return `<footer class="site-footer"><div class="container">
   <div class="footer-grid">

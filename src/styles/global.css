@@ -153,7 +153,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 @media (hover:hover){.text-link:hover{color:var(--primary-strong)}}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink-2);font-size:.82rem;font-weight:700}
 .sale-badge,.stock-badge,.new-badge{position:absolute;top:12px;z-index:2;display:inline-flex;align-items:center;padding:5px 10px;border-radius:var(--radius-pill);font-size:.72rem;font-weight:800;letter-spacing:.02em;line-height:1.2}
-.sale-badge{left:12px;background:var(--ink);color:#fff}
+.sale-badge{left:12px;background:var(--danger);color:#fff}
 .new-badge{left:12px;background:var(--theme-accent);color:var(--theme-text-on-accent)}
 .sale-badge+.new-badge{top:44px}
 .stock-badge{right:12px;background:rgba(255,255,255,.92);color:var(--danger);box-shadow:var(--shadow-sm)}
@@ -169,19 +169,25 @@ button,input,textarea,select{font:inherit;color:inherit}
 .site-logo-image{max-height:46px;max-width:170px;width:auto;height:auto;object-fit:contain}
 .logo:has(.site-logo-image:not([hidden])) .logo-text{display:none}
 .menu-toggle{display:none;margin-left:-8px}
-.main-nav{display:flex;align-items:center;gap:2px;min-width:0;font-weight:600;font-size:.95rem}
+.main-nav{display:flex;align-items:center;align-self:stretch;gap:2px;min-width:0;font-weight:600;font-size:.95rem}
 .main-nav>a,.nav-link{position:relative;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:8px 14px;border-radius:var(--radius-pill);color:var(--ink-2);white-space:nowrap;transition:color .18s,background .18s}
 .nav-link svg{width:14px;height:14px;transition:transform .2s}
 .main-nav>a::after,.nav-link::after{content:"";position:absolute;left:14px;right:14px;bottom:6px;height:2px;border-radius:2px;background:var(--ink);transform:scaleX(0);transform-origin:left;transition:transform .25s var(--ease)}
 @media (hover:hover){.main-nav>a:hover,.nav-link:hover{color:var(--ink)}.main-nav>a:hover::after,.nav-link:hover::after{transform:scaleX(1)}}
 .main-nav a[aria-current=page]{color:var(--ink)}
+/* "Sale" link: only shown while something is on sale (Admin → Products → sale price). */
+.main-nav>a.nav-sale,.mega-links a.sale-link{color:var(--danger)}
+.category-pills a.sale-pill{color:var(--danger)}.category-pills a.sale-pill.active{background:var(--danger);border-color:var(--danger);color:#fff}.main-nav>a.nav-sale::after{background:var(--danger)}
 .main-nav a[aria-current=page]::after{transform:scaleX(1);background:var(--brand-primary)}
-/* "Shop" mega menu: opens on hover or keyboard focus on computers. */
-.nav-item{position:static}
-.mega-menu{position:absolute;left:0;right:0;top:100%;padding-top:10px;opacity:0;visibility:hidden;transform:translateY(8px);transition:opacity .22s var(--ease),transform .22s var(--ease),visibility 0s linear .22s;pointer-events:none}
+/* "Shop" mega menu: opens on hover or keyboard focus on computers.
+   The Shop item fills the full header height, so the pointer never leaves it on the way down to the
+   menu, and the menu stays hoverable for a moment while it fades out (no pointer-events:none), so a
+   quick or slightly diagonal mouse movement doesn't close it. */
+.nav-item{position:static;align-self:stretch;display:flex;align-items:center}
+.mega-menu{position:absolute;left:0;right:0;top:100%;padding-top:10px;opacity:0;visibility:hidden;transform:translateY(8px);transition:opacity .22s var(--ease) .15s,transform .22s var(--ease) .15s,visibility 0s linear .37s}
 .mega-inner{display:grid;grid-template-columns:220px 1fr 220px;gap:32px;padding:28px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-lg)}
-@media (hover:hover){.nav-item:hover .mega-menu{opacity:1;visibility:visible;transform:none;transition-delay:.05s,.05s,0s;pointer-events:auto}.nav-item:hover .nav-link svg{transform:rotate(180deg)}}
-.nav-item:focus-within .mega-menu{opacity:1;visibility:visible;transform:none;transition-delay:0s;pointer-events:auto}
+@media (hover:hover){.nav-item:hover .mega-menu{opacity:1;visibility:visible;transform:none;transition-delay:.05s,.05s,0s}.nav-item:hover .nav-link svg{transform:rotate(180deg)}}
+.nav-item:focus-within .mega-menu{opacity:1;visibility:visible;transform:none;transition-delay:0s}
 .mega-title{margin:0 0 12px;color:var(--subtle);font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
 .mega-links{display:grid;gap:2px}
 .mega-links a{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;margin-inline:-12px;border-radius:var(--radius-sm);font-weight:600;color:var(--ink-2)}
@@ -372,12 +378,13 @@ html[data-font=modern] .hero-highlight,html[data-font=playful] .hero-highlight{f
 /* The whole product card is one big tap target: the title link is stretched over the card.
    Buttons inside the card (Quick view, Add to cart) sit above it so they still work on their own. */
 .product-info h2 a::after,.product-info h3 a::after{content:"";position:absolute;inset:0;z-index:3}
-.quick-add{position:absolute;right:12px;bottom:12px;z-index:4;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:42px;min-width:42px;padding:0 14px;border:0;border-radius:var(--radius-pill);background:rgba(255,255,255,.95);color:var(--ink);font-size:.84rem;font-weight:800;box-shadow:var(--shadow);cursor:pointer;transition:transform .25s var(--ease),background .2s,color .2s,opacity .25s}
+.quick-add{position:absolute;right:12px;bottom:12px;z-index:4;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:42px;width:42px;padding:0;border:0;border-radius:var(--radius-pill);background:rgba(255,255,255,.95);color:var(--ink);font-size:.84rem;font-weight:800;box-shadow:var(--shadow);cursor:pointer;transition:transform .25s var(--ease),background .2s,color .2s,opacity .25s}
 .quick-add svg{width:18px;height:18px}
 .quick-add .quick-add-label{max-width:0;overflow:hidden;white-space:nowrap;transition:max-width .3s var(--ease)}
-@media (hover:hover){.product-card:hover .quick-add .quick-add-label,.quick-add:focus-visible .quick-add-label{max-width:120px}.quick-add:hover{background:var(--ink);color:#fff}}
+@media (hover:hover){.quick-add:hover{background:var(--ink);color:#fff}}
 .quick-add.is-added{background:var(--success);color:#fff}
-.quick-view-trigger{position:absolute;left:12px;bottom:12px;z-index:4;padding:10px 14px;border:0;border-radius:var(--radius-pill);background:rgba(255,255,255,.95);color:var(--ink);font-size:.8rem;font-weight:800;box-shadow:var(--shadow);cursor:pointer;opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s var(--ease)}
+/* Quick view sits on the left and stops before the round Add / Options button, so they never overlap. */
+.quick-view-trigger{position:absolute;left:12px;right:64px;bottom:12px;z-index:4;height:42px;padding:0 14px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:0;border-radius:var(--radius-pill);background:rgba(255,255,255,.95);color:var(--ink);font-size:.8rem;font-weight:800;box-shadow:var(--shadow);cursor:pointer;opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s var(--ease)}
 @media (hover:hover){.product-card:hover .quick-view-trigger{opacity:1;transform:none}}
 .quick-view-trigger:focus-visible{opacity:1;transform:none}
 .view-product{display:none}
@@ -618,6 +625,7 @@ html[data-font=modern] .hero-highlight,html[data-font=playful] .hero-highlight{f
 .form-card input:focus,.form-card textarea:focus,.form-card select:focus,html[data-area=admin] #product-search:focus{border-color:var(--ink);box-shadow:var(--ring)}
 .form-card input::placeholder,.form-card textarea::placeholder{color:var(--subtle)}
 .form-card input:user-invalid,.form-card textarea:user-invalid,.form-card select:user-invalid{border-color:var(--danger);box-shadow:0 0 0 4px var(--danger-soft)}
+.form-card select{appearance:none;padding-right:42px;background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23333' stroke-width='1.8'%3E%3Cpath d='m1 1 5 5 5-5'/%3E%3C/svg%3E") no-repeat right 16px center;cursor:pointer}
 .form-card input[type=file]{padding:10px}
 .form-card input[type=checkbox],.form-card input[type=radio]{width:auto;min-height:0;accent-color:var(--ink)}
 .form-card .button{justify-self:start}
@@ -877,7 +885,7 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .product-info h2,.product-info h3{font-size:.92rem}
   .product-info p{display:none}
   .price{font-size:.98rem}
-  .quick-add{right:8px;bottom:8px;height:38px;min-width:38px;padding:0 10px}
+  .quick-add{right:8px;bottom:8px;height:38px;width:38px}
   .sale-badge,.new-badge,.stock-badge{top:8px;padding:4px 8px;font-size:.66rem}
   .sale-badge,.new-badge{left:8px}
   .stock-badge{right:8px}

@@ -22,7 +22,7 @@ export type CardProduct = {
   age_min?: number | null;
   age_max?: number | null;
   created_at?: string | null;
-  product_variants?: Array<{ id: string; is_active?: boolean | null }> | null;
+  product_variants?: Array<{ id: string; is_active?: boolean | null; price?: number | null; sale_price?: number | null }> | null;
 };
 
 interface Props {
@@ -40,7 +40,12 @@ const price = Number(product.sale_price ?? product.price);
 const original = product.sale_price != null ? Number(product.price) : null;
 const discount = original && original > price ? Math.round((1 - price / original) * 100) : 0;
 const inStock = Number(product.stock_quantity ?? 0) > 0;
-const hasOptions = (product.product_variants ?? []).some((v) => v.is_active !== false);
+const activeVariants = (product.product_variants ?? []).filter((v) => v.is_active !== false);
+const hasOptions = activeVariants.length > 0;
+// "Sale" tag: the toy itself has a sale price, or at least one of its options does (an option
+// without its own price uses the toy's price).
+const variantOnSale = activeVariants.some((v) => v.sale_price != null && Number(v.sale_price) < Number(v.price ?? product.price));
+const onSale = discount > 0 || variantOnSale;
 const isNew = product.created_at ? Date.now() - new Date(product.created_at).getTime() < 30 * 864e5 : false;
 const href = `/product/${product.slug}`;
 const ph = placeholderFor(product.name);
@@ -63,13 +68,13 @@ const money = (n: number) => `$${n.toFixed(2)}`;
         ? <img class="product-image" src={product.primary_image_url} alt="" loading={eager ? 'eager' : 'lazy'} decoding="async" width="400" height="400" />
         : <span class="product-placeholder" style={`--ph-h:${ph.hue}`}><span>{ph.emoji}</span></span>}
     </a>
-    {discount > 0 && <span class="sale-badge">−{discount}%</span>}
+    {onSale && <span class="sale-badge">Sale{discount > 0 && ` −${discount}%`}</span>}
     {isNew && <span class="new-badge">New</span>}
     {!inStock && <span class="stock-badge">Sold out</span>}
     <button type="button" class="quick-view-trigger" aria-label={`Quick view ${product.name}`}>Quick view</button>
     {inStock && (hasOptions
-      ? <a class="quick-add" href={href} aria-label={`Choose options for ${product.name}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M4 12h16M4 17h7M17 4v6M20 7h-6"/></svg><span class="quick-add-label">Options</span></a>
-      : <button type="button" class="quick-add" data-quick-add data-id={product.id} data-name={product.name} data-slug={product.slug} data-price={price} data-image={product.primary_image_url || ''} data-stock={product.stock_quantity} aria-label={`Add ${product.name} to cart`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="quick-add-label">Add to cart</span></button>)}
+      ? <a class="quick-add" href={href} title="Choose options" aria-label={`Choose options for ${product.name}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M4 12h16M4 17h7M17 4v6M20 7h-6"/></svg><span class="quick-add-label">Options</span></a>
+      : <button type="button" class="quick-add" title="Add to cart" data-quick-add data-id={product.id} data-name={product.name} data-slug={product.slug} data-price={price} data-image={product.primary_image_url || ''} data-stock={product.stock_quantity} aria-label={`Add ${product.name} to cart`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="quick-add-label">Add to cart</span></button>)}
   </div>
   <div class="product-info">
     {ages && <p class="product-meta">{ages}</p>}

@@ -14,7 +14,7 @@ import ProductCard, { type CardProduct } from '../components/ProductCard.astro';
 import QuickView from '../components/QuickView.astro';
 import '../styles/global.css';
 
-const cardFields = 'id,name,slug,price,sale_price,stock_quantity,primary_image_url,short_description,age_min,age_max,created_at,product_variants(id,is_active)';
+const cardFields = 'id,name,slug,price,sale_price,stock_quantity,primary_image_url,short_description,age_min,age_max,created_at,product_variants(id,is_active,price,sale_price)';
 
 // Settings, categories, featured toys and new arrivals all load at the same time.
 const [pageData, featuredResult, newestResult, categoriesResult] = await Promise.all([

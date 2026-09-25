@@ -8,6 +8,7 @@
  */
 import '../styles/global.css';
 import { supabaseConfig } from '../lib/config';
+import { LEBANON_GOVERNORATES } from '../lib/lebanon';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
 <head>
@@ -35,7 +36,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
       <form id="details-form" class="form-card account-details">
         <label>Full name<input name="full_name" autocomplete="name" maxlength="120" /></label>
         <label>Phone number<input name="phone" type="tel" autocomplete="tel" maxlength="40" /></label>
-        <label>Governorate<input name="governorate" autocomplete="address-level1" maxlength="80" /></label>
+        <label>Governorate<select name="governorate" autocomplete="address-level1"><option value="">Choose your governorate</option>{LEBANON_GOVERNORATES.map((g) => <option value={g}>{g}</option>)}</select></label>
         <label>City<input name="city" autocomplete="address-level2" maxlength="80" /></label>
         <label>Area<input name="area" autocomplete="address-level3" maxlength="120" /></label>
         <label class="wide">Full address<textarea name="address" rows="2" autocomplete="street-address" maxlength="500"></textarea></label>
@@ -48,6 +49,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { matchGovernorate } from '../lib/lebanon';
 
 type Order = { id: string; order_number: string; total: number; status: string; created_at: string; order_items?: Array<{ product_name?: string; variant_name?: string | null; quantity: number; unit_price?: number }> };
 
@@ -106,7 +108,7 @@ async function init() {
     }
     const values: Record<string, string> = profile.data || {};
     if (!values.full_name) values.full_name = session.user.user_metadata?.full_name || '';
-    for (const name of FIELDS) (form.elements.namedItem(name) as HTMLInputElement).value = values[name] || '';
+    for (const name of FIELDS) (form.elements.namedItem(name) as HTMLInputElement).value = name === 'governorate' ? matchGovernorate(values[name] || '') : values[name] || '';
   } catch (error) {
     message.textContent = error instanceof Error ? error.message : 'Could not load your account.';
   }

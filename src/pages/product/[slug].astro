@@ -68,7 +68,7 @@ const inStock = Boolean(product && product.stock_quantity > 0);
 // 2) "You may also like": active toys from the same categories (featured first), topped up with
 //    other featured/new toys. Both queries run at the same time to keep the page fast.
 type SimilarProduct = { id: string; name: string; slug: string; price: number; sale_price: number | null; stock_quantity: number; primary_image_url: string | null; is_active?: boolean; is_featured?: boolean; created_at?: string };
-const similarFields = 'id,name,slug,price,sale_price,stock_quantity,primary_image_url,age_min,age_max,is_active,is_featured,created_at,product_variants(id,is_active)';
+const similarFields = 'id,name,slug,price,sale_price,stock_quantity,primary_image_url,age_min,age_max,is_active,is_featured,created_at,product_variants(id,is_active,price,sale_price)';
 let similarProducts: SimilarProduct[] = [];
 if (product) {
   const categoryIds = [...new Set([...(product.product_categories ?? []).map((row: { category_id: string }) => row.category_id), ...(product.categories?.id ? [product.categories.id] : [])])];
@@ -130,6 +130,8 @@ const ageText = product && (product.age_min != null || product.age_max != null)
   : '';
 const placeholder = placeholderFor(product?.name || 'toy');
 const discount = baseOriginalPrice && baseOriginalPrice > baseDisplayPrice ? Math.round((1 - baseDisplayPrice / baseOriginalPrice) * 100) : 0;
+// Also tag the toy as on sale when only some of its options are discounted.
+const onSale = discount > 0 || variants.some((v) => v.originalPrice != null && v.originalPrice > v.displayPrice);
 const perks = [['🚚', design.product.delivery], ['💵', design.product.payment], ['↩️', design.product.returns]].filter(([, text]) => text);
 const similarCards = similarProducts as unknown as CardProduct[];
 ---
@@ -176,7 +178,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
               {images[0]
                 ? <img id="main-product-image" src={images[0].image_url} alt={images[0].alt_text || product.name} fetchpriority="high" decoding="async" width="800" height="800" />
                 : <span class="product-placeholder" style={`--ph-h:${placeholder.hue}`}><span aria-hidden="true">{placeholder.emoji}</span></span>}
-              {discount > 0 && <span class="sale-badge">−{discount}%</span>}
+              {onSale && <span class="sale-badge">Sale{discount > 0 && ` −${discount}%`}</span>}
             </div>
             {images.length > 1 && (
               <div class="gallery-thumbnails" aria-label="Product images">

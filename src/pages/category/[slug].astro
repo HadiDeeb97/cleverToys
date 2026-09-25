@@ -21,7 +21,7 @@ let productsError: unknown = null;
 if (category) {
   const ids = ((category.product_categories || []) as { product_id: string }[]).map((row) => row.product_id);
   if (ids.length) {
-    const result = await supabase.from('products').select('id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, age_min, age_max, created_at, product_variants(id,is_active)').in('id', ids).eq('is_active', true).order('created_at', { ascending: false });
+    const result = await supabase.from('products').select('id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, age_min, age_max, created_at, product_variants(id,is_active,price,sale_price)').in('id', ids).eq('is_active', true).order('created_at', { ascending: false });
     products = result.data as CategoryProduct[] | null;
     productsError = result.error;
   } else {
@@ -29,6 +29,8 @@ if (category) {
   }
 }
 
+// No real "sale" category: /category/sale opens the automatic Sale page instead.
+if (!category && !categoryError && slug === 'sale') return Astro.redirect('/products?sale=1');
 if (categoryError || !category) Astro.response.status = 404;
 const title = category ? category.seo_title || `${category.name} Toys | Clever Toys` : 'Category Not Found | Clever Toys';
 const description = category ? category.seo_description || category.description || `Shop ${category.name.toLowerCase()} toys at Clever Toys.` : 'The requested toy category could not be found.';
