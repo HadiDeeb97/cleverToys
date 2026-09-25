@@ -13,11 +13,6 @@
  * Shoppers can pick an option, choose a quantity and add to the cart without leaving the page.
  * The cart format is the same as on the product page (localStorage "cleverToysCart").
  */
-import { getPageData } from '../lib/page-data';
-
-// Delivery / payment / returns notes from Admin → Storefront → Product page.
-const { design } = await getPageData(Astro);
-const perks = [['🚚', design.product.delivery], ['💵', design.product.payment], ['↩️', design.product.returns]].filter(([, text]) => text);
 ---
 <div class="quick-view-modal" id="quick-view-modal" aria-hidden="true" inert>
   <div class="quick-view-backdrop" data-quick-view-close></div>
@@ -52,7 +47,6 @@ const perks = [['🚚', design.product.delivery], ['💵', design.product.paymen
       <p id="quick-view-message" class="quick-view-message" role="status"></p>
       <a class="text-link quick-view-full" id="quick-view-link" href="/products">View full details →</a>
 
-      {perks.length > 0 && <ul class="quick-view-perks">{perks.map(([icon, text]) => <li><span aria-hidden="true">{icon}</span>{text}</li>)}</ul>}
       <details class="quick-view-more" id="quick-view-more" hidden><summary>Full description</summary><div id="quick-view-long"></div></details>
     </div>
   </section>

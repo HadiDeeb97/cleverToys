@@ -405,6 +405,56 @@
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
 
+  // ---------- Sideways rows (category pills, photo thumbnails) ----------
+  // On phones these rows scroll with a finger. On a computer they can be dragged with the mouse the
+  // same way, and the mouse wheel scrolls them sideways. Faded edges show when there is more to see.
+  const DRAG_ROWS = '.category-pills,.quick-view-thumbs,.gallery-thumbnails';
+  function bindDragRow(row) {
+    const edges = () => {
+      const max = row.scrollWidth - row.clientWidth;
+      row.classList.toggle('more-left', max > 1 && row.scrollLeft > 1);
+      row.classList.toggle('more-right', max > 1 && row.scrollLeft < max - 1);
+    };
+    let drag = null;
+    row.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || row.scrollWidth <= row.clientWidth + 1) return;
+      drag = { x: e.clientX, left: row.scrollLeft, moved: false };
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x;
+      if (!drag.moved && Math.abs(dx) < 5) return;
+      drag.moved = true;
+      row.classList.add('is-dragging');
+      row.scrollLeft = drag.left - dx;
+    });
+    window.addEventListener('pointerup', () => {
+      if (!drag) return;
+      const moved = drag.moved;
+      drag = null;
+      row.classList.remove('is-dragging');
+      if (!moved) return;
+      // A drag is not a click: do not open the category (or photo) the mouse was released on.
+      const stop = (ev) => { ev.preventDefault(); ev.stopPropagation(); };
+      row.addEventListener('click', stop, { capture: true, once: true });
+      setTimeout(() => row.removeEventListener('click', stop, { capture: true }), 0);
+    });
+    // Stop the browser from dragging the link or picture itself.
+    row.addEventListener('dragstart', (e) => e.preventDefault());
+    row.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return; // trackpads already scroll sideways
+      const max = row.scrollWidth - row.clientWidth;
+      if (max <= 1 || (e.deltaY < 0 && row.scrollLeft <= 0) || (e.deltaY > 0 && row.scrollLeft >= max - 1)) return; // at the end: scroll the page
+      e.preventDefault();
+      row.scrollLeft += e.deltaY;
+    }, { passive: false });
+    row.addEventListener('scroll', edges, { passive: true });
+    if ('ResizeObserver' in window) new ResizeObserver(edges).observe(row);
+    // Photo thumbnails are filled in later (quick view): re-check the edges when they change.
+    new MutationObserver(edges).observe(row, { childList: true });
+    edges();
+  }
+
   // ---------- Start ----------
   // This file loads with "defer", so the page is fully parsed when it runs.
   ensureLogos();
@@ -413,6 +463,7 @@
   updateCartUI();
   bindImageViewer();
   initReveal();
+  document.querySelectorAll(DRAG_ROWS).forEach(bindDragRow);
   // Analytics waits until the page has finished loading so it never competes with the page itself.
   // A page the browser loaded ahead of time (speculation rules in src/middleware.ts) is only counted
   // once the shopper actually opens it.
