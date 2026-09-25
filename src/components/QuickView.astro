@@ -1,96 +1,284 @@
 ---
 /**
- * "Quick view" popup for product cards (computers only; on touch screens a tap opens the product).
- * Include once on any page that shows <ProductCard>. It reads the card's data-* attributes, so no
- * extra request is needed. The Add to cart button reuses the card's own button (see store-ui.js).
+ * "Quick view" popup for product cards (the round eye button). Include once on any page that shows
+ * <ProductCard>.
+ *
+ * How it stays fast:
+ *  1. It opens instantly with what the card already knows (name, photo, price, stock).
+ *  2. The full details come from /api/quick-view (src/pages/api/quick-view.ts): photos, description,
+ *     ages, brand, category and the options with their own prices and stock. That request starts as
+ *     soon as a finger or mouse reaches the eye button, so it is usually ready before the tap ends,
+ *     and each toy is fetched only once per page.
+ *
+ * Shoppers can pick an option, choose a quantity and add to the cart without leaving the page.
+ * The cart format is the same as on the product page (localStorage "cleverToysCart").
  */
+import { getPageData } from '../lib/page-data';
+
+// Delivery / payment / returns notes from Admin → Storefront → Product page.
+const { design } = await getPageData(Astro);
+const perks = [['🚚', design.product.delivery], ['💵', design.product.payment], ['↩️', design.product.returns]].filter(([, text]) => text);
 ---
 <div class="quick-view-modal" id="quick-view-modal" aria-hidden="true" inert>
   <div class="quick-view-backdrop" data-quick-view-close></div>
   <section class="quick-view-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-view-title">
     <button class="quick-view-close" type="button" aria-label="Close quick view" data-quick-view-close>×</button>
-    <div class="quick-view-media" id="quick-view-media"></div>
+    <div class="quick-view-gallery">
+      <div class="quick-view-media" id="quick-view-media"></div>
+      <div class="quick-view-thumbs" id="quick-view-thumbs" hidden></div>
+    </div>
     <div class="quick-view-content">
-      <p class="quick-view-kicker">Quick view</p>
+      <p class="quick-view-kicker" id="quick-view-kicker">Quick view</p>
       <h2 id="quick-view-title"></h2>
-      <p id="quick-view-description" class="quick-view-description"></p>
-      <div class="quick-view-price"><strong id="quick-view-price"></strong><span id="quick-view-original"></span></div>
+      <ul class="quick-view-meta" id="quick-view-meta" hidden></ul>
+      <div class="quick-view-price"><strong id="quick-view-price"></strong><span id="quick-view-original"></span><em id="quick-view-save" class="save-badge" hidden></em></div>
       <p id="quick-view-stock" class="quick-view-stock"></p>
-      <div class="quick-view-actions" id="quick-view-actions"></div>
+      <p id="quick-view-description" class="quick-view-description"></p>
+
+      <div class="quick-view-options" id="quick-view-options" hidden>
+        <p class="quick-view-label">Option: <strong id="quick-view-option-name">choose one</strong></p>
+        <div class="variant-options" id="quick-view-variants" role="group" aria-label="Options"></div>
+      </div>
+      <div class="quick-view-loading" id="quick-view-loading" aria-hidden="true" hidden><i></i><i></i><i></i></div>
+
+      <div class="quick-view-buy" id="quick-view-buy">
+        <div class="qty-stepper" id="quick-view-qty-wrap">
+          <button type="button" data-qv-qty="-1" aria-label="Decrease quantity">−</button>
+          <input id="quick-view-qty" type="number" inputmode="numeric" min="1" value="1" aria-label="Quantity" />
+          <button type="button" data-qv-qty="1" aria-label="Increase quantity">+</button>
+        </div>
+        <button type="button" class="button" id="quick-view-add">Add to cart</button>
+      </div>
+      <p id="quick-view-message" class="quick-view-message" role="status"></p>
+      <a class="text-link quick-view-full" id="quick-view-link" href="/products">View full details →</a>
+
+      {perks.length > 0 && <ul class="quick-view-perks">{perks.map(([icon, text]) => <li><span aria-hidden="true">{icon}</span>{text}</li>)}</ul>}
+      <details class="quick-view-more" id="quick-view-more" hidden><summary>Full description</summary><div id="quick-view-long"></div></details>
     </div>
   </section>
 </div>
 
 <script>
+type Variant = { id: string; name: string; sku: string | null; price: number; original: number | null; stock: number };
+type Details = {
+  id: string; name: string; slug: string; sku: string | null; shortDescription: string; description: string;
+  price: number; original: number | null; stock: number; ageMin: number | null; ageMax: number | null; brand: string | null;
+  category: { name: string; slug: string } | null; images: string[]; variants: Variant[];
+};
+
+const CART_KEY = 'cleverToysCart';
 const modal = document.getElementById('quick-view-modal')!;
-const $ = (id: string) => document.getElementById(id)!;
+const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+const money = (n: number) => `$${Number(n).toFixed(2)}`;
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+
+// ---------- Loading details (cached per page, started early) ----------
+const cache = new Map<string, Promise<Details | null>>();
+function load(slug: string) {
+  if (!cache.has(slug)) {
+    cache.set(slug, fetch(`/api/quick-view?slug=${encodeURIComponent(slug)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then((d) => { if (!d) cache.delete(slug); return d as Details | null; }));
+  }
+  return cache.get(slug)!;
+}
+const slugOf = (card: HTMLElement | null) => (card?.dataset.link || '').replace(/^\/product\//, '');
+// Start loading when a finger touches or a mouse reaches the eye button (before the tap/click finishes).
+for (const type of ['pointerenter', 'pointerdown', 'focusin'] as const) {
+  document.addEventListener(type, (event) => {
+    const trigger = (event.target as HTMLElement)?.closest?.('.quick-view-trigger');
+    const slug = slugOf(trigger?.closest<HTMLElement>('[data-product-card]') ?? null);
+    if (slug) load(slug);
+  }, { capture: true, passive: true });
+}
+
+// ---------- State of the open popup ----------
 let opener: HTMLElement | null = null;
+let current: Details | null = null;
+let chosen: Variant | null = null;
+let openToken = 0;
 
 function close() {
   modal.classList.remove('is-open');
   modal.setAttribute('aria-hidden', 'true');
   modal.setAttribute('inert', '');
-  document.body.style.overflow = '';
+  document.body.classList.remove('has-quick-view');
   if (opener && document.contains(opener)) opener.focus({ preventScroll: true });
   opener = null;
+  openToken++;
 }
 
-function open(card: HTMLElement, trigger: HTMLElement) {
-  const d = card.dataset;
-  opener = trigger;
+function showImage(url: string, alt: string, hue = '40', emoji = '🧸') {
   const media = $('quick-view-media');
-  media.innerHTML = '';
-  if (d.image) {
-    const img = document.createElement('img');
-    img.src = d.image;
-    img.alt = d.name || '';
-    media.appendChild(img);
-  } else {
-    const ph = document.createElement('span');
-    ph.className = 'product-placeholder';
-    ph.style.setProperty('--ph-h', d.phHue || '40');
-    ph.innerHTML = `<span aria-hidden="true">${d.phEmoji || '🧸'}</span>`;
-    media.appendChild(ph);
+  media.innerHTML = url
+    ? `<img src="${esc(url)}" alt="${esc(alt)}" decoding="async" />`
+    : `<span class="product-placeholder" style="--ph-h:${esc(hue)}"><span aria-hidden="true">${esc(emoji)}</span></span>`;
+}
+
+/** Price, stock, quantity limit and button for the toy or the chosen option. */
+function sync() {
+  const d = current;
+  const hasOptions = Boolean(d?.variants.length);
+  const price = chosen?.price ?? d?.price;
+  const original = chosen ? chosen.original : d?.original ?? null;
+  const stock = chosen ? chosen.stock : hasOptions ? Math.max(0, ...d!.variants.map((v) => v.stock)) : d?.stock ?? 0;
+  if (price != null) $('quick-view-price').textContent = money(price);
+  $('quick-view-original').textContent = original != null && price != null && original > price ? money(original) : '';
+  const save = original != null && price != null && original > price ? Math.round((1 - price / original) * 100) : 0;
+  $('quick-view-save').hidden = !save;
+  $('quick-view-save').textContent = save ? `Save ${save}%` : '';
+  const stockEl = $('quick-view-stock');
+  stockEl.textContent = stock <= 0 ? (hasOptions && !chosen ? 'All options sold out' : 'Out of stock') : stock <= 5 ? `Only ${stock} left, order soon!` : 'In stock';
+  stockEl.classList.toggle('out', stock <= 0);
+  const qty = $<HTMLInputElement>('quick-view-qty');
+  qty.max = String(Math.max(1, stock));
+  if (Number(qty.value) > stock && stock > 0) qty.value = String(stock);
+  const add = $<HTMLButtonElement>('quick-view-add');
+  const needsChoice = hasOptions && !chosen;
+  add.disabled = stock <= 0 || needsChoice;
+  add.textContent = stock <= 0 ? 'Out of stock' : needsChoice ? 'Choose an option' : 'Add to cart';
+  $('quick-view-option-name').textContent = chosen?.name || 'choose one';
+  document.querySelectorAll<HTMLButtonElement>('#quick-view-variants .variant-option').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.variant === chosen?.id)));
+}
+
+/** Fills the popup with the full details once they arrive. */
+function fill(d: Details, card: HTMLElement) {
+  current = d;
+  chosen = null;
+  // Photos: main image + thumbnails when there are several.
+  const thumbs = $('quick-view-thumbs');
+  if (d.images.length) {
+    showImage(d.images[0], d.name);
+    thumbs.hidden = d.images.length < 2;
+    thumbs.innerHTML = d.images.length > 1 ? d.images.map((url, i) => `<button type="button" class="quick-view-thumb${i === 0 ? ' active' : ''}" data-image="${esc(url)}" aria-label="Photo ${i + 1}"><img src="${esc(url)}" alt="" loading="lazy" decoding="async" /></button>`).join('') : '';
   }
+  // Category, ages, brand, SKU.
+  $('quick-view-kicker').innerHTML = d.category ? `<a href="/category/${encodeURIComponent(d.category.slug)}">${esc(d.category.name)}</a>` : 'Quick view';
+  const ages = d.ageMin != null && d.ageMax != null ? `Ages ${d.ageMin}–${d.ageMax}` : d.ageMin != null ? `Ages ${d.ageMin}+` : d.ageMax != null ? `Up to ${d.ageMax} yrs` : '';
+  const meta = [ages && `<li>🎈 ${esc(ages)}</li>`, d.brand && `<li>🏷️ ${esc(d.brand)}</li>`, d.sku && `<li>SKU ${esc(d.sku)}</li>`].filter(Boolean);
+  $('quick-view-meta').innerHTML = meta.join('');
+  $('quick-view-meta').hidden = !meta.length;
+  // Descriptions: the short one up top, the long one folded away.
+  const short = d.shortDescription || card.dataset.description || '';
+  $('quick-view-description').textContent = short;
+  $('quick-view-description').hidden = !short;
+  const long = d.description.trim();
+  $('quick-view-more').hidden = !long || long === short;
+  $('quick-view-long').innerHTML = esc(long).replace(/\n/g, '<br>');
+  // Options.
+  const options = $('quick-view-options');
+  options.hidden = !d.variants.length;
+  $('quick-view-variants').innerHTML = d.variants.map((v) => `<button type="button" class="variant-option" data-variant="${esc(v.id)}" aria-pressed="false"${v.stock <= 0 ? ' disabled' : ''}><span>${esc(v.name)}</span>${v.price !== d.price ? `<small>${money(v.price)}</small>` : ''}${v.stock <= 0 ? '<small>Sold out</small>' : ''}</button>`).join('');
+  // A single option in stock is picked automatically.
+  const available = d.variants.filter((v) => v.stock > 0);
+  if (available.length === 1 && d.variants.length === 1) chosen = available[0];
+  $('quick-view-loading').hidden = true;
+  $('quick-view-buy').hidden = false;
+  sync();
+}
+
+async function open(card: HTMLElement, trigger: HTMLElement) {
+  const d = card.dataset;
+  const token = ++openToken;
+  opener = trigger;
+  current = null;
+  chosen = null;
+  // 1. Instantly: what the card already shows.
+  showImage(d.image || '', d.name || '', d.phHue, d.phEmoji);
+  $('quick-view-thumbs').hidden = true;
+  $('quick-view-kicker').textContent = 'Quick view';
   $('quick-view-title').textContent = d.name || 'Toy';
+  $('quick-view-meta').hidden = true;
   $('quick-view-description').textContent = d.description || '';
   $('quick-view-description').hidden = !d.description;
   $('quick-view-price').textContent = d.price || '';
   $('quick-view-original').textContent = d.original || '';
+  $('quick-view-save').hidden = true;
   $('quick-view-stock').textContent = d.stock || '';
-  $('quick-view-stock').style.color = d.stock === 'Out of stock' ? 'var(--danger)' : 'var(--success)';
-  // Actions: a copy of the card's Add to cart button (toys without options) + a link to the full page.
-  const actions = $('quick-view-actions');
-  actions.innerHTML = '';
-  const add = card.querySelector<HTMLButtonElement>('button[data-quick-add]');
-  if (add) {
-    const copy = add.cloneNode(true) as HTMLButtonElement;
-    copy.className = 'button';
-    copy.textContent = 'Add to cart';
-    copy.addEventListener('click', () => setTimeout(close, 50));
-    actions.appendChild(copy);
-  }
-  const link = document.createElement('a');
-  link.className = add ? 'button secondary-button' : 'button';
-  link.href = d.link || '/products';
-  link.textContent = add ? 'View full details' : d.stock === 'Out of stock' ? 'View details' : 'Choose options';
-  actions.appendChild(link);
+  $('quick-view-stock').classList.toggle('out', d.stock === 'Out of stock');
+  $('quick-view-options').hidden = true;
+  $('quick-view-more').hidden = true;
+  $('quick-view-message').textContent = '';
+  $<HTMLInputElement>('quick-view-qty').value = '1';
+  $('quick-view-buy').hidden = true;
+  $('quick-view-loading').hidden = false;
+  $<HTMLAnchorElement>('quick-view-link').href = d.link || '/products';
 
   modal.removeAttribute('inert');
   modal.setAttribute('aria-hidden', 'false');
   modal.classList.add('is-open');
-  document.body.style.overflow = 'hidden';
+  document.body.classList.add('has-quick-view');
   requestAnimationFrame(() => modal.querySelector<HTMLElement>('.quick-view-close')?.focus({ preventScroll: true }));
+
+  // 2. The full details (usually already loaded by the time the popup appears).
+  const details = await load(slugOf(card));
+  if (token !== openToken) return; // closed or another toy opened meanwhile
+  if (details) fill(details, card);
+  else {
+    // Could not load: keep the basics and send shoppers to the full page for options.
+    $('quick-view-loading').hidden = true;
+    $('quick-view-message').textContent = 'More details are on the product page.';
+  }
+}
+
+/** Adds the toy / chosen option to the cart (same format as the product page), then opens the cart. */
+function addToCart() {
+  const d = current;
+  if (!d) return;
+  if (d.variants.length && !chosen) { $('quick-view-message').textContent = 'Please choose an option first.'; return; }
+  const maxStock = chosen ? chosen.stock : d.stock;
+  const qty = Math.floor(Number($<HTMLInputElement>('quick-view-qty').value) || 1);
+  if (qty < 1 || qty > maxStock) { $('quick-view-message').textContent = `Please choose a quantity from 1 to ${maxStock}.`; return; }
+  let cart: any[] = [];
+  try { cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]'); if (!Array.isArray(cart)) cart = []; } catch {}
+  const price = chosen?.price ?? d.price;
+  const existing = cart.find((item) => item.productId === d.id && (item.variantId || null) === (chosen?.id || null));
+  if (existing) {
+    if (Number(existing.quantity) >= maxStock) { $('quick-view-message').textContent = `Only ${maxStock} in stock, and they are all in your cart.`; return; }
+    existing.quantity = Math.min(Number(existing.quantity) + qty, maxStock);
+    existing.maxStock = maxStock;
+    existing.price = price;
+  } else {
+    cart.push({ productId: d.id, variantId: chosen?.id || null, variantName: chosen?.name || null, sku: chosen?.sku || null, name: d.name, slug: d.slug, price, image: d.images[0] || '', quantity: qty, maxStock });
+  }
+  try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch { $('quick-view-message').textContent = 'Your browser blocked the cart. Please allow site storage and try again.'; return; }
+  const trigger = opener;
+  close();
+  window.dispatchEvent(new CustomEvent('clever-cart-updated'));
+  window.dispatchEvent(new CustomEvent('clever-cart-added', { detail: { trigger } }));
 }
 
 document.addEventListener('click', (event) => {
-  const trigger = (event.target as HTMLElement).closest<HTMLElement>('.quick-view-trigger');
+  const target = event.target as HTMLElement;
+  const trigger = target.closest<HTMLElement>('.quick-view-trigger');
   if (trigger) {
     const card = trigger.closest<HTMLElement>('[data-product-card]');
     if (card) open(card, trigger);
     return;
   }
-  if ((event.target as HTMLElement).closest('[data-quick-view-close]')) close();
+  if (!modal.contains(target)) return;
+  if (target.closest('[data-quick-view-close]')) { close(); return; }
+  const option = target.closest<HTMLButtonElement>('#quick-view-variants .variant-option');
+  if (option && !option.disabled && current) {
+    chosen = current.variants.find((v) => v.id === option.dataset.variant) || null;
+    $('quick-view-message').textContent = '';
+    sync();
+    return;
+  }
+  const thumb = target.closest<HTMLButtonElement>('.quick-view-thumb');
+  if (thumb) {
+    showImage(thumb.dataset.image || '', current?.name || '');
+    document.querySelectorAll('.quick-view-thumb').forEach((t) => t.classList.toggle('active', t === thumb));
+    return;
+  }
+  const step = target.closest<HTMLButtonElement>('[data-qv-qty]');
+  if (step) {
+    const input = $<HTMLInputElement>('quick-view-qty');
+    input.value = String(Math.min(Number(input.max) || 1, Math.max(1, (Number(input.value) || 1) + Number(step.dataset.qvQty))));
+    return;
+  }
+  if (target.closest('#quick-view-add')) addToCart();
 });
 document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && modal.classList.contains('is-open')) close(); });
 </script>
