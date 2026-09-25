@@ -387,8 +387,12 @@ html[data-font=modern] .hero-highlight,html[data-font=playful] .hero-highlight{f
 @media (hover:hover){.quick-add:hover{background:var(--ink);color:#fff}}
 .quick-add.is-added{background:var(--success);color:#fff}
 /* Quick view sits on the left and stops before the round Add / Options button, so they never overlap. */
-.quick-view-trigger{position:absolute;left:12px;right:64px;bottom:12px;z-index:4;height:42px;padding:0 14px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border:0;border-radius:var(--radius-pill);background:rgba(255,255,255,.95);color:var(--ink);font-size:.8rem;font-weight:800;box-shadow:var(--shadow);cursor:pointer;opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s var(--ease)}
-@media (hover:hover){.product-card:hover .quick-view-trigger{opacity:1;transform:none}}
+/* Quick view: round eye button just left of the Add / Options button (or in its place on sold-out toys).
+   Computers: appears when the card is hovered. Phones and tablets: always visible. */
+.quick-view-trigger{position:absolute;right:62px;bottom:12px;z-index:4;display:grid;place-items:center;width:42px;height:42px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.95);color:var(--ink);box-shadow:var(--shadow);cursor:pointer;transition:opacity .25s,transform .25s var(--ease),background .2s,color .2s}
+.quick-view-trigger svg{width:19px;height:19px}
+.product-media:not(:has(.quick-add)) .quick-view-trigger{right:12px}
+@media (hover:hover){.quick-view-trigger{opacity:0;transform:translateY(8px)}.product-card:hover .quick-view-trigger{opacity:1;transform:none}.quick-view-trigger:hover{background:var(--ink);color:#fff}}
 .quick-view-trigger:focus-visible{opacity:1;transform:none}
 .view-product{display:none}
 
@@ -936,14 +940,22 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .wa-dialog-fields{grid-template-columns:1fr}
   .wa-dialog-actions .button{flex:1 1 100%}
   .quick-view-dialog{grid-template-columns:1fr}
+  .quick-view-trigger{right:52px;bottom:8px;width:38px;height:38px}
+  .product-media:not(:has(.quick-add)) .quick-view-trigger{right:8px}
+  .quick-view-trigger svg{width:17px;height:17px}
+  /* Quick view on phones: a sheet that slides up from the bottom. */
+  .quick-view-modal{place-items:end center;padding:0}
+  .quick-view-dialog{width:100%;max-height:92dvh;border-radius:var(--radius-lg) var(--radius-lg) 0 0;transform:translateY(40px)}
+  .quick-view-media{overflow:hidden}
+  .quick-view-media,.quick-view-media .product-placeholder,.quick-view-media img{min-height:0;height:min(42vh,300px);aspect-ratio:auto}
+  .quick-view-content{padding:20px 20px calc(20px + env(safe-area-inset-bottom))}
   .admin-head{align-items:flex-start;flex-direction:column}
   .admin-tabs{flex-wrap:wrap;width:auto;border-radius:18px}
   .panel-title{align-items:stretch;flex-direction:column}
   .panel-title #product-search{max-width:none}
 }
 @media (max-width:760px),(hover:none){
-  /* On touch screens the whole card opens the product, so skip the hover-only quick view button. */
-  .quick-view-trigger,.quick-view-label{display:none!important}
+  /* Touch screens: the Add / Options button is icon-only. */
   .quick-add .quick-add-label{display:none}
 }
 @media (max-width:400px){

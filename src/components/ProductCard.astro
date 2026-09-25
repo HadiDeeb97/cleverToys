@@ -71,7 +71,7 @@ const money = (n: number) => `$${n.toFixed(2)}`;
     {onSale && <span class="sale-badge">Sale{discount > 0 && ` −${discount}%`}</span>}
     {isNew && <span class="new-badge">New</span>}
     {!inStock && <span class="stock-badge">Sold out</span>}
-    <button type="button" class="quick-view-trigger" aria-label={`Quick view ${product.name}`}>Quick view</button>
+    <button type="button" class="quick-view-trigger" title="Quick view" aria-label={`Quick view ${product.name}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
     {inStock && (hasOptions
       ? <a class="quick-add" href={href} title="Choose options" aria-label={`Choose options for ${product.name}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M4 12h16M4 17h7M17 4v6M20 7h-6"/></svg><span class="quick-add-label">Options</span></a>
       : <button type="button" class="quick-add" title="Add to cart" data-quick-add data-id={product.id} data-name={product.name} data-slug={product.slug} data-price={price} data-image={product.primary_image_url || ''} data-stock={product.stock_quantity} aria-label={`Add ${product.name} to cart`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="quick-add-label">Add to cart</span></button>)}
