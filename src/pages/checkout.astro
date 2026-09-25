@@ -16,27 +16,42 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 </head>
 {/* Replaced by the shared store header in src/middleware.ts */}
 <header class="site-header"></header>
-<main class="section">
-  <div class="container checkout-layout">
-    <section>
-      <div class="section-header"><h1>Checkout</h1><p>Cash on delivery is available.</p></div>
-      <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
-      {/* If "Place Order" is tapped before the page script has loaded (slow connection), this
-          remembers the tap instead of reloading the page; the script then places the order. */}
-      <form id="checkout-form" class="form-card" onsubmit="this.dataset.pending='1';return false">
-        <label>Full name<input name="customer_name" required autocomplete="name" maxlength="120" /></label>
-        <label>Phone number<input name="customer_phone" required type="tel" autocomplete="tel" maxlength="40" /></label>
-        <label>Email <span>(optional)</span><input name="customer_email" type="email" autocomplete="email" maxlength="254" /></label>
-        <label>Governorate<input name="governorate" required autocomplete="address-level1" maxlength="80" /></label>
-        <label>City<input name="city" required autocomplete="address-level2" maxlength="80" /></label>
-        <label>Area <span>(optional)</span><input name="area" autocomplete="address-level3" maxlength="120" /></label>
-        <label>Full address<textarea name="address" required rows="3" autocomplete="street-address" maxlength="500"></textarea></label>
-        <label>Notes <span>(optional)</span><textarea name="notes" rows="2" maxlength="1000"></textarea></label>
-        <button class="button" type="submit">Place Order — Cash on Delivery</button>
-        <p id="form-message" role="status"></p>
-      </form>
-    </section>
-    <aside id="checkout-summary" class="checkout-summary" aria-label="Order summary"></aside>
+<main class="section tight">
+  <div class="container">
+    <ol class="checkout-steps" aria-label="Checkout progress">
+      <li class="done" data-step="1"><a href="/cart">Cart</a></li><span class="sep" aria-hidden="true"></span>
+      <li class="current" data-step="2" aria-current="step">Delivery details</li><span class="sep" aria-hidden="true"></span>
+      <li data-step="3">Confirmation</li>
+    </ol>
+    <div class="checkout-layout">
+      <section>
+        <div class="section-header"><h1>Checkout</h1><p>No card needed: you pay in cash when your toys arrive.</p></div>
+        <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+        {/* If "Place Order" is tapped before the page script has loaded (slow connection), this
+            remembers the tap instead of reloading the page; the script then places the order. */}
+        <form id="checkout-form" class="form-card" onsubmit="this.dataset.pending='1';return false">
+          <h2 class="form-section-title">Contact</h2>
+          <div class="form-grid">
+            <label class="wide">Full name<input name="customer_name" required autocomplete="name" maxlength="120" /></label>
+            <label>Phone number<input name="customer_phone" required type="tel" autocomplete="tel" maxlength="40" placeholder="+961 …" /></label>
+            <label>Email <span>(optional)</span><input name="customer_email" type="email" autocomplete="email" maxlength="254" /></label>
+          </div>
+          <h2 class="form-section-title">Delivery address</h2>
+          <div class="form-grid">
+            <label>Governorate<input name="governorate" required autocomplete="address-level1" maxlength="80" /></label>
+            <label>City<input name="city" required autocomplete="address-level2" maxlength="80" /></label>
+            <label class="wide">Area <span>(optional)</span><input name="area" autocomplete="address-level3" maxlength="120" /></label>
+            <label class="wide">Full address<textarea name="address" required rows="3" autocomplete="street-address" maxlength="500" placeholder="Street, building, floor"></textarea></label>
+            <label class="wide">Notes <span>(optional)</span><textarea name="notes" rows="2" maxlength="1000" placeholder="Best time to call, gift wrapping…"></textarea></label>
+          </div>
+          <h2 class="form-section-title">Payment</h2>
+          <div class="payment-option"><b aria-hidden="true">💵</b><div><strong>Cash on delivery</strong><span>Pay the driver when your order arrives.</span></div></div>
+          <button class="button" type="submit">Place order</button>
+          <p id="form-message" role="status"></p>
+        </form>
+      </section>
+      <aside id="checkout-summary" class="checkout-summary" aria-label="Order summary"></aside>
+    </div>
   </div>
 </main>
 <footer class="site-footer"></footer>
@@ -44,7 +59,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <script>
 import { getSession, getSupabase } from '../scripts/supabase-browser';
 
-type CartItem = { productId: string; variantId?: string | null; variantName?: string | null; name: string; price: number; quantity: number };
+type CartItem = { productId: string; variantId?: string | null; variantName?: string | null; name: string; price: number; quantity: number; image?: string };
 
 const CART_KEY = 'cleverToysCart';
 const CUSTOMER_KEY = 'cleverToysCustomer';
@@ -80,11 +95,11 @@ function renderSummary() {
     summary.innerHTML = '<h2>Order Summary</h2><p>Your cart is empty.</p><a href="/products" class="button">Shop Toys</a>';
     return { cart, subtotal, deliveryFee, total };
   }
-  const lines = cart.map((i) => `<div class="summary-line"><span>${esc(i.name)}${i.variantName ? ` · ${esc(i.variantName)}` : ''} × ${Number(i.quantity)}</span><strong>${money(i.price * i.quantity)}</strong></div>`).join('');
+  const lines = `<div class="summary-items">${cart.map((i) => `<div class="summary-item"><span class="summary-thumb">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy">` : '🧸'}<b>${Number(i.quantity)}</b></span><span>${esc(i.name)}${i.variantName ? `<small>${esc(i.variantName)}</small>` : ''}</span><strong>${money(i.price * i.quantity)}</strong></div>`).join('')}</div>`;
   const freeNote = freeDeliveryThreshold > 0
     ? `<p class="delivery-note">${subtotal >= freeDeliveryThreshold ? '🎉 Free delivery unlocked!' : `Free delivery on orders of ${money(freeDeliveryThreshold)} or more.`}</p>`
     : '';
-  summary.innerHTML = `<h2>Order Summary</h2>${lines}<hr>
+  summary.innerHTML = `<h2>Order summary</h2>${lines}<hr>
     <div class="summary-line"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
     <div class="summary-line"><span>COD delivery</span><strong>${deliveryFee === 0 ? 'Free' : money(deliveryFee)}</strong></div>
     ${freeNote}

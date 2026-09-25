@@ -5,8 +5,11 @@
  * Lists active toys, 24 per page, with search (?q=), category (?category=), option (?variant=),
  * age (?age_min= / ?age_max=) filters and sorting (?sort=). Everything is done on the server
  * with plain links and forms, so filters work even before any JavaScript has loaded.
+ * On computers the filters sit in a sidebar; on phones and tablets they slide in from the left.
  */
 import { supabase } from '../lib/supabase';
+import ProductCard, { type CardProduct } from '../components/ProductCard.astro';
+import QuickView from '../components/QuickView.astro';
 import '../styles/global.css';
 
 const pageSize = 24;
@@ -46,7 +49,7 @@ const from = (requestedPage - 1) * pageSize;
 const to = from + pageSize - 1;
 
 const buildProductsQuery = (head = false) => {
-  let query = supabase.from('products').select('id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, category_id, age_min, age_max', { count: 'exact', head }).eq('is_active', true);
+  let query = supabase.from('products').select('id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, category_id, age_min, age_max, created_at, product_variants(id,is_active)', { count: 'exact', head }).eq('is_active', true);
   if (search) query = query.ilike('name', `%${search}%`);
   if (selectedCategoryIds.length) {
     const ids = [...(categoryProductIds || [])];
@@ -95,8 +98,28 @@ const hasFilters = Boolean(selectedCategorySlugs.length || selectedVariantFilter
 const title = activeCategoryTitle ? `${activeCategoryTitle} Toys | Clever Toys` : search ? `Search results for ${search} | Clever Toys` : 'Shop Toys | Clever Toys';
 const description = activeCategoryTitle ? `Shop ${activeCategoryTitle.toLowerCase()} toys at Clever Toys.` : 'Shop toys for children of all ages at Clever Toys. Discover fun, educational and exciting toys.';
 const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
----
+const cards = (products ?? []) as unknown as CardProduct[];
 
+/** Link to this page with one filter removed (for the removable filter chips). */
+function withoutFilter(kind: 'q' | 'category' | 'variant' | 'age', value = '') {
+  const params = new URLSearchParams();
+  if (search && kind !== 'q') params.set('q', search);
+  selectedCategorySlugs.filter((slug) => !(kind === 'category' && slug === value)).forEach((slug) => params.append('category', slug));
+  selectedVariantFilters.filter((v) => !(kind === 'variant' && v === value)).forEach((v) => params.append('variant', v));
+  if (kind !== 'age') { if (ageMinParam) params.set('age_min', ageMinParam); if (ageMaxParam) params.set('age_max', ageMaxParam); }
+  if (sort !== 'newest') params.set('sort', sort);
+  const qs = params.toString();
+  return `/products${qs ? `?${qs}` : ''}`;
+}
+const activeChips = [
+  ...(search ? [{ label: `“${search}”`, href: withoutFilter('q') }] : []),
+  ...categories.filter((c) => selectedCategorySlugs.includes(c.slug)).map((c) => ({ label: c.name, href: withoutFilter('category', c.slug) })),
+  ...selectedVariantFilters.map((v) => ({ label: v, href: withoutFilter('variant', v) })),
+  ...(ageMinParam || ageMaxParam ? [{ label: `Ages ${ageMinParam || '0'}–${ageMaxParam || '∞'}`, href: withoutFilter('age') }] : [])
+];
+const filterCount = selectedCategorySlugs.length + selectedVariantFilters.length + (ageMinParam || ageMaxParam ? 1 : 0);
+const heading = activeCategoryTitle || (search ? `Results for “${search}”` : 'Shop all toys');
+---
 <head>
   <title>{title}</title>
   <meta name="description" content={description} />
@@ -106,282 +129,116 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
   <meta property="og:type" content="website" />
   <meta property="og:url" content={canonicalUrl} />
 </head>
-
-{/* Replaced by the shared store header in src/middleware.ts */}
 <header class="site-header"></header>
-
 <main>
-  <section class="shop-hero"><div class="container"><p class="shop-eyebrow">Clever Toys</p><h1>{activeCategoryTitle || (search ? 'Search results' : 'Shop all toys')}</h1><p>Find fun, educational and exciting toys for every child.</p></div></section>
-  <section class="section shop-section"><div class="container">
-    <div class="shop-toolbar">
-      <form class="search-form" method="get" action="/products">
-        <label class="sr-only" for="product-search">Search toys</label>
-        <input id="product-search" name="q" value={search} placeholder="Search toys..." type="search" />
-        {selectedCategorySlugs.map(slug => <input type="hidden" name="category" value={slug} />)}
-        {selectedVariantFilters.map(variant => <input type="hidden" name="variant" value={variant} />)}
-        {ageMinParam && <input type="hidden" name="age_min" value={ageMinParam} />}
-        {ageMaxParam && <input type="hidden" name="age_max" value={ageMaxParam} />}
-        {sort !== 'newest' && <input type="hidden" name="sort" value={sort} />}
-        <button class="button search-button" type="submit">Search</button>
-      </form>
-      <div class="toolbar-actions">
-        <button class="button filter-button" type="button" id="filter-toggle" aria-expanded="false" aria-controls="filter-panel" aria-label="Open filters"><span class="filter-icon" aria-hidden="true">☰</span><span>Filter{hasFilters ? ` (${selectedCategorySlugs.length + selectedVariantFilters.length + (ageMinParam ? 1 : 0) + (ageMaxParam ? 1 : 0)})` : ''}</span></button>
-        <form method="get" action="/products" class="sort-form">
-          {search && <input type="hidden" name="q" value={search} />}
-          {selectedCategorySlugs.map(slug => <input type="hidden" name="category" value={slug} />)}
-          {selectedVariantFilters.map(variant => <input type="hidden" name="variant" value={variant} />)}
-          {ageMinParam && <input type="hidden" name="age_min" value={ageMinParam} />}
-          {ageMaxParam && <input type="hidden" name="age_max" value={ageMaxParam} />}
-          <label for="sort">Sort</label><select id="sort" name="sort" onchange="this.form.submit()"><option value="newest" selected={sort === 'newest'}>Newest</option><option value="price-asc" selected={sort === 'price-asc'}>Price: Low to High</option><option value="price-desc" selected={sort === 'price-desc'}>Price: High to Low</option><option value="name" selected={sort === 'name'}>Name: A–Z</option></select>
+  <section class="page-hero shop-hero">
+    <div class="container">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">Shop</span></nav>
+      <h1>{heading}</h1>
+      <p>Fun, educational and exciting toys for every child, with cash on delivery across Lebanon.</p>
+    </div>
+  </section>
+
+  <section class="section tight shop-section">
+    <div class="container">
+      {/* Category shortcuts */}
+      <div class="category-pills" aria-label="Shop categories">
+        <a class:list={{ active: !selectedCategorySlugs.length }} href="/products">All toys</a>
+        {categories.map((item) => <a class:list={{ active: selectedCategorySlugs.includes(item.slug) }} href={`/products?category=${encodeURIComponent(item.slug)}`}>{item.name}</a>)}
+      </div>
+
+      <div class="shop-layout">
+        {/* Filters: sidebar on computers, slide-in panel on phones (opened by the Filters button). */}
+        <form class="filter-panel" id="filter-panel" method="get" action="/products" aria-label="Filter toys">
+          {sort !== 'newest' && <input type="hidden" name="sort" value={sort} />}
+          <div class="filter-panel-head"><strong>Filters</strong><button type="button" class="icon-button filter-close" id="filter-close" aria-label="Close filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+          <div class="search-form">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <label class="sr-only" for="product-search">Search toys</label>
+            <input id="product-search" name="q" value={search} placeholder="Search toys…" type="search" enterkeyhint="search" />
+          </div>
+          <div class="filter-groups">
+            <fieldset class="filter-group"><legend>Category</legend><div class="filter-check-grid">{categories.map((item) => <label class="filter-check"><input type="checkbox" name="category" value={item.slug} checked={selectedCategorySlugs.includes(item.slug)} /><span>{item.name}</span></label>)}</div></fieldset>
+            {variantOptions.length > 0 && <fieldset class="filter-group"><legend>Options</legend><div class="filter-check-grid">{variantOptions.map((item) => <label class="filter-check"><input type="checkbox" name="variant" value={item} checked={selectedVariantFilters.includes(item)} /><span>{item}</span></label>)}</div></fieldset>}
+            <fieldset class="filter-group"><legend>Age</legend><div class="age-grid"><label>From<input name="age_min" type="number" inputmode="numeric" min="0" step="1" value={ageMinParam} placeholder="Any" /></label><label>To<input name="age_max" type="number" inputmode="numeric" min="0" step="1" value={ageMaxParam} placeholder="Any" /></label></div></fieldset>
+          </div>
+          <div class="filter-actions"><a class="button secondary-button" href="/products">Clear</a><button class="button" type="submit">Apply</button></div>
         </form>
+
+        <div class="shop-results">
+          <div class="shop-toolbar">
+            <div class="shop-result-row"><p>{categoryFilterError || variantFilterError ? 'Some filters could not be loaded.' : totalProducts === 0 ? 'No toys found' : `${totalProducts} ${totalProducts === 1 ? 'toy' : 'toys'}`}</p></div>
+            <div class="shop-controls">
+              <button class="button secondary-button small filter-button" type="button" id="filter-toggle" aria-expanded="false" aria-controls="filter-panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filters{filterCount ? ` (${filterCount})` : ''}</button>
+              <form method="get" action="/products" class="sort-form">
+                {search && <input type="hidden" name="q" value={search} />}
+                {selectedCategorySlugs.map((slug) => <input type="hidden" name="category" value={slug} />)}
+                {selectedVariantFilters.map((variant) => <input type="hidden" name="variant" value={variant} />)}
+                {ageMinParam && <input type="hidden" name="age_min" value={ageMinParam} />}
+                {ageMaxParam && <input type="hidden" name="age_max" value={ageMaxParam} />}
+                <label for="sort">Sort by</label>
+                <select id="sort" name="sort" onchange="this.form.submit()">
+                  <option value="newest" selected={sort === 'newest'}>Newest</option>
+                  <option value="price-asc" selected={sort === 'price-asc'}>Price: low to high</option>
+                  <option value="price-desc" selected={sort === 'price-desc'}>Price: high to low</option>
+                  <option value="name" selected={sort === 'name'}>Name: A–Z</option>
+                </select>
+                <noscript><button class="small-button" type="submit">Sort</button></noscript>
+              </form>
+            </div>
+          </div>
+
+          {activeChips.length > 0 && (
+            <div class="active-filters" aria-label="Active filters">
+              {activeChips.map((chip) => <a href={chip.href} aria-label={`Remove filter ${chip.label}`}>{chip.label} <span aria-hidden="true">×</span></a>)}
+              {hasFilters && <a href={search ? `/products?q=${encodeURIComponent(search)}` : '/products'}>Clear all</a>}
+            </div>
+          )}
+
+          {error ? (
+            <div class="empty-state"><h2>We couldn't load the toys</h2><p>Please try again in a moment.</p></div>
+          ) : cards.length ? (
+            <div class="product-grid shop-grid">{cards.map((product, index) => <ProductCard product={product} heading="h2" eager={index < 4} />)}</div>
+          ) : (
+            <div class="empty-state"><h2>No toys found</h2><p>Try another search or remove a filter.</p><a class="button" href="/products">View all toys</a></div>
+          )}
+
+          {totalPages > 1 && (
+            <nav class="pagination" aria-label="Product pages">
+              {currentPage > 1 && <a href={pageUrl(currentPage - 1)} rel="prev">← Previous</a>}
+              <span>Page {currentPage} of {totalPages}</span>
+              {currentPage < totalPages && <a href={pageUrl(currentPage + 1)} rel="next">Next →</a>}
+            </nav>
+          )}
+        </div>
       </div>
     </div>
-
-    <div class="category-pills" aria-label="Shop categories"><a class:list={{ active: !selectedCategorySlugs.length }} href="/products">All Toys</a>{categories?.map(item => <a class:list={{ active: selectedCategorySlugs.includes(item.slug) }} href={`/products?category=${encodeURIComponent(item.slug)}`}>{item.name}</a>)}</div>
-
-    <form class="filter-panel" id="filter-panel" hidden method="get" action="/products">
-      {search && <input type="hidden" name="q" value={search} />}
-      {sort !== 'newest' && <input type="hidden" name="sort" value={sort} />}
-      <div class="filter-panel-head"><div><strong>Filter toys</strong><span class="filter-panel-subtitle">Select as many options as you need.</span></div><button type="button" class="filter-close" id="filter-close" aria-label="Close filters">×</button></div>
-      <div class="filter-groups">
-        <fieldset class="filter-group"><legend>Categories</legend><div class="filter-check-grid">{categories.map(item => <label class="filter-check"><input type="checkbox" name="category" value={item.slug} checked={selectedCategorySlugs.includes(item.slug)} /><span>{item.name}</span></label>)}</div></fieldset>
-        {variantOptions.length > 0 && <fieldset class="filter-group"><legend>Variants / options</legend><div class="filter-check-grid">{variantOptions.map(item => <label class="filter-check"><input type="checkbox" name="variant" value={item} checked={selectedVariantFilters.includes(item)} /><span>{item}</span></label>)}</div></fieldset>}
-        <fieldset class="filter-group age-filter-group"><legend>Age range</legend><div class="age-grid"><label>From age<input name="age_min" type="number" min="0" step="1" value={ageMinParam} placeholder="Any" /></label><label>To age<input name="age_max" type="number" min="0" step="1" value={ageMaxParam} placeholder="Any" /></label></div></fieldset>
-      </div>
-      <div class="filter-actions"><a class="button secondary-button" href="/products">Clear all</a><button class="button" type="submit">Apply filters</button></div>
-    </form>
-
-    <div class="shop-result-row"><p>{categoryFilterError || variantFilterError ? 'Some filters could not be loaded.' : totalProducts === 0 ? 'No toys found.' : `Showing ${from + 1}–${Math.min(from + (products?.length ?? 0), totalProducts)} of ${totalProducts} toys`}</p>{hasFilters && <a href="/products">Clear filters</a>}</div>
-    {error ? <div class="empty-state"><h2>We couldn't load the toys</h2><p>Please try again in a moment.</p></div> : products?.length ? <div class="product-grid shop-grid">{products.map(product => {
-      const displayPrice=Number(product.sale_price??product.price);
-      const originalPrice=product.sale_price!=null?Number(product.price):null;
-      const inStock=product.stock_quantity>0;
-      return <article class="product-card shop-card">
-        {/* Photo link + "Quick view" button side by side (a button is not allowed inside a link). */}
-        <div class="product-media">
-          <a href={`/product/${product.slug}`} class="product-image-link" tabindex="-1" aria-hidden="true">
-            {product.primary_image_url?<img class="product-image" src={product.primary_image_url} alt="" loading="lazy" decoding="async" width="400" height="400"/>:<div class="product-placeholder"><span>No image yet</span></div>}
-            {product.sale_price!=null&&<span class="sale-badge">Sale</span>}
-            {!inStock&&<span class="stock-badge">Out of stock</span>}
-          </a>
-          {/* Computers only (hidden on touch screens by global.css) */}
-          <button type="button" class="quick-view-trigger" aria-label={`Quick view ${product.name}`}>Quick view</button>
-        </div>
-        <div class="product-info">
-          <h2><a href={`/product/${product.slug}`}>{product.name}</a></h2>
-          {product.short_description&&<p>{product.short_description}</p>}
-          <div class="shop-price"><span class="price">${displayPrice.toFixed(2)}</span>{originalPrice!=null&&<span class="shop-original-price">${originalPrice.toFixed(2)}</span>}</div>
-          <a class="view-product" href={`/product/${product.slug}`} tabindex="-1">{inStock?'View product':'View details'}</a>
-        </div>
-      </article>;
-    })}</div> : <div class="empty-state"><h2>No toys found</h2><p>Try another search or browse all of our toys.</p><a class="button" href="/products">View all toys</a></div>}
-    {totalPages > 1 && <nav class="pagination" aria-label="Product pagination">{currentPage > 1 && <a href={pageUrl(currentPage - 1)}>← Previous</a>}<span>Page {currentPage} of {totalPages}</span>{currentPage < totalPages && <a href={pageUrl(currentPage + 1)}>Next →</a>}</nav>}
-  </div></section>
+  </section>
 </main>
-
-<div class="quick-view-modal" id="quick-view-modal" aria-hidden="true" inert><div class="quick-view-backdrop" data-quick-view-close></div><section class="quick-view-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-view-title"><button class="quick-view-close" type="button" aria-label="Close quick view" data-quick-view-close>×</button><div class="quick-view-media"><img id="quick-view-image" src="" alt="" /></div><div class="quick-view-content"><p class="quick-view-kicker">Quick view</p><h2 id="quick-view-title"></h2><p id="quick-view-description" class="quick-view-description"></p><div class="quick-view-price"><strong id="quick-view-price"></strong><span id="quick-view-original"></span></div><p id="quick-view-stock" class="quick-view-stock"></p><a id="quick-view-link" class="button" href="#">View product</a></div></section></div>
+<QuickView />
 <footer class="site-footer"></footer>
 
-<style>
-.shop-hero{padding:58px 0 48px;background:var(--page-hero-bg);border-bottom:1px solid var(--line)}
-.shop-eyebrow{margin:0 0 10px;color:var(--muted);font-size:.8rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
-.shop-hero h1{margin:0 0 12px;font-size:clamp(2.3rem,6vw,4rem);letter-spacing:-.02em}
-.shop-hero p:last-child{margin:0;color:var(--muted);font-size:1.05rem}
-.shop-section{padding-top:36px}
-.shop-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:stretch;margin-bottom:20px}
-.search-form{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;min-width:0}
-.search-form input,.sort-form select,.filter-group input[type=number]{min-height:48px;border:1px solid var(--line-strong);border-radius:12px;background:#fff;padding:0 14px;font:inherit}
-.search-form input{min-width:0;width:100%}
-.search-button{min-height:48px;border:0;cursor:pointer;font:inherit;white-space:nowrap;min-width:96px}
-.toolbar-actions{display:grid;grid-template-columns:auto auto;gap:10px;align-items:center}
-.filter-button{min-height:48px;border:0;cursor:pointer;font:inherit;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:8px}
-.filter-icon{font-size:.95em}
-.sort-form{display:flex;align-items:center;gap:8px;white-space:nowrap}
-.sort-form label{font-size:.9rem;font-weight:700}
-.sort-form select{min-width:170px}
-.category-pills{display:none;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:20px;scrollbar-width:thin}
-.category-pills a{flex:0 0 auto;padding:9px 14px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:.88rem;font-weight:700}
-.category-pills a.active{background:var(--brand-primary);color:var(--brand-text-on-primary);border-color:var(--brand-primary)}
-@media (hover:hover){
-  .category-pills a:hover{background:var(--brand-primary);color:var(--brand-text-on-primary);border-color:var(--brand-primary)}
-}
-.filter-panel{margin:0 0 20px;padding:20px;border:1px solid var(--line);border-radius:18px;background:#fff;box-shadow:0 10px 30px rgba(15,23,42,.06)}
-.filter-panel[hidden]{display:none}
-.filter-panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:18px}
-.filter-panel-head strong{display:block;font-size:1.1rem}
-.filter-panel-subtitle{display:block;margin-top:4px;color:var(--muted);font-size:.86rem}
-.filter-close{width:38px;height:38px;border:1px solid var(--line);border-radius:50%;background:#fff;font-size:22px;line-height:1;cursor:pointer}
-.filter-groups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
-.filter-group{min-width:0;margin:0;padding:16px;border:1px solid var(--line);border-radius:14px}
-.filter-group legend{padding:0 6px;font-weight:800}
-.filter-check-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:8px;max-height:240px;overflow:auto;padding-right:2px}
-.filter-check{display:flex;align-items:center;gap:9px;min-width:0;padding:9px 10px;border-radius:10px;background:var(--surface-2);font-size:.9rem;cursor:pointer}
-@media (hover:hover){
-  .filter-check:hover{background:var(--surface-2)}
-}
-.filter-check input{width:17px;height:17px;flex:0 0 auto;accent-color:var(--brand-primary)}
-.filter-check span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.age-filter-group{min-width:0}
-.age-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:8px;min-width:0}
-.age-grid label{display:grid;gap:7px;min-width:0;font-size:.84rem;font-weight:700;color:var(--muted)}
-.age-grid input{width:100%;min-width:0;max-width:100%;padding-inline:10px}
-.filter-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
-.filter-actions .button{min-height:46px}
-.shop-result-row{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px;color:var(--muted);font-size:.9rem}
-.shop-result-row p{margin:0}
-.shop-result-row a{font-weight:700;color:var(--primary-strong)}
-.shop-grid{margin-top:0}
-.shop-card{position:relative}
-.product-media{position:relative}
-.product-image-link{position:relative;display:block;cursor:pointer}
-.quick-view-trigger{position:absolute;left:50%;bottom:14px;z-index:4;transform:translate(-50%,8px);padding:9px 14px;border:0;border-radius:999px;background:var(--brand-primary);color:var(--brand-text-on-primary);font:inherit;font-size:.76rem;font-weight:800;opacity:0;pointer-events:auto;transition:opacity .18s,transform .18s;white-space:nowrap;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.18)}
-.product-media:focus-within .quick-view-trigger{opacity:1;transform:translate(-50%,0)}
-@media (hover:hover){
-  .product-media:hover .quick-view-trigger{opacity:1;transform:translate(-50%,0)}
-}
-.sale-badge,.stock-badge{position:absolute;top:12px;padding:6px 9px;border-radius:999px;font-size:.72rem;font-weight:800;background:#fff;box-shadow:0 4px 12px rgba(15,23,42,.1)}
-.sale-badge{left:12px}
-.stock-badge{right:12px}
-.shop-card .product-info h2{margin:0 0 8px;font-size:1rem}
-.shop-price{display:flex;align-items:baseline;gap:8px;margin-top:10px}
-.shop-original-price{color:var(--subtle);font-size:.9rem;text-decoration:line-through}
-.view-product{display:inline-block;margin-top:12px;font-size:.88rem;font-weight:800}
-.empty-state{padding:64px 20px;border:1px dashed var(--line-strong);border-radius:18px;text-align:center}
-.empty-state h2{margin:0 0 8px}
-.empty-state p{margin:0 0 20px;color:var(--muted)}
-.pagination{display:flex;justify-content:center;align-items:center;gap:18px;margin-top:40px;font-size:.92rem}
-.pagination a{padding:10px 14px;border:1px solid var(--line);border-radius:10px;font-weight:700}
-.pagination span{color:var(--muted)}
-.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.quick-view-modal{position:fixed;inset:0;z-index:18000;display:none;align-items:center;justify-content:center;padding:20px}
-.quick-view-modal.is-open{display:flex}
-.quick-view-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.62);backdrop-filter:blur(5px)}
-.quick-view-dialog{position:relative;z-index:1;width:min(920px,100%);display:grid;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr);gap:0;overflow:hidden;border-radius:22px;background:#fff;box-shadow:0 28px 80px rgba(15,23,42,.28)}
-.quick-view-media{min-height:420px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;padding:24px}
-.quick-view-media img{width:100%;height:100%;max-height:600px;object-fit:contain;border-radius:14px}
-.quick-view-content{padding:34px;display:flex;flex-direction:column;justify-content:center}
-.quick-view-kicker{margin:0 0 8px;color:var(--muted);font-size:.76rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
-.quick-view-content h2{margin:0 0 12px;font-size:clamp(1.4rem,3vw,2.2rem);line-height:1.15}
-.quick-view-description{margin:0 0 18px;color:var(--muted);line-height:1.6}
-.quick-view-price{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
-.quick-view-price strong{font-size:1.5rem}
-.quick-view-price span{text-decoration:line-through;color:var(--subtle)}
-.quick-view-stock{margin:0 0 20px;color:var(--muted)}
-.quick-view-close{position:absolute;top:12px;right:12px;z-index:3;width:42px;height:42px;border:0;border-radius:50%;background:rgba(255,255,255,.92);font-size:24px;cursor:pointer}
-@media (max-width:900px){
-  .shop-toolbar{grid-template-columns:1fr}
-  .toolbar-actions{grid-template-columns:1fr 1fr}
-  .sort-form{display:grid;grid-template-columns:1fr;gap:6px}
-  .sort-form label{display:none}
-  .sort-form select{width:100%}
-  .filter-groups{grid-template-columns:1fr}
-  .quick-view-dialog{grid-template-columns:1fr;max-height:90vh;overflow:auto}
-  .quick-view-media{min-height:240px;max-height:44vh}
-  .quick-view-content{padding:22px}
-}
-@media (max-width:767px){
-  .category-pills{display:flex}
-  .shop-toolbar{margin-bottom:14px}
-  .search-form{grid-template-columns:1fr}
-  .search-button{width:100%}
-  .toolbar-actions{grid-template-columns:1fr 1fr}
-  .filter-panel{padding:14px}
-  .filter-groups{gap:10px}
-  .filter-group{padding:12px}
-  .filter-check-grid{grid-template-columns:1fr 1fr}
-  .age-grid{grid-template-columns:1fr 1fr}
-  .filter-actions{display:grid;grid-template-columns:1fr 1fr}
-  .filter-actions .button{width:100%}
-  .shop-result-row{align-items:flex-start}
-  .shop-card .product-info h2{font-size:.9rem}
-  .product-image{aspect-ratio:1/1;object-fit:cover;width:100%}
-  .quick-view-trigger{opacity:1;transform:translate(-50%,0)}
-}
-@media (max-width:430px){
-  .shop-hero{padding:42px 0 32px}
-  .shop-section{padding-top:22px}
-  .category-pills{margin-bottom:14px}
-  .filter-check-grid{gap:7px}
-  .filter-check{padding:8px;font-size:.78rem}
-  .quick-view-dialog{border-radius:16px}
-  .quick-view-media{padding:14px}
-  .quick-view-content{padding:17px}
-}
-</style>
-
 <script>
-// Filter panel (open/close) and the "Quick view" popup for computers.
-const filterToggle = document.querySelector<HTMLButtonElement>('#filter-toggle');
-const filterPanel = document.querySelector<HTMLFormElement>('#filter-panel');
-const filterClose = document.querySelector('#filter-close');
-const setFilterOpen = (open: boolean) => {
-  if (!filterPanel || !filterToggle) return;
-  filterPanel.hidden = !open;
-  filterPanel.style.display = open ? 'block' : '';
-  filterToggle.setAttribute('aria-expanded', String(open));
-  filterToggle.setAttribute('aria-pressed', String(open));
-};
-filterToggle?.addEventListener('click', () => setFilterOpen(filterPanel?.hidden !== false));
-filterClose?.addEventListener('click', () => setFilterOpen(false));
-
-const modal = document.querySelector('#quick-view-modal');
-const modalImage = document.querySelector('#quick-view-image');
-const modalTitle = document.querySelector('#quick-view-title');
-const modalDescription = document.querySelector('#quick-view-description');
-const modalPrice = document.querySelector('#quick-view-price');
-const modalOriginal = document.querySelector('#quick-view-original');
-const modalStock = document.querySelector('#quick-view-stock');
-const modalLink = document.querySelector('#quick-view-link');
-let restoreFocus: HTMLElement | null = null;
-
-const closeQuickView = () => {
-  if (!(modal instanceof HTMLElement)) return;
-  modal.classList.remove('is-open');
-  modal.setAttribute('aria-hidden', 'true');
-  modal.setAttribute('inert', '');
-  if (restoreFocus instanceof HTMLElement) restoreFocus.focus();
-};
-
-const openQuickView = (card: Element | null, trigger: Element) => {
-  if (!(modal instanceof HTMLElement) || !(card instanceof HTMLElement)) return;
-  const image = card.querySelector('.product-image');
-  const titleEl = card.querySelector('.shop-card .product-info h2');
-  const descEl = card.querySelector('.product-info p');
-  const priceEl = card.querySelector('.shop-price .price');
-  const originalEl = card.querySelector('.shop-original-price');
-  const link = card.querySelector('.view-product');
-  const stockBadge = card.querySelector('.stock-badge');
-  const name = titleEl?.textContent?.trim() || 'Toy';
-
-  if (modalImage instanceof HTMLImageElement) {
-    modalImage.src = image instanceof HTMLImageElement ? image.src : '';
-    modalImage.alt = name;
+// Filters panel on phones and tablets: slides in from the left, closes with ×, Esc or a tap outside.
+const panel = document.querySelector<HTMLFormElement>('#filter-panel')!;
+const toggle = document.querySelector<HTMLButtonElement>('#filter-toggle')!;
+let scrim: HTMLDivElement | null = null;
+function setOpen(open: boolean) {
+  panel.classList.toggle('is-open', open);
+  toggle.setAttribute('aria-expanded', String(open));
+  document.body.classList.toggle('has-drawer', open);
+  if (open) {
+    scrim = document.createElement('div');
+    scrim.className = 'filter-scrim';
+    scrim.addEventListener('click', () => setOpen(false));
+    document.body.appendChild(scrim);
+    panel.querySelector<HTMLElement>('.filter-close')?.focus({ preventScroll: true });
+  } else {
+    scrim?.remove();
+    scrim = null;
   }
-  if (modalTitle) modalTitle.textContent = name;
-  if (modalDescription) modalDescription.textContent = descEl?.textContent?.trim() || 'Discover more details about this toy.';
-  if (modalPrice) modalPrice.textContent = priceEl?.textContent?.trim() || '';
-  if (modalOriginal) modalOriginal.textContent = originalEl?.textContent?.trim() || '';
-  if (modalStock) modalStock.textContent = stockBadge?.textContent?.trim() || 'In stock';
-  if (modalLink instanceof HTMLAnchorElement) modalLink.href = link instanceof HTMLAnchorElement ? link.href : '#';
-
-  restoreFocus = trigger instanceof HTMLElement ? trigger : null;
-  modal.classList.add('is-open');
-  modal.setAttribute('aria-hidden', 'false');
-  modal.removeAttribute('inert');
-  modal.querySelector<HTMLElement>('.quick-view-close')?.focus();
-};
-
-document.querySelectorAll('.quick-view-trigger').forEach(trigger => {
-  trigger.addEventListener('click', () => {
-    openQuickView(trigger.closest('.product-card'), trigger);
-  });
-});
-
-document.querySelectorAll('[data-quick-view-close]').forEach(el => el.addEventListener('click', closeQuickView));
-document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') closeQuickView();
-});
-
-
-
+}
+toggle.addEventListener('click', () => setOpen(!panel.classList.contains('is-open')));
+document.querySelector('#filter-close')?.addEventListener('click', () => { setOpen(false); toggle.focus(); });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && panel.classList.contains('is-open')) setOpen(false); });
 </script>

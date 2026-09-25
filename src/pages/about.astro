@@ -7,6 +7,9 @@ const title='About Clever Toys | Clever Toys';
 const description='Learn about Clever Toys and our mission to make children’s play more fun, creative and educational.';
 ---
 <head><title>{title}</title><meta name="description" content={description}/><link rel="canonical" href={new URL("/about", Astro.site ?? Astro.url.origin).href}/></head>
-<header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart">Cart</a></nav></div></header>
-<main class="section"><div class="container narrow"><div class="section-header"><p>Clever Toys</p><h1>Play. Learn. Discover.</h1><p>We believe the right toy can turn an ordinary moment into a chance to imagine, learn and create.</p></div><div class="form-card"><h2>Our store</h2><p>Clever Toys brings together fun, educational and creative toys for children of different ages. We focus on practical products, clear information and a simple shopping experience.</p><h2>Our promise</h2><p>We aim to offer quality toys, straightforward prices and responsive customer service from browsing to delivery.</p><a class="button" href="/products">Explore our toys</a></div></div></main>
-<footer class="site-footer"><div class="container"><p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p></div></footer>
+<header class="site-header"></header>
+<main>
+  <section class="page-hero"><div class="container"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">Play. Learn. Discover.</span></nav><p class="eyebrow">Clever Toys</p><h1>Play. Learn. Discover.</h1><p>We believe the right toy can turn an ordinary moment into a chance to imagine, learn and create.</p></div></section>
+  <section class="section tight"><div class="container"><div class="content-card prose"><h2>Our store</h2><p>Clever Toys brings together fun, educational and creative toys for children of different ages. We focus on practical products, clear information and a simple shopping experience.</p><h2>Our promise</h2><p>We aim to offer quality toys, straightforward prices and responsive customer service from browsing to delivery.</p><a class="button" href="/products">Explore our toys</a></div></div></section>
+</main>
+<footer class="site-footer"></footer>

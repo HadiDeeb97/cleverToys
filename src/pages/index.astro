@@ -2,24 +2,45 @@
 /**
  * Home page: /
  *
- * Hero banner, categories, featured toys (products marked "Featured" in Admin → Products)
- * and the store's promises. On computers each featured toy has a "Quick view" popup.
+ * Built from sections that are switched on, ordered and written in Admin → Storefront:
+ * hero, store promises, categories, featured toys, promotion banner, new arrivals, shop by age,
+ * our story and "help choosing" (WhatsApp). Defaults live in src/lib/design.ts.
+ * Styles: src/styles/global.css, section 6. Product cards: src/components/ProductCard.astro.
  */
 import { supabase } from '../lib/supabase';
+import { getPageData, DEFAULT_WHATSAPP_URL } from '../lib/page-data';
+import { AGE_RANGES, placeholderFor } from '../lib/design';
+import ProductCard, { type CardProduct } from '../components/ProductCard.astro';
+import QuickView from '../components/QuickView.astro';
 import '../styles/global.css';
 
-// Categories and featured toys load at the same time.
-const [{ data: categories, error: categoriesError }, { data: featuredProducts, error: productsError }] = await Promise.all([
-  supabase.from('categories').select('id,name,slug,description').eq('is_active', true).order('sort_order', { ascending: true }),
-  supabase.from('products').select('id,name,slug,price,sale_price,primary_image_url,short_description,stock_quantity').eq('is_active', true).eq('is_featured', true).order('created_at', { ascending: false }).limit(8)
+const cardFields = 'id,name,slug,price,sale_price,stock_quantity,primary_image_url,short_description,age_min,age_max,created_at,product_variants(id,is_active)';
+
+// Settings, categories, featured toys and new arrivals all load at the same time.
+const [pageData, featuredResult, newestResult, categoriesResult] = await Promise.all([
+  getPageData(Astro),
+  supabase.from('products').select(cardFields).eq('is_active', true).eq('is_featured', true).order('created_at', { ascending: false }).limit(8),
+  supabase.from('products').select(cardFields).eq('is_active', true).order('created_at', { ascending: false }).limit(8),
+  supabase.from('categories').select('id,name,slug,description,image_url').eq('is_active', true).order('sort_order', { ascending: true })
 ]);
+const { design, storeSettings } = pageData;
+const featured = (featuredResult.data ?? []) as unknown as CardProduct[];
+const newest = (newestResult.data ?? []) as unknown as CardProduct[];
+const categories = categoriesResult.data ?? [];
+const sections = design.sections.filter((s) => s.enabled).map((s) => s.id);
+const whatsappUrl = /^https:\/\//.test(String(storeSettings.whatsapp_url || '')) ? String(storeSettings.whatsapp_url) : DEFAULT_WHATSAPP_URL;
+
+// Hero picture: the uploaded hero image, otherwise a composition of product photos or toy emoji tiles.
+const heroPhotos = featured.map((p) => p.primary_image_url).filter(Boolean) as string[];
+
 const siteUrl = new URL('/', Astro.site ?? Astro.url.origin).href;
 const title = 'Clever Toys Lebanon | Educational & Fun Toys for Kids';
 const description = 'Shop fun, educational and exciting toys in Lebanon. Discover quality toys for babies, kids and growing learners at Clever Toys.';
 const webSiteSchema = {
-  '@context':'https://schema.org','@type':'WebSite',name:'Clever Toys',url:siteUrl,
-  potentialAction:{'@type':'SearchAction',target:`${new URL('/products', Astro.site ?? Astro.url.origin).href}?q={search_term_string}`, 'query-input':'required name=search_term_string'}
+  '@context': 'https://schema.org', '@type': 'WebSite', name: 'Clever Toys', url: siteUrl,
+  potentialAction: { '@type': 'SearchAction', target: `${new URL('/products', Astro.site ?? Astro.url.origin).href}?q={search_term_string}`, 'query-input': 'required name=search_term_string' }
 };
+const tile = (name: string) => placeholderFor(name);
 ---
 <head>
   <title>{title}</title>
@@ -34,281 +55,163 @@ const webSiteSchema = {
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content={title} />
   <meta name="twitter:description" content={description} />
+  {design.hero.image && <link rel="preload" as="image" href={design.hero.image} fetchpriority="high" />}
   <script type="application/ld+json" set:html={JSON.stringify(webSiteSchema)} />
 </head>
-{/* Replaced by the shared store header in src/middleware.ts */}
 <header class="site-header"></header>
 <main>
-  {/* Hero */}
-  <section class="hero home-hero">
-    <div class="container home-hero-inner">
-      <div class="hero-content">
-        <p class="home-eyebrow">Clever Toys • Lebanon</p>
-        <h1>Play. Learn. <span class="text-gradient">Discover.</span></h1>
-        <p>Fun, educational and exciting toys carefully selected for every stage of childhood.</p>
-        <div class="hero-actions">
-          <a href="/products" class="button">Shop Toys</a>
-          <a href="/categories" class="button secondary-button">Browse Categories</a>
+  {sections.map((id) => {
+    /* ---------- Hero ---------- */
+    if (id === 'hero') return (
+      <section class="home-hero">
+        <div class="container home-hero-inner">
+          <div class="hero-copy">
+            {design.hero.eyebrow && <p class="home-eyebrow">{design.hero.eyebrow}</p>}
+            <h1>{design.hero.title} {design.hero.highlight && <span class="hero-highlight">{design.hero.highlight}</span>}</h1>
+            {design.hero.text && <p>{design.hero.text}</p>}
+            <div class="hero-actions">
+              {design.hero.primary_label && <a href={design.hero.primary_link} class="button">{design.hero.primary_label} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>}
+              {design.hero.secondary_label && <a href={design.hero.secondary_link} class="button secondary-button">{design.hero.secondary_label}</a>}
+            </div>
+            <div class="hero-proof" aria-hidden="true">
+              <span class="hero-proof-dots"><span style="--h:40">🧸</span><span style="--h:200">🚀</span><span style="--h:330">🎨</span><span style="--h:145">🧩</span></span>
+              <span>Delivered to families across Lebanon</span>
+            </div>
+          </div>
+          <div class="hero-visual">
+            {design.hero.image ? <img src={design.hero.image} alt="" fetchpriority="high" decoding="async" width="600" height="600" /> : (
+              <div class="hero-art" aria-hidden="true">
+                <div class="art-main">{heroPhotos[0] ? <img src={heroPhotos[0]} alt="" fetchpriority="high" decoding="async" /> : '🧸'}</div>
+                <div class="art-a">{heroPhotos[1] ? <img src={heroPhotos[1]} alt="" loading="lazy" /> : '🚀'}</div>
+                <div class="art-b">{heroPhotos[2] ? <img src={heroPhotos[2]} alt="" loading="lazy" /> : '🧩'}</div>
+                <div class="art-card"><b>✓</b><span>Cash on delivery<small>Pay when it arrives</small></span></div>
+              </div>
+            )}
+          </div>
         </div>
-        <div class="hero-points"><span>✓ Quality toys</span><span>✓ Cash on delivery</span><span>✓ Fast local delivery</span></div>
-      </div>
-      <div class="hero-art" aria-hidden="true">
-        <span class="hero-bubble bubble-1">🧸</span><span class="hero-bubble bubble-2">🚀</span><span class="hero-bubble bubble-3">🧩</span><span class="hero-bubble bubble-4">🎨</span><span class="hero-bubble bubble-5">🦖</span>
-      </div>
-    </div>
-  </section>
+      </section>
+    );
 
-  {/* Shop by category */}
-  <section class="section">
-    <div class="container">
-      <div class="section-header"><h2>Shop by Category</h2><p>Find something fun for every child.</p></div>
-      {categoriesError ? (
-        <div class="empty-state"><h2>Categories are temporarily unavailable</h2><p>Please try again shortly.</p></div>
-      ) : categories?.length ? (
-        <div class="category-grid">
-          {categories.map((category) => (
-            <a href={`/category/${category.slug}`} class="category-card">
-              <strong>{category.name}</strong>
-              {category.description && <p>{category.description}</p>}
-              <span class="category-arrow">View toys →</span>
-            </a>
+    /* ---------- Store promises ---------- */
+    if (id === 'trust' && design.trust.length) return (
+      <section class="trust-strip" aria-label="Why shop with us">
+        <div class="container trust-grid" style={`--items:${design.trust.length}`}>
+          {design.trust.map((item) => (
+            <div class="trust-item"><span class="trust-icon" aria-hidden="true">{item.icon || '✓'}</span><span><strong>{item.title}</strong>{item.text && <span>{item.text}</span>}</span></div>
           ))}
         </div>
-      ) : (
-        <div class="empty-state"><h2>No categories yet</h2><p>New collections are coming soon.</p></div>
-      )}
-    </div>
-  </section>
+      </section>
+    );
 
-  {/* Featured toys */}
-  <section class="section home-featured">
-    <div class="container">
-      <div class="section-header section-header-row">
-        <div><h2>Featured Toys</h2><p>Popular picks from Clever Toys.</p></div>
-        <a href="/products" class="text-link">View all toys →</a>
-      </div>
-      {productsError ? (
-        <div class="empty-state"><h2>We couldn't load featured toys</h2><p>Please refresh the page in a moment.</p></div>
-      ) : featuredProducts?.length ? (
-        <div class="product-grid home-product-grid">
-          {featuredProducts.map((product) => {
-            const price = Number(product.sale_price ?? product.price);
-            const original = product.sale_price != null ? Number(product.price) : null;
-            const inStock = Number(product.stock_quantity ?? 0) > 0;
-            return (
-              <article class="product-card home-product-card"
-                data-product-name={product.name}
-                data-product-description={product.short_description || ''}
-                data-product-price={`$${price.toFixed(2)}`}
-                data-product-original={original != null ? `$${original.toFixed(2)}` : ''}
-                data-product-stock={inStock ? 'In stock' : 'Out of stock'}
-                data-product-link={`/product/${product.slug}`}>
-                <div class="home-product-frame">
-                  <a href={`/product/${product.slug}`} class="home-product-link" tabindex="-1" aria-hidden="true">
-                    <span class="home-product-media">
-                      {product.primary_image_url
-                        ? <img class="product-image" src={product.primary_image_url} alt="" loading="lazy" decoding="async" width="400" height="400" />
-                        : <span class="product-placeholder"><span>No image yet</span></span>}
-                    </span>
-                  </a>
-                  {/* Computers only (hidden on touch screens by global.css) */}
-                  <button type="button" class="quick-view-trigger" aria-label={`Quick view ${product.name}`}>Quick view</button>
-                </div>
-                <div class="product-info">
-                  <h3><a href={`/product/${product.slug}`}>{product.name}</a></h3>
-                  {product.short_description && <p>{product.short_description}</p>}
-                  <div class="home-price">
-                    <span class="price">${price.toFixed(2)}</span>
-                    {original != null && <span class="shop-original-price">${original.toFixed(2)}</span>}
-                  </div>
-                  <a href={`/product/${product.slug}`} class="view-product" tabindex="-1">View product →</a>
-                </div>
-              </article>
-            );
-          })}
+    /* ---------- Shop by category ---------- */
+    if (id === 'categories' && categories.length) return (
+      <section class="section">
+        <div class="container">
+          <div class="section-header section-header-row">
+            <div><h2>{design.titles.categories.title}</h2><p>{design.titles.categories.subtitle}</p></div>
+            <a href="/categories" class="text-link">All categories →</a>
+          </div>
+          <div class="category-tiles">
+            {categories.map((category) => {
+              const ph = tile(category.name);
+              return (
+                <a href={`/category/${category.slug}`} class="category-tile">
+                  <span class="tile-media" style={`--ph-h:${ph.hue}`}>
+                    {category.image_url ? <img src={category.image_url} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">{ph.emoji}</span>}
+                    <span class="tile-arrow" aria-hidden="true">→</span>
+                  </span>
+                  <span><strong>{category.name}</strong>{category.description && <small>{category.description}</small>}</span>
+                </a>
+              );
+            })}
+          </div>
         </div>
-      ) : (
-        <div class="empty-state"><h2>No featured toys yet</h2><p>Browse our full collection to find your next favorite toy.</p><a href="/products" class="button">Shop all toys</a></div>
-      )}
-    </div>
-  </section>
+      </section>
+    );
 
-  {/* Store promises */}
-  <section class="section home-benefits">
-    <div class="container benefit-grid">
-      <div><strong>Easy ordering</strong><p>Simple checkout with cash on delivery.</p></div>
-      <div><strong>Made for families</strong><p>Fun picks for babies, kids and growing learners.</p></div>
-      <div><strong>Local support</strong><p>Need help? Message us directly on WhatsApp.</p></div>
-    </div>
-  </section>
+    /* ---------- Featured toys / New arrivals ---------- */
+    if ((id === 'featured' && featured.length) || (id === 'new' && newest.length)) {
+      const list = id === 'featured' ? featured : newest;
+      const text = design.titles[id];
+      return (
+        <section class="section">
+          <div class="container">
+            <div class="section-header section-header-row">
+              <div><h2>{text.title}</h2><p>{text.subtitle}</p></div>
+              <a href={id === 'new' ? '/products?sort=newest' : '/products'} class="text-link">View all toys →</a>
+            </div>
+            <div class="product-grid home-rail">{list.map((product) => <ProductCard product={product} />)}</div>
+          </div>
+        </section>
+      );
+    }
+
+    /* ---------- Promotion banner ---------- */
+    if (id === 'promo') return (
+      <section class="section tight">
+        <div class="container">
+          <div class:list={['promo-banner', `style-${design.promo.style}`]}>
+            <div>
+              {design.promo.eyebrow && <p class="eyebrow">{design.promo.eyebrow}</p>}
+              <h2>{design.promo.title}</h2>
+              {design.promo.text && <p>{design.promo.text}</p>}
+              {design.promo.button_label && <a class="button" href={design.promo.button_link}>{design.promo.button_label}</a>}
+            </div>
+            <div class="promo-visual" aria-hidden="true">{design.promo.image ? <img src={design.promo.image} alt="" loading="lazy" decoding="async" /> : '🎁'}</div>
+          </div>
+        </div>
+      </section>
+    );
+
+    /* ---------- Shop by age ---------- */
+    if (id === 'ages') return (
+      <section class="section">
+        <div class="container">
+          <div class="section-header center"><h2>{design.titles.ages.title}</h2><p>{design.titles.ages.subtitle}</p></div>
+          <div class="age-grid-home">
+            {AGE_RANGES.map((age) => (
+              <a class="age-tile" href={`/products?age_min=${age.min}${age.max != null ? `&age_max=${age.max}` : ''}`}>
+                <span class="age-icon" aria-hidden="true">{age.icon}</span>
+                <strong>{age.label}</strong>
+                <small>{age.note}</small>
+              </a>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+
+    /* ---------- Our story ---------- */
+    if (id === 'story') return (
+      <section class="section">
+        <div class="container story-block">
+          <div class="story-visual" aria-hidden="true">{design.story.image ? <img src={design.story.image} alt="" loading="lazy" decoding="async" /> : '🎈'}</div>
+          <div class="story-copy">
+            {design.story.eyebrow && <p class="eyebrow">{design.story.eyebrow}</p>}
+            <h2>{design.story.title}</h2>
+            <p>{design.story.text}</p>
+            {design.story.button_label && <a class="button secondary-button" href={design.story.button_link}>{design.story.button_label}</a>}
+          </div>
+        </div>
+      </section>
+    );
+
+    /* ---------- Help choosing (WhatsApp) ---------- */
+    if (id === 'help') return (
+      <section class="section tight">
+        <div class="container">
+          <div class="help-card">
+            <div>
+              <span class="help-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="currentColor" d="M17.47 14.38c-.3-.15-1.76-.87-2.03-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.26-.46-2.39-1.48-.88-.79-1.48-1.76-1.65-2.06-.17-.3-.02-.46.13-.6.13-.14.3-.35.45-.52.15-.18.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.07c.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.7.63.71.22 1.36.2 1.87.12.57-.09 1.76-.72 2-1.41.25-.7.25-1.29.18-1.41-.08-.13-.28-.2-.57-.35m-5.42 7.4h-.01a9.87 9.87 0 0 1-5.03-1.38l-.36-.21-3.74.98 1-3.65-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.89-9.88 2.64 0 5.12 1.03 6.99 2.9a9.83 9.83 0 0 1 2.89 6.99c0 5.45-4.44 9.88-9.88 9.88m8.41-18.3A11.82 11.82 0 0 0 12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.69 1.45h.01c6.55 0 11.89-5.34 11.89-11.89 0-3.18-1.24-6.16-3.48-8.41Z"/></svg></span>
+              <div><h2>{design.help.title}</h2><p>{design.help.text}</p></div>
+            </div>
+            <a class="button whatsapp-button" href={whatsappUrl} target="_blank" rel="noopener noreferrer">{design.help.button_label}</a>
+          </div>
+        </div>
+      </section>
+    );
+    return null;
+  })}
 </main>
-
-{/* Quick view popup, filled in by the script below */}
-<div class="quick-view-modal" id="home-quick-view-modal" aria-hidden="true" inert>
-  <div class="quick-view-backdrop" data-home-quick-view-close></div>
-  <section class="quick-view-dialog" role="dialog" aria-modal="true" aria-labelledby="home-quick-view-title">
-    <button class="quick-view-close" type="button" aria-label="Close quick view" data-home-quick-view-close>×</button>
-    <div class="quick-view-media"><img id="home-quick-view-image" src="data:," alt="" /></div>
-    <div class="quick-view-content">
-      <p class="quick-view-kicker">Quick view</p>
-      <h2 id="home-quick-view-title"></h2>
-      <p id="home-quick-view-description" class="quick-view-description"></p>
-      <div class="quick-view-price"><strong id="home-quick-view-price"></strong><span id="home-quick-view-original"></span></div>
-      <p id="home-quick-view-stock" class="quick-view-stock"></p>
-      <a id="home-quick-view-link" class="button" href="/products">View product</a>
-    </div>
-  </section>
-</div>
+<QuickView />
 <footer class="site-footer"></footer>
-<style>
-.home-hero{padding:88px 0 80px}
-.home-hero-inner{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:32px;align-items:center}
-.hero-art{position:relative;height:380px}
-.hero-bubble{position:absolute;display:grid;place-items:center;border-radius:50%;background:var(--surface);box-shadow:var(--shadow);animation:hero-float 6s ease-in-out infinite}
-.bubble-1{left:22%;top:14%;width:170px;height:170px;font-size:88px;background:var(--brand-gradient)}
-.bubble-2{right:4%;top:0;width:112px;height:112px;font-size:54px;animation-delay:-1.5s}
-.bubble-3{right:10%;bottom:6%;width:132px;height:132px;font-size:64px;background:var(--theme-accent);animation-delay:-3s}
-.bubble-4{left:2%;bottom:2%;width:104px;height:104px;font-size:50px;animation-delay:-4.5s}
-.bubble-5{left:50%;bottom:-4%;width:86px;height:86px;font-size:42px;background:var(--brand-soft);animation-delay:-2.2s}
-@keyframes hero-float{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-12px) rotate(4deg)}}
-@media(max-width:900px){
-  .home-hero-inner{grid-template-columns:1fr}
-  .hero-art{display:none}
-}
-.home-eyebrow{margin:0 0 14px;color:var(--muted);font-size:.82rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
-.hero-actions{display:flex;gap:10px;flex-wrap:wrap}
-.hero-points{display:flex;gap:18px;flex-wrap:wrap;margin-top:24px;color:var(--muted);font-size:.9rem;font-weight:650}
-.category-card{position:relative}
-.category-arrow{margin-top:14px;color:var(--muted);font-size:.82rem;font-weight:800}
-.section-header-row{display:flex;justify-content:space-between;align-items:end;gap:20px}
-.text-link{font-weight:800}
-.home-product-frame{position:relative}
-.home-product-link{position:relative;display:block;cursor:pointer}
-.home-product-media{position:relative;display:block;width:100%;aspect-ratio:1/1;overflow:hidden;background:var(--surface-2)}
-.home-product-media .product-image,.home-product-media .product-placeholder{position:absolute;inset:0;width:100%;height:100%;max-width:100%;object-fit:cover}
-.home-product-media .product-placeholder{display:grid;place-items:center;color:var(--subtle);background:var(--surface-2)}
-.quick-view-trigger{position:absolute;left:50%;bottom:14px;z-index:4;transform:translate(-50%,8px);padding:9px 14px;border:0;border-radius:999px;background:var(--brand-primary);color:var(--brand-text-on-primary);font:inherit;font-size:.76rem;font-weight:800;opacity:0;pointer-events:auto;transition:opacity .18s,transform .18s;white-space:nowrap;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.18)}
-.home-product-frame:focus-within .quick-view-trigger{opacity:1;transform:translate(-50%,0)}
-@media (hover:hover){
-  .home-product-frame:hover .quick-view-trigger{opacity:1;transform:translate(-50%,0)}
-}
-.home-price{display:flex;align-items:baseline;gap:8px;margin-top:8px}
-.shop-original-price{text-decoration:line-through;color:var(--subtle)}
-.view-product{display:inline-block;margin-top:12px;font-size:.88rem;font-weight:800}
-.home-benefits{padding-top:20px}
-.benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
-.benefit-grid>div{padding:22px;border:1px solid var(--line);border-radius:16px;background:#fff}
-.benefit-grid strong{font-size:1rem}
-.benefit-grid p{margin:7px 0 0;color:var(--muted);line-height:1.55}
-.footer-inner{display:flex;justify-content:space-between;gap:30px;align-items:flex-start;margin-bottom:22px}
-.footer-inner p{margin:6px 0 0}
-.footer-links{display:flex;gap:16px;flex-wrap:wrap;font-weight:650;font-size:.9rem}
-@media (hover:hover){
-  .footer-links a:hover{text-decoration:underline}
-}
-.quick-view-modal{position:fixed;inset:0;z-index:18000;display:none;align-items:center;justify-content:center;padding:20px}
-.quick-view-modal.is-open{display:flex}
-.quick-view-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.62);backdrop-filter:blur(5px)}
-.quick-view-dialog{position:relative;z-index:1;width:min(920px,100%);display:grid;grid-template-columns:minmax(0,1.05fr) minmax(300px,.95fr);gap:0;overflow:hidden;border-radius:22px;background:#fff;box-shadow:0 28px 80px rgba(15,23,42,.28)}
-.quick-view-media{min-height:420px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;padding:24px}
-.quick-view-media img{width:100%;height:100%;max-height:600px;object-fit:contain;border-radius:14px}
-.quick-view-content{padding:34px;display:flex;flex-direction:column;justify-content:center}
-.quick-view-kicker{margin:0 0 8px;color:var(--muted);font-size:.76rem;font-weight:800;letter-spacing:.09em;text-transform:uppercase}
-.quick-view-content h2{margin:0 0 12px;font-size:clamp(1.6rem,3vw,2.35rem);line-height:1.08;letter-spacing:-.015em}
-.quick-view-description{margin:0;color:var(--muted);line-height:1.6}
-.quick-view-price{display:flex;align-items:baseline;gap:9px;margin:20px 0 8px}
-.quick-view-price strong{font-size:1.5rem}
-.quick-view-price span{text-decoration:line-through;color:var(--subtle)}
-.quick-view-stock{margin:0 0 22px;font-size:.9rem;font-weight:700}
-.quick-view-close{position:absolute;top:12px;right:12px;z-index:2;width:40px;height:40px;border:0;border-radius:50%;background:rgba(255,255,255,.94);box-shadow:0 4px 15px rgba(15,23,42,.12);font-size:24px;line-height:1;cursor:pointer}
-.home-product-grid{min-width:0}
-.home-product-grid .product-card{min-width:0;overflow:hidden}
-.home-product-grid .product-info{min-width:0}
-.home-product-grid .product-info h3,.home-product-grid .product-info p{overflow-wrap:anywhere;word-break:break-word}
-@media(max-width:900px){
-  .home-hero{padding:68px 0 58px}
-  .benefit-grid{grid-template-columns:1fr}
-  .footer-inner{flex-direction:column}
-  .quick-view-dialog{grid-template-columns:1fr}
-  .quick-view-media{min-height:320px;max-height:52vh}
-  .quick-view-content{padding:26px}
-}
-@media(max-width:640px){
-  .home-hero{padding:52px 0 46px}
-  .hero-actions .button{width:100%}
-  .hero-points{gap:10px 14px;font-size:.82rem}
-  .section-header-row{align-items:flex-start;flex-direction:column}
-  .footer-links{gap:12px}
-  .footer-inner{margin-bottom:18px}
-  .home-product-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
-  .home-product-grid .product-info{padding:10px!important}
-  .home-product-grid .product-info h3{font-size:.78rem!important;line-height:1.3!important}
-  .home-product-grid .product-info p{font-size:.7rem!important;line-height:1.4!important}
-  .home-product-grid .price{font-size:.92rem!important}
-  .home-product-grid .view-product{font-size:.72rem!important;min-height:40px!important}
-  .quick-view-modal{padding:12px}
-  .quick-view-dialog{max-height:calc(100vh - 24px);overflow:auto;border-radius:18px}
-  .quick-view-media{min-height:280px;padding:16px}
-  .quick-view-content{padding:22px}
-  .quick-view-content h2{font-size:1.55rem}
-  .quick-view-close{top:8px;right:8px}
-  .quick-view-trigger{opacity:1;transform:translate(-50%,0);bottom:10px;font-size:.7rem;padding:7px 11px}
-}
-@media(max-width:420px){
-  .home-product-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
-  .home-product-grid .product-info{padding:9px!important}
-  .home-product-grid .product-info h3{font-size:.75rem!important}
-  .home-product-grid .product-info p{font-size:.68rem!important}
-  .home-product-grid .price{font-size:.88rem!important}
-}
-</style>
-
-<script>
-// Quick view popup for featured toys (computers only; on phones a tap opens the product page).
-const modal = document.getElementById('home-quick-view-modal')!;
-const image = document.getElementById('home-quick-view-image') as HTMLImageElement;
-const title = document.getElementById('home-quick-view-title')!;
-const description = document.getElementById('home-quick-view-description')!;
-const price = document.getElementById('home-quick-view-price')!;
-const original = document.getElementById('home-quick-view-original')!;
-const stock = document.getElementById('home-quick-view-stock')!;
-const link = document.getElementById('home-quick-view-link') as HTMLAnchorElement;
-let opener: HTMLElement | null = null;
-
-function closeQuickView() {
-  const restore = opener;
-  opener = null;
-  modal.classList.remove('is-open');
-  modal.setAttribute('aria-hidden', 'true');
-  modal.setAttribute('inert', '');
-  document.body.style.overflow = '';
-  if (restore && document.contains(restore)) requestAnimationFrame(() => restore.focus({ preventScroll: true }));
-}
-
-function openQuickView(card: HTMLElement, trigger: HTMLElement) {
-  const imageEl = card.querySelector<HTMLImageElement>('.product-image');
-  opener = trigger;
-  image.src = imageEl ? imageEl.currentSrc || imageEl.src : 'data:,';
-  image.alt = card.dataset.productName || '';
-  title.textContent = card.dataset.productName || 'Product';
-  description.textContent = card.dataset.productDescription || '';
-  description.hidden = !description.textContent;
-  price.textContent = card.dataset.productPrice || '';
-  original.textContent = card.dataset.productOriginal || '';
-  original.hidden = !original.textContent;
-  stock.textContent = card.dataset.productStock || 'In stock';
-  stock.style.color = stock.textContent === 'Out of stock' ? '#b91c1c' : '#15803d';
-  link.href = card.dataset.productLink || '/products';
-  modal.removeAttribute('inert');
-  modal.setAttribute('aria-hidden', 'false');
-  modal.classList.add('is-open');
-  document.body.style.overflow = 'hidden';
-  requestAnimationFrame(() => modal.querySelector<HTMLElement>('.quick-view-close')?.focus({ preventScroll: true }));
-}
-
-document.querySelectorAll<HTMLButtonElement>('.home-product-card .quick-view-trigger').forEach((trigger) => {
-  trigger.addEventListener('click', () => openQuickView(trigger.closest<HTMLElement>('.home-product-card')!, trigger));
-});
-modal.querySelectorAll('[data-home-quick-view-close]').forEach((el) => el.addEventListener('click', closeQuickView));
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && modal.classList.contains('is-open')) closeQuickView(); });
-</script>

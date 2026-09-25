@@ -5,5 +5,7 @@
 import '../styles/global.css';
 const order = Astro.url.searchParams.get('order');
 ---
-<header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/">Home</a></nav></div></header>
+<head><title>Thank you for your order | Clever Toys</title></head>
+<header class="site-header"></header>
 <main class="section"><div class="container narrow"><div class="success-card"><h1>Thank you for your order!</h1><p>Your order has been received.</p>{order && <p class="order-number">Order number: <strong>{order}</strong></p>}<p>We will contact you to confirm delivery details.</p><div class="form-actions">{order && <a class="button" href={`/track-order?order=${encodeURIComponent(order)}`}>Track your order</a>}<a class="button secondary-button" href="/products">Continue Shopping</a></div></div></div></main>
+<footer class="site-footer"></footer>

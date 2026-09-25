@@ -87,11 +87,11 @@
     });
   };
 
-  /** The ribbon (Admin → Branding) belongs directly under the header. */
-  const moveRibbonBelowHeader = () => {
+  /** The announcement ribbon (Admin → Branding) sits directly above the header. */
+  const placeRibbon = () => {
     const header = document.querySelector('header.site-header');
     const ribbon = document.querySelector('.clever-ribbon');
-    if (header && ribbon && header.nextElementSibling !== ribbon) header.insertAdjacentElement('afterend', ribbon);
+    if (header && ribbon && header.previousElementSibling !== ribbon) header.insertAdjacentElement('beforebegin', ribbon);
   };
 
   // ---------- WhatsApp links ask about the product being viewed ----------
@@ -266,7 +266,7 @@
   // ---------- Start ----------
   const start = () => {
     applyHeaderSocials();
-    moveRibbonBelowHeader();
+    placeRibbon();
     patchFloatingWhatsapp();
     if (!isAdmin) setupWhatsappOrderButton();
   };

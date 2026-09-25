@@ -13,11 +13,19 @@ import '../styles/global.css';
 </head>
 {/* Replaced by the shared store header in src/middleware.ts */}
 <header class="site-header"></header>
-<main class="section">
-  <div class="container">
-    <div class="section-header"><h1>Your Cart</h1><p>Review your items before checkout.</p></div>
-    <div id="cart-root" aria-live="polite"></div>
-  </div>
+<main>
+  <section class="page-hero">
+    <div class="container">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">Cart</span></nav>
+      <h1>Your cart</h1>
+      <p>Review your toys before checkout. You pay in cash when they arrive.</p>
+    </div>
+  </section>
+  <section class="section tight">
+    <div class="container">
+      <div id="cart-root" aria-live="polite"></div>
+    </div>
+  </section>
 </main>
 <footer class="site-footer"></footer>
 
@@ -27,6 +35,10 @@ type CartItem = { productId: string; variantId?: string | null; variantName?: st
 const CART_KEY = 'cleverToysCart';
 const root = document.querySelector<HTMLElement>('#cart-root')!;
 const money = (n: number) => `$${Number(n).toFixed(2)}`;
+// Same soft colour + emoji stand-in as product cards (src/lib/design.ts placeholderFor) for toys without a photo.
+const hashOf = (name: string) => { let h = 0; for (const ch of String(name || 'toy')) h = (h * 31 + ch.codePointAt(0)!) >>> 0; return h; };
+const emoji = (name: string) => ['🧸', '🚂', '🧩', '🎨', '🪀', '🚀', '🦖', '🎲', '🪁', '🧱', '🎈', '🦄'][hashOf(name) % 12];
+const hue = (name: string) => [12, 32, 48, 145, 170, 200, 222, 255, 285, 330][Math.floor(hashOf(name) / 12) % 10];
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
 
 const read = (): CartItem[] => {
@@ -63,7 +75,7 @@ function render() {
     const max = Number(i.maxStock);
     const atMax = Number.isFinite(max) && max > 0 && i.quantity >= max;
     return `<article class="cart-item">
-      <div>${i.image ? `<img src="${esc(i.image)}" alt="${esc(i.name)}" loading="lazy" decoding="async" width="110" height="110">` : '<div class="cart-placeholder">Toy</div>'}</div>
+      <a href="/product/${encodeURIComponent(i.slug)}" tabindex="-1" aria-hidden="true">${i.image ? `<img src="${esc(i.image)}" alt="" loading="lazy" decoding="async" width="104" height="104">` : `<span class="product-placeholder" style="--ph-h:${hue(i.name)}"><span>${emoji(i.name)}</span></span>`}</a>
       <div class="cart-item-info">
         <h2><a href="/product/${encodeURIComponent(i.slug)}">${esc(i.name)}</a></h2>
         ${i.variantName ? `<p class="cart-variant">Option: ${esc(i.variantName)}</p>` : ''}
@@ -81,11 +93,13 @@ function render() {
   }).join('');
   root.innerHTML = `<div class="cart-list">${items}</div>
     <div class="cart-summary">
-      <div><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
+      <h2>Order summary</h2>
+      <div><span>Subtotal (${cart.reduce((n, i) => n + i.quantity, 0)} items)</span><strong>${money(subtotal)}</strong></div>
       ${deliveryProgress(subtotal)}
-      <p>Delivery fee will be calculated at checkout.</p>
-      <p class="checkout-question">Ready to place your order?</p>
+      <p>Delivery fee is shown at checkout.</p>
       <a class="button" href="/checkout">Proceed to Checkout</a>
+      <a class="summary-cart-link" href="/products">Continue shopping</a>
+      <div class="summary-perks"><span>💵 Pay cash on delivery</span><span>🚚 Delivery across Lebanon</span><span>💬 Questions? We reply on WhatsApp</span></div>
     </div>`;
 }
 
@@ -109,13 +123,3 @@ render();
 window.addEventListener('storage', (event) => { if (event.key === CART_KEY) render(); });
 </script>
 
-<style is:global>
-.delivery-progress{display:block!important;margin:4px 0 14px;padding:12px 14px;border-radius:14px;background:var(--surface-2)}
-.delivery-progress p{margin:0 0 8px;color:var(--ink);font-size:.92rem;font-weight:700}
-.delivery-progress-track{height:10px;border-radius:99px;background:var(--line);overflow:hidden}
-.delivery-progress-track i{display:block;height:100%;border-radius:99px;background:var(--brand-gradient);transition:width .3s}
-.cart-variant{margin:.2rem 0;color:var(--muted);font-size:.9rem}
-.cart-item small{display:block;margin-top:6px;color:var(--muted)}
-.checkout-question{font-weight:700;margin:12px 0}
-.quantity-control button:disabled{opacity:.4;cursor:not-allowed}
-</style>

@@ -34,6 +34,7 @@ Run the SQL files in `supabase/` from the Supabase SQL Editor. They can safely b
 - `accounts_and_admins.sql`: customer profiles on sign-up and Admin → Team
 - `seo_advanced.sql`: Admin → SEO indexing, sitemap, verification and business details; fixes product/category fallback titles
 - `branding_assets.sql`: small, cached logo and the uploadable website icon (Admin → Branding)
+- `storefront_design.sql`: Admin → Storefront (fonts, homepage sections, texts, footer)
 
 ## Project structure
 

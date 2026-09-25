@@ -1,12 +1,68 @@
 ---
 /**
- * Contact page: /contact. Ways to reach the store (WhatsApp link comes from Admin → Branding).
+ * Contact page: /contact
+ *
+ * Every detail comes from the admin panel, so nothing here needs editing:
+ *  - WhatsApp and Instagram links: Admin → Branding & settings
+ *  - Phone, email and city: Admin → SEO → Settings → Business details
+ *  - Street address and opening hours: Admin → Storefront → Footer
  */
 import '../styles/global.css';
-const title='Contact Clever Toys | Clever Toys';
-const description='Contact Clever Toys for product questions, order help and delivery assistance.';
+import { getPageData, DEFAULT_WHATSAPP_URL } from '../lib/page-data';
+import { parseSeoSettings } from '../lib/seo';
+
+const { storeSettings, design } = await getPageData(Astro);
+const seo = parseSeoSettings(storeSettings.seo);
+const https = (value: unknown) => /^https:\/\/[^\s"<>]+$/i.test(String(value ?? '').trim()) ? String(value).trim() : '';
+const whatsappUrl = https(storeSettings.whatsapp_url) || DEFAULT_WHATSAPP_URL;
+const instagramUrl = storeSettings.show_instagram ? https(storeSettings.instagram_url) : '';
+const title = 'Contact Clever Toys | Clever Toys';
+const description = 'Contact Clever Toys for product questions, order help and delivery assistance.';
 ---
-<head><title>{title}</title><meta name="description" content={description}/><link rel="canonical" href={new URL("/contact", Astro.site ?? Astro.url.origin).href}/></head>
-<header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/categories">Categories</a><a href="/cart">Cart</a></nav></div></header>
-<main class="section"><div class="container narrow"><div class="section-header"><h1>Contact us</h1><p>Need help choosing a toy or checking an order? We’re happy to help.</p></div><div class="form-card"><h2>Customer support</h2><p>For product questions, availability and order assistance, please use the same contact channel you normally use with Clever Toys.</p><p><strong>Before launch:</strong> add your business WhatsApp number, Instagram link or email address here.</p><a class="button" href="/products">Continue Shopping</a></div></div></main>
-<footer class="site-footer"><div class="container"><p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p></div></footer>
+<head>
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  <link rel="canonical" href={new URL('/contact', Astro.site ?? Astro.url.origin).href} />
+</head>
+<header class="site-header"></header>
+<main>
+  <section class="page-hero">
+    <div class="container">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">Contact</span></nav>
+      <h1>We're here to help</h1>
+      <p>Questions about a toy, a gift idea or your order? Message us and a real person will answer.</p>
+    </div>
+  </section>
+  <section class="section tight">
+    <div class="container">
+      <div class="contact-grid">
+        <div class="contact-card">
+          <b aria-hidden="true">💬</b>
+          <strong>WhatsApp</strong>
+          <span>The fastest way to reach us, for questions and orders.</span>
+          <a class="button whatsapp-button" href={whatsappUrl} target="_blank" rel="noopener noreferrer">Chat on WhatsApp</a>
+        </div>
+        {seo.org_phone && (
+          <div class="contact-card"><b aria-hidden="true">📞</b><strong>Phone</strong><a href={`tel:${seo.org_phone.replace(/[^+\d]/g, '')}`}>{seo.org_phone}</a></div>
+        )}
+        {seo.org_email && (
+          <div class="contact-card"><b aria-hidden="true">✉️</b><strong>Email</strong><a href={`mailto:${seo.org_email}`}>{seo.org_email}</a></div>
+        )}
+        {(design.footer.address || seo.org_city || design.footer.hours) && (
+          <div class="contact-card">
+            <b aria-hidden="true">📍</b><strong>Where & when</strong>
+            {(design.footer.address || seo.org_city) && <span>{design.footer.address || seo.org_city}</span>}
+            {design.footer.hours && <span>{design.footer.hours}</span>}
+          </div>
+        )}
+        {instagramUrl && (
+          <div class="contact-card"><b aria-hidden="true">📸</b><strong>Instagram</strong><span>New arrivals and ideas every week.</span><a href={instagramUrl} target="_blank" rel="noopener noreferrer">Follow us</a></div>
+        )}
+        <div class="contact-card">
+          <b aria-hidden="true">📦</b><strong>Your order</strong><span>Check the status with your order number and phone.</span><a href="/track-order">Track your order</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="site-footer"></footer>

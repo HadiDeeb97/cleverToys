@@ -3,6 +3,8 @@
  *
  *  - Cart counters in the header and on the floating cart button (the cart lives in localStorage)
  *  - Floating cart + WhatsApp buttons and the header cart link (fallbacks if the server did not add them)
+ *  - Slide-in menu (phones/tablets) and cart drawer (opens after "Add to cart")
+ *  - "Add to cart" buttons on product cards and small toast messages
  *  - Full-screen photo viewer when a product photo is tapped
  *  - Gentle fade-in of cards as they scroll into view
  *  - Loads the visitor analytics script
@@ -168,7 +170,9 @@
   const openViewer = (src, alt) => {
     const el = ensureViewer();
     const seen = new Set();
-    viewer.images = [...document.querySelectorAll('img')].filter(isViewerCandidate).map((img) => ({ src: img.currentSrc || img.src, alt: img.alt || STORE_NAME })).filter((item) => !seen.has(item.src) && seen.add(item.src));
+    // All photos of the product (from the gallery thumbnails), or just the one that was tapped.
+    const fromThumbs = [...document.querySelectorAll('.thumbnail[data-image]')].map((b) => ({ src: b.dataset.image, alt: b.dataset.alt || STORE_NAME }));
+    viewer.images = (fromThumbs.length ? fromThumbs : [{ src, alt: alt || STORE_NAME }]).filter((item) => item.src && !seen.has(item.src) && seen.add(item.src));
     if (!viewer.images.length) viewer.images = [{ src, alt: alt || STORE_NAME }];
     viewer.index = Math.max(0, viewer.images.findIndex((item) => item.src === src));
     viewer.previousOverflow = document.body.style.overflow;
@@ -185,10 +189,9 @@
     document.body.style.overflow = viewer.previousOverflow;
   }
 
-  /** Makes product photos open the viewer. The shop grid is skipped: there a tap opens the product. */
+  /** Makes product photos open the viewer (the product page gallery, or any image marked data-zoomable). */
   const bindImageViewer = () => {
-    if (/^\/products\/?$/.test(location.pathname)) return;
-    document.querySelectorAll('main img').forEach((img) => {
+    document.querySelectorAll('.gallery-main img, img[data-zoomable]').forEach((img) => {
       if (img.dataset.cleverViewerBound || !isViewerCandidate(img)) return;
       img.dataset.cleverViewerBound = 'true';
       img.classList.add('clever-image-clickable');
@@ -222,7 +225,7 @@
       element.addEventListener('transitionend', done);
     }), { rootMargin: '0px 0px -6% 0px', threshold: 0.06 });
     const fold = window.innerHeight;
-    document.querySelectorAll('.product-card, .category-card, .category-page-card, .benefit-grid > div, .section-header').forEach((element) => {
+    document.querySelectorAll('.product-card, .category-tile, .category-page-card, .age-tile, .section-header, .promo-banner, .story-block, .help-card').forEach((element) => {
       if (element.dataset.reveal) return;
       element.dataset.reveal = '1';
       if (element.getBoundingClientRect().top < fold) return;
@@ -243,6 +246,158 @@
     document.head.appendChild(script);
   };
 
+  // ---------- Money and cart helpers shared by the drawers ----------
+  const money = (n) => `$${Number(n || 0).toFixed(2)}`;
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const saveCart = (cart) => {
+    try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch { toast('Your browser blocked the cart. Please allow site storage.'); return false; }
+    window.dispatchEvent(new CustomEvent('clever-cart-updated'));
+    return true;
+  };
+  const placeholderEmoji = (name) => { let h = 0; for (const ch of String(name || 'toy')) h = (h * 31 + ch.codePointAt(0)) >>> 0; return ['🧸', '🚂', '🧩', '🎨', '🪀', '🚀', '🦖', '🎲', '🪁', '🧱', '🎈', '🦄'][h % 12]; };
+
+  // ---------- Toast: small message at the bottom of the screen ----------
+  let toastTimer = 0;
+  function toast(message) {
+    let el = document.querySelector('.store-toast');
+    if (!el) { el = document.createElement('div'); el.className = 'store-toast'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+    el.textContent = message;
+    requestAnimationFrame(() => el.classList.add('is-visible'));
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('is-visible'), 2600);
+  }
+
+  // ---------- Drawers: the menu (left) and the cart (right) ----------
+  // Opening: remove [hidden], then add .is-open on the next frame so the slide-in animates.
+  let lastTrigger = null;
+  const openDrawer = (drawer, trigger, focusSelector) => {
+    if (!drawer) return;
+    document.querySelectorAll('.drawer.is-open').forEach((d) => d !== drawer && closeDrawer(d, false));
+    lastTrigger = trigger || document.activeElement;
+    drawer.hidden = false;
+    document.body.classList.add('has-drawer');
+    requestAnimationFrame(() => requestAnimationFrame(() => drawer.classList.add('is-open')));
+    document.querySelectorAll(`[aria-controls="${drawer.id}"]`).forEach((b) => b.setAttribute('aria-expanded', 'true'));
+    const target = drawer.querySelector(focusSelector || '[data-drawer-close]');
+    // On phones, only move focus into the search box when search was asked for (it opens the keyboard).
+    setTimeout(() => target?.focus({ preventScroll: true }), 60);
+  };
+  const closeDrawer = (drawer, restoreFocus = true) => {
+    if (!drawer || drawer.hidden) return;
+    drawer.classList.remove('is-open');
+    document.querySelectorAll(`[aria-controls="${drawer.id}"]`).forEach((b) => b.setAttribute('aria-expanded', 'false'));
+    if (!document.querySelector('.drawer.is-open')) document.body.classList.remove('has-drawer');
+    setTimeout(() => { if (!drawer.classList.contains('is-open')) drawer.hidden = true; }, 360);
+    if (restoreFocus && lastTrigger && document.contains(lastTrigger)) lastTrigger.focus({ preventScroll: true });
+  };
+  document.addEventListener('click', (event) => {
+    const opener = event.target.closest('[data-drawer-open]');
+    if (opener) {
+      event.preventDefault();
+      openDrawer(document.getElementById(opener.dataset.drawerOpen), opener, opener.dataset.drawerFocus === 'search' ? 'input[type=search]' : null);
+      return;
+    }
+    const closer = event.target.closest('[data-drawer-close]');
+    if (closer) { event.preventDefault(); closeDrawer(closer.closest('.drawer')); }
+  });
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') document.querySelectorAll('.drawer.is-open').forEach((d) => closeDrawer(d)); });
+
+  // ---------- Cart drawer: opens after something is added, lets shoppers adjust quantities ----------
+  const cartDrawer = () => {
+    let drawer = document.getElementById('cart-drawer');
+    if (drawer) return drawer;
+    drawer = document.createElement('div');
+    drawer.className = 'drawer from-right';
+    drawer.id = 'cart-drawer';
+    drawer.hidden = true;
+    drawer.innerHTML = '<div class="drawer-backdrop" data-drawer-close></div><aside class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="cart-drawer-title"><div class="drawer-head"><strong id="cart-drawer-title">Your cart</strong><button type="button" class="icon-button" data-drawer-close aria-label="Close cart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div><div class="drawer-body" data-cart-drawer-body></div><div class="drawer-foot" data-cart-drawer-foot></div></aside>';
+    document.body.appendChild(drawer);
+    // − / + / remove inside the drawer
+    drawer.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-cd-action]');
+      if (!button || button.disabled) return;
+      const cart = readCart();
+      const item = cart[Number(button.dataset.index)];
+      if (!item) return;
+      const max = Number(item.maxStock);
+      if (button.dataset.cdAction === 'minus') item.quantity = Math.max(1, Number(item.quantity) - 1);
+      if (button.dataset.cdAction === 'plus') item.quantity = Number.isFinite(max) && max > 0 ? Math.min(Number(item.quantity) + 1, max) : Number(item.quantity) + 1;
+      if (button.dataset.cdAction === 'remove') cart.splice(Number(button.dataset.index), 1);
+      saveCart(cart);
+    });
+    return drawer;
+  };
+  const renderCartDrawer = () => {
+    const drawer = document.getElementById('cart-drawer');
+    if (!drawer) return;
+    const cart = readCart();
+    const body = drawer.querySelector('[data-cart-drawer-body]');
+    const foot = drawer.querySelector('[data-cart-drawer-foot]');
+    const count = cartCount();
+    drawer.querySelector('#cart-drawer-title').textContent = count ? `Your cart (${count})` : 'Your cart';
+    if (!cart.length) {
+      body.innerHTML = '<div class="cart-drawer-empty"><span aria-hidden="true">🧺</span><strong>Your cart is empty</strong><p>Find something fun to add.</p><a class="button" href="/products">Shop toys</a></div>';
+      foot.hidden = true;
+      return;
+    }
+    body.innerHTML = cart.map((item, i) => {
+      const max = Number(item.maxStock);
+      const thumb = item.image ? `<img src="${esc(item.image)}" alt="" loading="lazy">` : `<span aria-hidden="true">${placeholderEmoji(item.name)}</span>`;
+      return `<div class="cart-drawer-item"><a class="cd-thumb" href="/product/${encodeURIComponent(item.slug || '')}" tabindex="-1">${thumb}</a><div><strong>${esc(item.name)}</strong>${item.variantName ? `<small>${esc(item.variantName)}</small>` : ''}<div class="quantity-control"><button type="button" data-cd-action="minus" data-index="${i}" aria-label="Decrease quantity"${Number(item.quantity) <= 1 ? ' disabled' : ''}>−</button><strong>${Number(item.quantity)}</strong><button type="button" data-cd-action="plus" data-index="${i}" aria-label="Increase quantity"${Number.isFinite(max) && max > 0 && Number(item.quantity) >= max ? ' disabled' : ''}>+</button><button type="button" class="remove-link" data-cd-action="remove" data-index="${i}">Remove</button></div></div><strong>${money(Number(item.price) * Number(item.quantity))}</strong></div>`;
+    }).join('');
+    const subtotal = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+    const threshold = Math.max(0, Number(branding.freeDeliveryThreshold || 0));
+    const progress = threshold
+      ? `<div class="delivery-progress"><p>${subtotal >= threshold ? '🎉 You unlocked free delivery!' : `Add <strong>${money(threshold - subtotal)}</strong> more for free delivery`}</p><div class="delivery-progress-track" aria-hidden="true"><i style="width:${Math.min(100, Math.round((subtotal / threshold) * 100))}%"></i></div></div>`
+      : '';
+    foot.hidden = false;
+    foot.innerHTML = `${progress}<div class="cart-drawer-total"><span>Subtotal</span><span>${money(subtotal)}</span></div><div class="cart-drawer-actions"><a class="button" href="/checkout">Checkout</a><a class="button secondary-button" href="/cart">View cart</a></div><p class="cart-drawer-note">Cash on delivery · Delivery fee shown at checkout</p>`;
+  };
+  const openCartDrawer = (trigger) => { cartDrawer(); renderCartDrawer(); openDrawer(document.getElementById('cart-drawer'), trigger); };
+
+  // ---------- "Add to cart" buttons on product cards ----------
+  // <button data-quick-add data-id data-name data-slug data-price data-image data-stock>
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-quick-add]');
+    if (!button) return;
+    event.preventDefault();
+    const d = button.dataset;
+    const maxStock = Number(d.stock);
+    const cart = readCart();
+    const existing = cart.find((item) => item.productId === d.id && !item.variantId);
+    const nextQty = (existing ? Number(existing.quantity) : 0) + 1;
+    if (Number.isFinite(maxStock) && maxStock > 0 && nextQty > maxStock) { toast(`Only ${maxStock} in stock, and they are all in your cart.`); return; }
+    if (existing) { existing.quantity = nextQty; existing.maxStock = maxStock; existing.price = Number(d.price); }
+    else cart.push({ productId: d.id, variantId: null, variantName: null, sku: null, name: d.name, slug: d.slug, price: Number(d.price), image: d.image || '', quantity: 1, maxStock });
+    if (!saveCart(cart)) return;
+    button.classList.add('is-added');
+    setTimeout(() => button.classList.remove('is-added'), 1400);
+    openCartDrawer(button);
+  });
+  // The product page (and anything else) can ask for the cart drawer after adding an item.
+  window.addEventListener('clever-cart-added', (event) => openCartDrawer(event.detail?.trigger));
+
+  // ---------- Broken product photos ----------
+  // If a product photo fails to load (deleted file, bad link), hide it so the card shows its soft
+  // background instead of the browser's broken-image icon. Errors don't bubble, so listen in the capture phase.
+  document.addEventListener('error', (event) => {
+    const img = event.target;
+    if (img instanceof HTMLImageElement && img.closest('.product-media, .cart-item, .summary-item, .cart-drawer')) img.style.visibility = 'hidden';
+  }, true);
+  // Photos that already failed before this script loaded.
+  document.querySelectorAll('.product-media img').forEach((img) => { if (img.complete && !img.naturalWidth && img.getAttribute('src')) img.style.visibility = 'hidden'; });
+
+  // ---------- Header shadow once the page is scrolled ----------
+  const header = document.querySelector('.site-header');
+  let ticking = false;
+  const onScroll = () => {
+    if (ticking) return;
+    ticking = true;
+    requestAnimationFrame(() => { header?.classList.toggle('is-scrolled', window.scrollY > 8); ticking = false; });
+  };
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
   // ---------- Start ----------
   // This file loads with "defer", so the page is fully parsed when it runs.
   ensureLogos();
@@ -256,8 +411,8 @@
   else window.addEventListener('load', loadVisitorAnalytics, { once: true });
 
   // Keep counters in sync: cart changed on this page, in another tab, or page restored with the Back button.
-  window.addEventListener('clever-cart-updated', updateCartUI);
+  window.addEventListener('clever-cart-updated', () => { updateCartUI(); renderCartDrawer(); });
   window.addEventListener('cart-updated', updateCartUI);
-  window.addEventListener('storage', (event) => { if (event.key === CART_KEY) updateCartUI(); });
+  window.addEventListener('storage', (event) => { if (event.key === CART_KEY) { updateCartUI(); renderCartDrawer(); } });
   window.addEventListener('pageshow', (event) => { if (event.persisted) updateCartUI(); });
 })();

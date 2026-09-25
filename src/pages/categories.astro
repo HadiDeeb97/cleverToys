@@ -4,6 +4,7 @@
  * One card per active category (Admin → Products → Categories), linking to /category/<slug>.
  */
 import { supabase } from '../lib/supabase';
+import { placeholderFor } from '../lib/design';
 import '../styles/global.css';
 
 const { data: categories, error } = await supabase
@@ -16,7 +17,6 @@ const title = 'Toy Categories | Clever Toys';
 const description = 'Browse Clever Toys by category and find the right toys for every child.';
 const canonicalUrl = new URL('/categories', Astro.site ?? Astro.url.origin).href;
 ---
-
 <head>
   <title>{title}</title>
   <meta name="description" content={description} />
@@ -26,179 +26,41 @@ const canonicalUrl = new URL('/categories', Astro.site ?? Astro.url.origin).href
   <meta property="og:type" content="website" />
   <meta property="og:url" content={canonicalUrl} />
 </head>
-
 <header class="site-header"></header>
-
 <main>
-  <section class="category-hero">
+  <section class="page-hero">
     <div class="container">
-      <p class="eyebrow">Clever Toys</p>
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">Categories</span></nav>
       <h1>Shop by category</h1>
-      <p>Explore our toy collection and find something perfect for every child.</p>
+      <p>Explore our collection and find something perfect for every child.</p>
     </div>
   </section>
-
   <section class="section">
     <div class="container">
       {error ? (
-        <div class="category-empty">
-          <h2>We couldn't load the categories</h2>
-          <p>Please try again in a moment.</p>
-        </div>
+        <div class="category-empty"><h2>We couldn't load the categories</h2><p>Please try again in a moment.</p></div>
       ) : categories?.length ? (
         <div class="category-page-grid">
-          {categories.map((category) => (
-            <a class="category-page-card" href={`/category/${category.slug}`}>
-              {category.image_url ? (
-                <img src={category.image_url} alt="" loading="lazy" decoding="async" />
-              ) : (
-                <div class="category-page-placeholder" aria-hidden="true">
-                  <span>{category.name.slice(0, 1)}</span>
-                </div>
-              )}
-              <div class="category-page-info">
-                <h2>{category.name}</h2>
-                {category.description && <p>{category.description}</p>}
-                <span>Shop category →</span>
-              </div>
-            </a>
-          ))}
+          {categories.map((category) => {
+            const ph = placeholderFor(category.name);
+            return (
+              <a class="category-page-card" href={`/category/${category.slug}`}>
+                <span class="tile-media" style={`--ph-h:${ph.hue}`}>
+                  {category.image_url ? <img src={category.image_url} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">{ph.emoji}</span>}
+                </span>
+                <span>
+                  <h2>{category.name}</h2>
+                  {category.description && <p>{category.description}</p>}
+                  <span class="text-link">Shop {category.name} →</span>
+                </span>
+              </a>
+            );
+          })}
         </div>
       ) : (
-        <div class="category-empty">
-          <h2>No categories yet</h2>
-          <p>Our toy categories will appear here soon.</p>
-        </div>
+        <div class="category-empty"><h2>No categories yet</h2><p>New collections are coming soon.</p><a class="button" href="/products">Shop all toys</a></div>
       )}
     </div>
   </section>
 </main>
-
-<footer class="site-footer">
-  <div class="container">
-    <p>© {new Date().getFullYear()} Clever Toys. All rights reserved.</p>
-  </div>
-</footer>
-
-<style>
-  .category-hero {
-    padding: 58px 0 48px;
-    background: var(--page-hero-bg);
-    border-bottom: 1px solid var(--line);
-  }
-
-  .category-hero .eyebrow {
-    margin: 0 0 10px;
-    color: var(--muted);
-    font-size: 0.8rem;
-    font-weight: 800;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
-
-  .category-hero h1 {
-    margin: 0 0 12px;
-    font-size: clamp(2.3rem, 6vw, 4rem);
-    letter-spacing:-.02em;
-  }
-
-  .category-hero p:last-child {
-    margin: 0;
-    color: var(--muted);
-    font-size: 1.05rem;
-  }
-
-  .category-page-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-  }
-
-  .category-page-card {
-    overflow: hidden;
-    border: 1px solid var(--line);
-    border: 1.5px solid var(--line);
-    border-radius: var(--radius-lg);
-    background: var(--surface);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-  }
-
-  @media (hover:hover){.category-page-card:hover{
-    transform: translateY(-4px);
-    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.09);
-  }}
-
-  .category-page-card img,
-  .category-page-placeholder {
-    width: 100%;
-    aspect-ratio: 16 / 10;
-    object-fit: cover;
-    background: var(--surface-2);
-  }
-
-  .category-page-placeholder {
-    display: grid;
-    place-items: center;
-    background:
-      radial-gradient(circle at 85% 15%, color-mix(in srgb, #fff 45%, transparent) 0 46px, transparent 47px),
-      radial-gradient(circle at 10% 95%, color-mix(in srgb, #fff 30%, transparent) 0 64px, transparent 65px),
-      var(--brand-soft);
-  }
-
-  .category-page-card:nth-child(4n+2) .category-page-placeholder { background-color: var(--accent-soft); }
-  .category-page-card:nth-child(4n+3) .category-page-placeholder { background-color: color-mix(in srgb, var(--brand-primary) 22%, #fff); }
-  .category-page-card:nth-child(4n) .category-page-placeholder { background-color: color-mix(in srgb, var(--theme-accent) 45%, #fff); }
-
-  .category-page-placeholder span {
-    display: grid;
-    width: 70px;
-    height: 70px;
-    place-items: center;
-    border-radius: 50%;
-    background: #fff;
-    color: var(--primary-strong);
-    font-family: var(--font-display);
-    font-size: 2rem;
-    font-weight: 700;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-  }
-
-  .category-page-info {
-    padding: 20px;
-  }
-
-  .category-page-info h2 {
-    margin: 0 0 8px;
-    font-size: 1.25rem;
-  }
-
-  .category-page-info p {
-    margin: 0 0 14px;
-    color: var(--muted);
-    line-height: 1.6;
-  }
-
-  .category-page-info span {
-    color: var(--primary-strong);
-    font-size: 0.9rem;
-    font-weight: 800;
-  }
-
-  .category-empty {
-    padding: 64px 20px;
-    border: 1px dashed var(--line-strong);
-    border-radius: 18px;
-    text-align: center;
-  }
-
-  .category-empty h2 { margin: 0 0 8px; }
-  .category-empty p { margin: 0; color: var(--muted); }
-
-  @media (max-width: 800px) {
-    .category-page-grid { grid-template-columns: repeat(2, 1fr); }
-  }
-
-  @media (max-width: 520px) {
-    .category-page-grid { grid-template-columns: 1fr; }
-  }
-</style>
+<footer class="site-footer"></footer>

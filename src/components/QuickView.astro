@@ -1,0 +1,96 @@
+---
+/**
+ * "Quick view" popup for product cards (computers only; on touch screens a tap opens the product).
+ * Include once on any page that shows <ProductCard>. It reads the card's data-* attributes, so no
+ * extra request is needed. The Add to cart button reuses the card's own button (see store-ui.js).
+ */
+---
+<div class="quick-view-modal" id="quick-view-modal" aria-hidden="true" inert>
+  <div class="quick-view-backdrop" data-quick-view-close></div>
+  <section class="quick-view-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-view-title">
+    <button class="quick-view-close" type="button" aria-label="Close quick view" data-quick-view-close>×</button>
+    <div class="quick-view-media" id="quick-view-media"></div>
+    <div class="quick-view-content">
+      <p class="quick-view-kicker">Quick view</p>
+      <h2 id="quick-view-title"></h2>
+      <p id="quick-view-description" class="quick-view-description"></p>
+      <div class="quick-view-price"><strong id="quick-view-price"></strong><span id="quick-view-original"></span></div>
+      <p id="quick-view-stock" class="quick-view-stock"></p>
+      <div class="quick-view-actions" id="quick-view-actions"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const modal = document.getElementById('quick-view-modal')!;
+const $ = (id: string) => document.getElementById(id)!;
+let opener: HTMLElement | null = null;
+
+function close() {
+  modal.classList.remove('is-open');
+  modal.setAttribute('aria-hidden', 'true');
+  modal.setAttribute('inert', '');
+  document.body.style.overflow = '';
+  if (opener && document.contains(opener)) opener.focus({ preventScroll: true });
+  opener = null;
+}
+
+function open(card: HTMLElement, trigger: HTMLElement) {
+  const d = card.dataset;
+  opener = trigger;
+  const media = $('quick-view-media');
+  media.innerHTML = '';
+  if (d.image) {
+    const img = document.createElement('img');
+    img.src = d.image;
+    img.alt = d.name || '';
+    media.appendChild(img);
+  } else {
+    const ph = document.createElement('span');
+    ph.className = 'product-placeholder';
+    ph.style.setProperty('--ph-h', d.phHue || '40');
+    ph.innerHTML = `<span aria-hidden="true">${d.phEmoji || '🧸'}</span>`;
+    media.appendChild(ph);
+  }
+  $('quick-view-title').textContent = d.name || 'Toy';
+  $('quick-view-description').textContent = d.description || '';
+  $('quick-view-description').hidden = !d.description;
+  $('quick-view-price').textContent = d.price || '';
+  $('quick-view-original').textContent = d.original || '';
+  $('quick-view-stock').textContent = d.stock || '';
+  $('quick-view-stock').style.color = d.stock === 'Out of stock' ? 'var(--danger)' : 'var(--success)';
+  // Actions: a copy of the card's Add to cart button (toys without options) + a link to the full page.
+  const actions = $('quick-view-actions');
+  actions.innerHTML = '';
+  const add = card.querySelector<HTMLButtonElement>('button[data-quick-add]');
+  if (add) {
+    const copy = add.cloneNode(true) as HTMLButtonElement;
+    copy.className = 'button';
+    copy.textContent = 'Add to cart';
+    copy.addEventListener('click', () => setTimeout(close, 50));
+    actions.appendChild(copy);
+  }
+  const link = document.createElement('a');
+  link.className = add ? 'button secondary-button' : 'button';
+  link.href = d.link || '/products';
+  link.textContent = add ? 'View full details' : d.stock === 'Out of stock' ? 'View details' : 'Choose options';
+  actions.appendChild(link);
+
+  modal.removeAttribute('inert');
+  modal.setAttribute('aria-hidden', 'false');
+  modal.classList.add('is-open');
+  document.body.style.overflow = 'hidden';
+  requestAnimationFrame(() => modal.querySelector<HTMLElement>('.quick-view-close')?.focus({ preventScroll: true }));
+}
+
+document.addEventListener('click', (event) => {
+  const trigger = (event.target as HTMLElement).closest<HTMLElement>('.quick-view-trigger');
+  if (trigger) {
+    const card = trigger.closest<HTMLElement>('[data-product-card]');
+    if (card) open(card, trigger);
+    return;
+  }
+  if ((event.target as HTMLElement).closest('[data-quick-view-close]')) close();
+});
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && modal.classList.contains('is-open')) close(); });
+</script>

@@ -1,0 +1,83 @@
+---
+/**
+ * One product in a grid (home page, shop, category pages, "You may also like").
+ *
+ * - The whole card opens the product (the title link is stretched over it in global.css).
+ * - "Add to cart" adds one straight away for toys without options; toys with options get
+ *   "Options", which opens the product page. Handled by public/store-ui.js.
+ * - "Quick view" (computers only) is handled by src/components/QuickView.astro.
+ * - Toys without a photo get a soft coloured tile with a toy emoji instead of an empty box.
+ */
+import { placeholderFor } from '../lib/design';
+
+export type CardProduct = {
+  id: string;
+  name: string;
+  slug: string;
+  price: number;
+  sale_price: number | null;
+  stock_quantity: number;
+  primary_image_url: string | null;
+  short_description?: string | null;
+  age_min?: number | null;
+  age_max?: number | null;
+  created_at?: string | null;
+  product_variants?: Array<{ id: string; is_active?: boolean | null }> | null;
+};
+
+interface Props {
+  product: CardProduct;
+  /** Heading level for the product name (h2 on the shop page, h3 inside other sections). */
+  heading?: 'h2' | 'h3';
+  /** Load the photo immediately (first row of a page) instead of lazily. */
+  eager?: boolean;
+  showDescription?: boolean;
+}
+
+const { product, heading = 'h3', eager = false, showDescription = false } = Astro.props;
+const Heading = heading;
+const price = Number(product.sale_price ?? product.price);
+const original = product.sale_price != null ? Number(product.price) : null;
+const discount = original && original > price ? Math.round((1 - price / original) * 100) : 0;
+const inStock = Number(product.stock_quantity ?? 0) > 0;
+const hasOptions = (product.product_variants ?? []).some((v) => v.is_active !== false);
+const isNew = product.created_at ? Date.now() - new Date(product.created_at).getTime() < 30 * 864e5 : false;
+const href = `/product/${product.slug}`;
+const ph = placeholderFor(product.name);
+const ages = product.age_min != null && product.age_max != null ? `Ages ${product.age_min}–${product.age_max}` : product.age_min != null ? `Ages ${product.age_min}+` : product.age_max != null ? `Up to ${product.age_max} yrs` : '';
+const money = (n: number) => `$${n.toFixed(2)}`;
+---
+<article class="product-card" data-product-card
+  data-name={product.name}
+  data-description={product.short_description || ''}
+  data-price={money(price)}
+  data-original={original != null ? money(original) : ''}
+  data-stock={inStock ? 'In stock' : 'Out of stock'}
+  data-link={href}
+  data-image={product.primary_image_url || ''}
+  data-ph-hue={ph.hue}
+  data-ph-emoji={ph.emoji}>
+  <div class="product-media">
+    <a href={href} class="product-image-link" tabindex="-1" aria-hidden="true">
+      {product.primary_image_url
+        ? <img class="product-image" src={product.primary_image_url} alt="" loading={eager ? 'eager' : 'lazy'} decoding="async" width="400" height="400" />
+        : <span class="product-placeholder" style={`--ph-h:${ph.hue}`}><span>{ph.emoji}</span></span>}
+    </a>
+    {discount > 0 && <span class="sale-badge">−{discount}%</span>}
+    {isNew && <span class="new-badge">New</span>}
+    {!inStock && <span class="stock-badge">Sold out</span>}
+    <button type="button" class="quick-view-trigger" aria-label={`Quick view ${product.name}`}>Quick view</button>
+    {inStock && (hasOptions
+      ? <a class="quick-add" href={href} aria-label={`Choose options for ${product.name}`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M4 12h16M4 17h7M17 4v6M20 7h-6"/></svg><span class="quick-add-label">Options</span></a>
+      : <button type="button" class="quick-add" data-quick-add data-id={product.id} data-name={product.name} data-slug={product.slug} data-price={price} data-image={product.primary_image_url || ''} data-stock={product.stock_quantity} aria-label={`Add ${product.name} to cart`}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span class="quick-add-label">Add to cart</span></button>)}
+  </div>
+  <div class="product-info">
+    {ages && <p class="product-meta">{ages}</p>}
+    <Heading><a href={href}>{product.name}</a></Heading>
+    {showDescription && product.short_description && <p>{product.short_description}</p>}
+    <div class="product-price">
+      <span class:list={['price', { 'on-sale': discount > 0 }]}>{money(price)}</span>
+      {original != null && <span class="shop-original-price">{money(original)}</span>}
+    </div>
+  </div>
+</article>

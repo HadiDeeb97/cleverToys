@@ -34,3 +34,10 @@ interface RequestInit {
 declare module 'cloudflare:workers' {
   export const env: Record<string, string | undefined>;
 }
+
+// Request-scoped data shared by src/middleware.ts with pages (see src/lib/page-data.ts).
+declare namespace App {
+  interface Locals {
+    pageData?: Promise<import('./lib/page-data').PageData>;
+  }
+}
