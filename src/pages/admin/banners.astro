@@ -1,0 +1,229 @@
+---
+/**
+ * Admin → Home banners: a slideshow at the top of the home page. Each banner has a picture (or a
+ * colour), a title, a short text, a button and optional start/end dates, so offers switch on and
+ * off by themselves. Order and visibility of the slideshow itself: Admin → Storefront → Home page.
+ * Needs supabase/cms.sql.
+ */
+import '../../styles/global.css';
+import { supabaseConfig } from '../../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
+---
+<head>
+  <title>Home banners | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Marketing</p>
+        <h1>Home banners</h1>
+        <p>A slideshow at the top of the home page. Schedule offers to start and stop by themselves.</p>
+      </div>
+      <div class="cms-actions"><a class="button secondary-button" href="/" target="_blank" rel="noopener">View home page ↗</a></div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+
+    <div id="app" hidden>
+      <div id="setup" hidden></div>
+      <div class="cms-layout">
+        <section class="admin-panel">
+          <div class="panel-title"><h2>Banners</h2><button type="button" class="small-button" id="new">+ New banner</button></div>
+          <div id="list" class="cms-list"></div>
+          <p class="cms-help" style="margin-top:12px">The slideshow shows live banners in this order. Hide or move it in <a class="text-link" href="/admin/storefront#home">Storefront → Home page</a>.</p>
+        </section>
+        <section class="admin-panel">
+          <form id="form" class="cms-form" novalidate>
+            <div class="panel-title"><h2 id="form-title">New banner</h2></div>
+            <div class="banner-preview" id="preview"><div class="banner-preview-copy"><strong>Title</strong><span>Text</span><em>Button</em></div></div>
+            <label>Title<input name="title" required maxlength="120" placeholder="Back to school: 20% off puzzles" /></label>
+            <label>Text <span>(optional)</span><input name="subtitle" maxlength="200" placeholder="This week only, while stocks last" /></label>
+            <div class="cms-row">
+              <label>Button text <span>(optional)</span><input name="button_text" maxlength="40" placeholder="Shop puzzles" /></label>
+              <label>Button link<input name="link_url" maxlength="500" placeholder="/category/puzzles-games" /></label>
+            </div>
+            <div class="cms-row">
+              <label>Picture <span>(wide, e.g. 1600×600)</span><input type="file" id="image-file" accept="image/jpeg,image/png,image/webp" /></label>
+              <label>Colour <span>(when there is no picture)</span><input name="background" type="color" value="#1b1822" /></label>
+            </div>
+            <div class="cms-actions"><button type="button" class="small-button" id="remove-image" hidden>Remove picture</button><span id="upload-state" class="cms-help"></span></div>
+            <label>Text colour<select name="text_tone"><option value="light">White text (for dark pictures)</option><option value="dark">Dark text (for light pictures)</option></select></label>
+            <div class="cms-row">
+              <label>Show from <span>(optional)</span><input name="starts_at" type="datetime-local" /></label>
+              <label>Until <span>(optional)</span><input name="ends_at" type="datetime-local" /></label>
+            </div>
+            <label class="cms-check"><input class="toggle" name="is_active" type="checkbox" checked /> Active</label>
+            <div class="cms-actions">
+              <button class="button" type="submit" id="save">Save banner</button>
+              <button class="button secondary-button" type="button" id="delete" hidden>Delete</button>
+            </div>
+            <p id="msg" class="cms-help" role="status"></p>
+          </form>
+        </section>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+import { startAdmin, esc, toast, toWebp, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+import { safeLink } from '../../lib/design';
+
+type Banner = { id: string; title: string; subtitle: string | null; image_url: string | null; link_url: string | null; button_text: string | null; text_tone: 'light' | 'dark'; background: string | null; starts_at: string | null; ends_at: string | null; is_active: boolean; sort_order: number };
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+const form = $<HTMLFormElement>('#form');
+const input = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+let supabase: Db;
+let banners: Banner[] = [];
+let editing: Banner | null = null;
+let imageUrl = '';
+const toLocal = (iso: string | null) => { if (!iso) return ''; const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+const fromLocal = (v: string) => (v ? new Date(v).toISOString() : null);
+function state(b: Banner): [string, string] {
+  const now = Date.now();
+  if (!b.is_active) return ['Off', ''];
+  if (b.starts_at && new Date(b.starts_at).getTime() > now) return [`From ${new Date(b.starts_at).toLocaleDateString()}`, 'warn'];
+  if (b.ends_at && new Date(b.ends_at).getTime() <= now) return ['Ended', 'bad'];
+  return [b.ends_at ? `Live until ${new Date(b.ends_at).toLocaleDateString()}` : 'Live', 'good'];
+}
+
+function renderPreview() {
+  const p = $('#preview');
+  p.style.backgroundImage = imageUrl ? `linear-gradient(90deg,rgba(0,0,0,.45),transparent),url("${imageUrl}")` : '';
+  p.style.backgroundColor = input('background').value;
+  p.classList.toggle('dark-text', input('text_tone').value === 'dark');
+  p.querySelector('strong')!.textContent = input('title').value || 'Title';
+  p.querySelector('span')!.textContent = input('subtitle').value || '';
+  const btn = p.querySelector('em') as HTMLElement; btn.textContent = input('button_text').value; btn.hidden = !input('button_text').value;
+  $('#remove-image').hidden = !imageUrl;
+}
+
+function renderList() {
+  $('#list').innerHTML = banners.length ? banners.map((b, i) => {
+    const [label, tone] = state(b);
+    return `<div class="cms-item${editing?.id === b.id ? ' is-active' : ''}">
+      <span class="cms-thumb" style="${b.image_url ? `background-image:url('${esc(b.image_url)}')` : `background-color:${esc(b.background || '#1b1822')}`}"></span>
+      <button type="button" class="cms-item-main" data-edit="${esc(b.id)}" style="border:0;background:none;text-align:left;cursor:pointer"><strong>${esc(b.title)}</strong><small>${esc(b.link_url || 'No link')}</small></button>
+      <span class="cms-badge ${tone}">${esc(label)}</span>
+      <span class="sf-menu-moves"><button type="button" class="small-button" data-move="${i}" data-dir="-1" aria-label="Move up"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" class="small-button" data-move="${i}" data-dir="1" aria-label="Move down"${i === banners.length - 1 ? ' disabled' : ''}>↓</button></span>
+    </div>`;
+  }).join('') : '<p class="cms-empty">No banners yet. When there are none, the home page simply starts with the hero.</p>';
+  document.querySelectorAll<HTMLButtonElement>('[data-edit]').forEach((b) => b.onclick = () => edit(banners.find((x) => x.id === b.dataset.edit) || null));
+  document.querySelectorAll<HTMLButtonElement>('[data-move]').forEach((b) => b.onclick = () => move(Number(b.dataset.move), Number(b.dataset.dir)));
+}
+
+function edit(b: Banner | null) {
+  editing = b;
+  form.reset();
+  input('title').value = b?.title || '';
+  input('subtitle').value = b?.subtitle || '';
+  input('button_text').value = b?.button_text || '';
+  input('link_url').value = b?.link_url || '';
+  input('background').value = b?.background || '#1b1822';
+  input('text_tone').value = b?.text_tone || 'light';
+  input('starts_at').value = toLocal(b?.starts_at ?? null);
+  input('ends_at').value = toLocal(b?.ends_at ?? null);
+  input('is_active').checked = b ? b.is_active : true;
+  imageUrl = b?.image_url || '';
+  $('#form-title').textContent = b ? 'Edit banner' : 'New banner';
+  $('#delete').hidden = !b;
+  $('#msg').textContent = '';
+  renderPreview();
+  renderList();
+}
+
+async function load() {
+  const r = await supabase.from('banners').select('*').order('sort_order').order('created_at');
+  if (missingTable(r.error)) { $('#setup').innerHTML = setupNotice(); $('#setup').hidden = false; $<HTMLButtonElement>('#save').disabled = true; return false; }
+  if (r.error) throw new Error(r.error.message);
+  banners = (r.data ?? []) as Banner[];
+  renderList();
+  return true;
+}
+
+async function move(i: number, dir: number) {
+  const j = i + dir;
+  if (j < 0 || j >= banners.length) return;
+  [banners[i], banners[j]] = [banners[j], banners[i]];
+  renderList();
+  const results = await Promise.all(banners.map((b, index) => supabase.from('banners').update({ sort_order: index + 1 }).eq('id', b.id)));
+  const failed = results.find((r) => r.error);
+  if (failed?.error) toast(failed.error.message, 'error'); else toast('Order saved.');
+  await load();
+}
+
+form.addEventListener('input', renderPreview);
+$<HTMLInputElement>('#image-file').addEventListener('change', async (event) => {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  $('#upload-state').textContent = 'Uploading…';
+  try {
+    const blob = await toWebp(file, 2000);
+    const path = `branding/banners/banner-${Date.now()}.webp`;
+    const up = await supabase.storage.from('product-images').upload(path, blob, { contentType: 'image/webp', upsert: false, cacheControl: '31536000' });
+    if (up.error) throw new Error(up.error.message);
+    imageUrl = supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+    $('#upload-state').textContent = 'Picture ready. Save the banner to publish it.';
+    renderPreview();
+  } catch (error) {
+    $('#upload-state').textContent = error instanceof Error ? error.message : 'Upload failed.';
+  }
+});
+$('#remove-image').addEventListener('click', () => { imageUrl = ''; renderPreview(); });
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const msg = $('#msg');
+  const title = input('title').value.trim();
+  const link = input('link_url').value.trim();
+  if (!title) { msg.textContent = 'Add a title.'; input('title').focus(); return; }
+  if (link && !safeLink(link, '')) { msg.textContent = 'The link must be a page on this site (starting with /) or a full https:// address.'; input('link_url').focus(); return; }
+  const starts = fromLocal(input('starts_at').value), ends = fromLocal(input('ends_at').value);
+  if (starts && ends && new Date(ends) <= new Date(starts)) { msg.textContent = '“Until” must be after “Show from”.'; return; }
+  const payload = {
+    title, subtitle: input('subtitle').value.trim() || null, button_text: input('button_text').value.trim() || null, link_url: link || null,
+    image_url: imageUrl || null, background: input('background').value, text_tone: input('text_tone').value,
+    starts_at: starts, ends_at: ends, is_active: input('is_active').checked
+  };
+  const button = $<HTMLButtonElement>('#save'); button.disabled = true; msg.textContent = 'Saving…';
+  const r = editing
+    ? await supabase.from('banners').update(payload).eq('id', editing.id).select('*').single()
+    : await supabase.from('banners').insert({ ...payload, sort_order: banners.length + 1 }).select('*').single();
+  button.disabled = false;
+  if (r.error) { msg.textContent = r.error.message; return; }
+  toast('Banner saved. The home page shows it right away (when it is live).');
+  await load();
+  edit(banners.find((b) => b.id === (r.data as Banner).id) || null);
+});
+$('#delete').addEventListener('click', async () => {
+  if (!editing || !confirm(`Delete the banner “${editing.title}”?`)) return;
+  const r = await supabase.from('banners').delete().eq('id', editing.id);
+  if (r.error) { toast(r.error.message, 'error'); return; }
+  toast('Banner deleted.');
+  await load();
+  edit(null);
+});
+$('#new').addEventListener('click', () => { edit(null); input('title').focus(); });
+
+(async () => {
+  const started = await startAdmin('content', 'Home banners');
+  if (!started) return;
+  supabase = started.supabase;
+  if (!(await load())) return;
+  edit(banners[0] || null);
+})();
+</script>
+
+<style is:global>
+.banner-preview{position:relative;display:flex;align-items:center;min-height:150px;padding:20px;border-radius:16px;background:#1b1822 center/cover no-repeat;color:#fff;overflow:hidden}
+.banner-preview.dark-text{color:#1b1822}
+.banner-preview-copy{display:grid;gap:6px;max-width:70%}
+.banner-preview-copy strong{font-family:var(--font-display);font-size:1.3rem;line-height:1.1}
+.banner-preview-copy span{font-size:.86rem;opacity:.9}
+.banner-preview-copy em{justify-self:start;padding:6px 14px;border-radius:99px;background:#fff;color:#1b1822;font-style:normal;font-size:.8rem;font-weight:800}
+.banner-preview.dark-text .banner-preview-copy em{background:#1b1822;color:#fff}
+.sf-menu-moves{display:flex;gap:4px}
+.sf-menu-moves .small-button{min-width:34px;padding:0 8px}
+</style>

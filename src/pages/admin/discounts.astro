@@ -1,0 +1,281 @@
+---
+/**
+ * Admin → Discounts & delivery
+ *  - Discount codes: percent off, fixed amount off or free delivery, with a minimum order, a usage
+ *    limit and start/end dates. Customers type the code at checkout; create_order checks it again.
+ *  - Delivery fees per governorate: a different fee (or "no delivery") for each governorate.
+ *    Governorates left empty use the standard fee from Branding & settings.
+ * Needs supabase/cms.sql.
+ */
+import '../../styles/global.css';
+import { supabaseConfig } from '../../lib/config';
+import { LEBANON_GOVERNORATES } from '../../lib/lebanon';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
+---
+<head>
+  <title>Discounts & delivery | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Marketing</p>
+        <h1>Discounts & delivery</h1>
+        <p>Discount codes for checkout, and delivery fees for each governorate.</p>
+      </div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+
+    <div id="app" hidden>
+      <div id="setup" hidden></div>
+      <div class="cms-tabs chip-row" role="tablist">
+        <button type="button" class="chip active" role="tab" data-tab="coupons" aria-selected="true">Discount codes</button>
+        <button type="button" class="chip" role="tab" data-tab="delivery" aria-selected="false" id="delivery-tab">Delivery fees</button>
+      </div>
+
+      <section data-panel="coupons">
+        <div class="cms-layout">
+          <section class="admin-panel">
+            <div class="panel-title"><h2>Codes</h2><span id="coupon-count" class="cms-badge"></span></div>
+            <div id="coupon-list" class="cms-list"></div>
+          </section>
+          <section class="admin-panel">
+            <div class="panel-title"><h2 id="coupon-form-title">New code</h2><button type="button" class="small-button" id="coupon-new">+ New</button></div>
+            <form id="coupon-form" class="cms-form" novalidate>
+              <input type="hidden" name="id" />
+              <label>Code <span>(letters, numbers, - or _; customers type this)</span><input name="code" required maxlength="30" autocomplete="off" placeholder="WELCOME10" style="text-transform:uppercase" /></label>
+              <label>Note shown to the customer <span>(optional)</span><input name="description" maxlength="120" placeholder="10% off your first order" /></label>
+              <div class="cms-row">
+                <label>Type<select name="discount_type"><option value="percent">% off the toys</option><option value="fixed">$ off the toys</option><option value="free_delivery">Free delivery</option></select></label>
+                <label id="value-label">Amount<input name="value" type="number" min="0" step="0.01" inputmode="decimal" placeholder="10" /></label>
+              </div>
+              <div class="cms-row">
+                <label>Minimum order ($)<input name="min_subtotal" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" /></label>
+                <label>Use limit <span>(total)</span><input name="max_uses" type="number" min="1" step="1" inputmode="numeric" placeholder="No limit" /></label>
+              </div>
+              <div class="cms-row">
+                <label>Starts <span>(optional)</span><input name="starts_at" type="datetime-local" /></label>
+                <label>Ends <span>(optional)</span><input name="ends_at" type="datetime-local" /></label>
+              </div>
+              <label class="cms-check"><input class="toggle" name="is_active" type="checkbox" checked /> Active</label>
+              <p id="coupon-usage" class="cms-help"></p>
+              <div class="cms-actions">
+                <button class="button" type="submit" id="coupon-save">Save code</button>
+                <button class="button secondary-button" type="button" id="coupon-delete" hidden>Delete</button>
+              </div>
+              <p id="coupon-msg" class="cms-help" role="status"></p>
+            </form>
+          </section>
+        </div>
+      </section>
+
+      <section data-panel="delivery" hidden>
+        <section class="admin-panel">
+          <div class="panel-title"><h2>Delivery fee per governorate</h2><span class="cms-badge" id="standard-fee"></span></div>
+          <p class="cms-help">Leave the fee empty to use the standard fee from <a class="text-link" href="/admin/branding">Branding &amp; settings</a>. Switch off “We deliver” where you do not deliver yet; customers there see a clear message at checkout. The free-delivery amount still applies everywhere.</p>
+          <div class="table-wrap" style="margin-top:14px">
+            <table class="cms-table">
+              <thead><tr><th>Governorate</th><th>Fee ($)</th><th>Delivery time <span class="sr-only">(shown at checkout)</span></th><th>We deliver</th></tr></thead>
+              <tbody id="zone-rows">
+                {LEBANON_GOVERNORATES.map((g) => (
+                  <tr data-gov={g}>
+                    <th scope="row">{g}</th>
+                    <td><input type="number" min="0" step="0.01" inputmode="decimal" data-field="fee" aria-label={`Delivery fee for ${g}`} placeholder="Standard" /></td>
+                    <td><input type="text" maxlength="40" data-field="eta" aria-label={`Delivery time for ${g}`} placeholder="e.g. 1–2 days" /></td>
+                    <td><input type="checkbox" class="toggle" data-field="is_active" aria-label={`We deliver to ${g}`} checked /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div class="cms-actions" style="margin-top:14px"><button type="button" class="button" id="zones-save">Save delivery fees</button><span id="zones-msg" class="cms-help" role="status"></span></div>
+        </section>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+import { startAdmin, esc, money, toast, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+
+type Coupon = { id: string; code: string; description: string | null; discount_type: 'percent' | 'fixed' | 'free_delivery'; value: number; min_subtotal: number; max_uses: number | null; used_count: number; starts_at: string | null; ends_at: string | null; is_active: boolean };
+type Zone = { governorate: string; fee: number; is_active: boolean; eta: string | null };
+
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+const form = $<HTMLFormElement>('#coupon-form');
+const input = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
+let supabase: Db;
+let coupons: Coupon[] = [];
+let editing: Coupon | null = null;
+
+// datetime-local ↔ ISO (the browser's local time zone)
+const toLocal = (iso: string | null) => { if (!iso) return ''; const d = new Date(iso); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+const fromLocal = (v: string) => (v ? new Date(v).toISOString() : null);
+
+function describe(c: Coupon) {
+  const what = c.discount_type === 'percent' ? `${Number(c.value)}% off` : c.discount_type === 'fixed' ? `${money(c.value)} off` : 'Free delivery';
+  return `${what}${Number(c.min_subtotal) > 0 ? ` · orders over ${money(c.min_subtotal)}` : ''}`;
+}
+function status(c: Coupon): [string, string] {
+  const now = Date.now();
+  if (!c.is_active) return ['Off', ''];
+  if (c.ends_at && new Date(c.ends_at).getTime() <= now) return ['Expired', 'bad'];
+  if (c.starts_at && new Date(c.starts_at).getTime() > now) return ['Scheduled', 'warn'];
+  if (c.max_uses && c.used_count >= c.max_uses) return ['Used up', 'bad'];
+  return ['Live', 'good'];
+}
+
+function renderCoupons() {
+  $('#coupon-count').textContent = `${coupons.length} ${coupons.length === 1 ? 'code' : 'codes'}`;
+  $('#coupon-list').innerHTML = coupons.length ? coupons.map((c) => {
+    const [label, tone] = status(c);
+    return `<button type="button" class="cms-item${editing?.id === c.id ? ' is-active' : ''}" data-coupon="${esc(c.id)}" style="border:0;background:none;text-align:left;cursor:pointer;width:100%">
+      <span class="cms-item-main"><strong>${esc(c.code)}</strong><small>${esc(describe(c))} · used ${c.used_count}${c.max_uses ? ` of ${c.max_uses}` : ''} times</small></span>
+      <span class="cms-badge ${tone}">${label}</span></button>`;
+  }).join('') : '<p class="cms-empty">No discount codes yet. Create your first one on the right.</p>';
+  document.querySelectorAll<HTMLButtonElement>('[data-coupon]').forEach((b) => b.onclick = () => edit(coupons.find((c) => c.id === b.dataset.coupon) || null));
+}
+
+function syncValueField() {
+  const type = input('discount_type').value;
+  $('#value-label').hidden = type === 'free_delivery';
+  input('value').placeholder = type === 'percent' ? '10 (%)' : '5.00 ($)';
+  input('value').max = type === 'percent' ? '100' : '';
+}
+
+function edit(c: Coupon | null) {
+  editing = c;
+  form.reset();
+  input('id').value = c?.id || '';
+  input('code').value = c?.code || '';
+  input('description').value = c?.description || '';
+  input('discount_type').value = c?.discount_type || 'percent';
+  input('value').value = c && c.discount_type !== 'free_delivery' ? String(Number(c.value)) : '';
+  input('min_subtotal').value = c && Number(c.min_subtotal) ? String(Number(c.min_subtotal)) : '';
+  input('max_uses').value = c?.max_uses ? String(c.max_uses) : '';
+  input('starts_at').value = toLocal(c?.starts_at ?? null);
+  input('ends_at').value = toLocal(c?.ends_at ?? null);
+  input('is_active').checked = c ? c.is_active : true;
+  $('#coupon-form-title').textContent = c ? `Edit ${c.code}` : 'New code';
+  $('#coupon-delete').hidden = !c;
+  $('#coupon-usage').textContent = c ? `Used ${c.used_count} ${c.used_count === 1 ? 'time' : 'times'} so far.` : '';
+  $('#coupon-msg').textContent = '';
+  syncValueField();
+  renderCoupons();
+}
+
+async function loadCoupons() {
+  const r = await supabase.from('coupons').select('*').order('created_at', { ascending: false });
+  if (missingTable(r.error)) { $('#setup').innerHTML = setupNotice(); $('#setup').hidden = false; $<HTMLButtonElement>('#coupon-save').disabled = true; $<HTMLButtonElement>('#zones-save').disabled = true; return false; }
+  if (r.error) throw new Error(r.error.message);
+  coupons = (r.data ?? []) as Coupon[];
+  renderCoupons();
+  return true;
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const msg = $('#coupon-msg');
+  const code = input('code').value.trim().toUpperCase().replace(/\s+/g, '');
+  const type = input('discount_type').value as Coupon['discount_type'];
+  const value = type === 'free_delivery' ? 0 : Number(input('value').value);
+  if (!/^[A-Z0-9_-]{3,30}$/.test(code)) { msg.textContent = 'The code needs 3–30 letters or numbers (dashes and underscores are fine, no spaces).'; input('code').focus(); return; }
+  if (type !== 'free_delivery' && !(value > 0)) { msg.textContent = 'Enter the discount amount.'; input('value').focus(); return; }
+  if (type === 'percent' && value > 100) { msg.textContent = 'A percentage cannot be more than 100.'; return; }
+  const starts = fromLocal(input('starts_at').value), ends = fromLocal(input('ends_at').value);
+  if (starts && ends && new Date(ends) <= new Date(starts)) { msg.textContent = 'The end date must be after the start date.'; return; }
+  const payload = {
+    code, discount_type: type, value,
+    description: input('description').value.trim() || null,
+    min_subtotal: Math.max(0, Number(input('min_subtotal').value || 0)),
+    max_uses: input('max_uses').value ? Math.max(1, Math.floor(Number(input('max_uses').value))) : null,
+    starts_at: starts, ends_at: ends,
+    is_active: input('is_active').checked
+  };
+  const button = $<HTMLButtonElement>('#coupon-save'); button.disabled = true; msg.textContent = 'Saving…';
+  const r = editing
+    ? await supabase.from('coupons').update(payload).eq('id', editing.id).select('*').single()
+    : await supabase.from('coupons').insert(payload).select('*').single();
+  button.disabled = false;
+  if (r.error) { msg.textContent = /duplicate|unique/i.test(r.error.message) ? `The code ${code} already exists.` : r.error.message; return; }
+  toast(`${code} saved.`);
+  await loadCoupons();
+  edit(coupons.find((c) => c.id === (r.data as Coupon).id) || null);
+});
+$('#coupon-delete').addEventListener('click', async () => {
+  if (!editing || !confirm(`Delete the code ${editing.code}? Orders that used it keep their discount.`)) return;
+  const r = await supabase.from('coupons').delete().eq('id', editing.id);
+  if (r.error) { toast(r.error.message, 'error'); return; }
+  toast(`${editing.code} deleted.`);
+  await loadCoupons();
+  edit(null);
+});
+$('#coupon-new').addEventListener('click', () => { edit(null); input('code').focus(); });
+input('discount_type').addEventListener('change', syncValueField);
+
+// ---------- Delivery fees ----------
+async function loadZones() {
+  const [z, s] = await Promise.all([
+    supabase.from('delivery_zones').select('*'),
+    supabase.from('store_settings').select('cod_delivery_price,free_delivery_threshold').eq('id', 'default').maybeSingle()
+  ]);
+  if (z.error) { if (!missingTable(z.error)) toast(z.error.message, 'error'); return; }
+  const standard = Number((s.data as any)?.cod_delivery_price || 0);
+  const free = Number((s.data as any)?.free_delivery_threshold || 0);
+  $('#standard-fee').textContent = `Standard fee ${money(standard)}${free ? ` · free above ${money(free)}` : ''}`;
+  const zones = new Map(((z.data ?? []) as Zone[]).map((row) => [row.governorate.toLowerCase(), row]));
+  document.querySelectorAll<HTMLTableRowElement>('#zone-rows tr').forEach((tr) => {
+    const zone = zones.get(String(tr.dataset.gov).toLowerCase());
+    (tr.querySelector('[data-field=fee]') as HTMLInputElement).value = zone ? String(Number(zone.fee)) : '';
+    (tr.querySelector('[data-field=eta]') as HTMLInputElement).value = zone?.eta || '';
+    (tr.querySelector('[data-field=is_active]') as HTMLInputElement).checked = zone ? zone.is_active : true;
+  });
+}
+$('#zones-save').addEventListener('click', async () => {
+  const rows: Zone[] = []; const clear: string[] = [];
+  document.querySelectorAll<HTMLTableRowElement>('#zone-rows tr').forEach((tr) => {
+    const fee = (tr.querySelector('[data-field=fee]') as HTMLInputElement).value;
+    const eta = (tr.querySelector('[data-field=eta]') as HTMLInputElement).value.trim();
+    const active = (tr.querySelector('[data-field=is_active]') as HTMLInputElement).checked;
+    const gov = String(tr.dataset.gov);
+    // A row is only stored when it differs from the standard (own fee, delivery time or "no delivery").
+    if (fee === '' && !eta && active) clear.push(gov);
+    else rows.push({ governorate: gov, fee: fee === '' ? -1 : Math.max(0, Number(fee)), is_active: active, eta: eta || null });
+  });
+  // "Own delivery time but standard fee": store the standard fee so the time can be shown.
+  const standard = Number(($('#standard-fee').textContent || '').match(/\$([\d.]+)/)?.[1] || 0);
+  rows.forEach((row) => { if (row.fee < 0) row.fee = standard; });
+  const msg = $('#zones-msg'); msg.textContent = 'Saving…';
+  const [up, del] = await Promise.all([
+    rows.length ? supabase.from('delivery_zones').upsert(rows, { onConflict: 'governorate' }) : Promise.resolve({ error: null }),
+    clear.length ? supabase.from('delivery_zones').delete().in('governorate', clear) : Promise.resolve({ error: null })
+  ]);
+  const error = up.error || del.error;
+  msg.textContent = error ? error.message : 'Saved. Checkout uses the new fees right away.';
+  if (!error) toast('Delivery fees saved.');
+  await loadZones();
+});
+
+// ---------- Tabs ----------
+function showTab(name: string) {
+  document.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => { const on = b.dataset.tab === name; b.classList.toggle('active', on); b.setAttribute('aria-selected', String(on)); });
+  document.querySelectorAll<HTMLElement>('[data-panel]').forEach((p) => { p.hidden = p.dataset.panel !== name; });
+  history.replaceState(null, '', `#${name}`);
+}
+document.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.addEventListener('click', () => showTab(String(b.dataset.tab))));
+
+(async () => {
+  const started = await startAdmin('marketing', 'Discounts & delivery');
+  if (!started) return;
+  supabase = started.supabase;
+  // Delivery fees need the "settings" permission (owners and managers).
+  const canDelivery = started.access.perms.includes('settings');
+  $('#delivery-tab').hidden = !canDelivery;
+  edit(null);
+  if (!(await loadCoupons())) return;
+  if (canDelivery) await loadZones();
+  if (location.hash === '#delivery' && canDelivery) showTab('delivery');
+})();
+</script>

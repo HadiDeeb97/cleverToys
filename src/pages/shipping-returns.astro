@@ -1,15 +1,22 @@
 ---
 /**
- * Shipping & returns: /shipping-returns. Edit the wording directly below.
+ * Shipping & returns: /shipping-returns. Text comes from Admin → Pages (the text below is only a fallback).
  */
 import '../styles/global.css';
-const title='Shipping & Returns | Clever Toys';
-const description='Clever Toys delivery, order confirmation and returns information.';
+import ContentPageView from '../components/ContentPageView.astro';
+import { getContentPage } from '../lib/content-pages';
+import { markdownToText } from '../lib/markdown';
+// Text from Admin → Pages when available; the original text below is the fallback.
+const page = await getContentPage('shipping-returns');
+const title=page ? `${page.title} | Clever Toys` : 'Shipping & Returns | Clever Toys';
+const description=page ? (page.intro || markdownToText(page.body)) : 'Clever Toys delivery, order confirmation and returns information.';
 ---
 <head><title>{title}</title><meta name="description" content={description}/><link rel="canonical" href={new URL("/shipping-returns", Astro.site ?? Astro.url.origin).href}/></head>
 <header class="site-header"></header>
+{page ? <ContentPageView page={page} /> : (
 <main>
   <section class="page-hero"><div class="container"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">Shipping & Returns</span></nav><h1>Shipping & Returns</h1><p>Important information before placing your order.</p></div></section>
   <section class="section tight"><div class="container"><div class="content-card prose"><h2>Delivery</h2><p>Orders are placed with cash on delivery. After an order is received, Clever Toys will contact you to confirm the order and delivery details.</p><h2>Delivery fee</h2><p>Any delivery fee is confirmed with you before the order is finalized.</p><h2>Returns and exchanges</h2><p>If an item arrives defective, contact us as soon as possible with your order number and details. Exchange requests should be made within 3 days of receiving the order.</p><h2>Important</h2><p>Products should be returned in the condition in which they were received. Final approval of a return or exchange is subject to inspection.</p></div></div></section>
 </main>
+)}
 <footer class="site-footer"></footer>

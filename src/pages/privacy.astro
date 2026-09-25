@@ -1,15 +1,22 @@
 ---
 /**
- * Privacy policy: /privacy. Edit the wording directly below.
+ * Privacy policy: /privacy. Text comes from Admin → Pages (the text below is only a fallback).
  */
 import '../styles/global.css';
-const title='Privacy Policy | Clever Toys';
-const description='Clever Toys privacy policy and information about customer data.';
+import ContentPageView from '../components/ContentPageView.astro';
+import { getContentPage } from '../lib/content-pages';
+import { markdownToText } from '../lib/markdown';
+// Text from Admin → Pages when available; the original text below is the fallback.
+const page = await getContentPage('privacy');
+const title=page ? `${page.title} | Clever Toys` : 'Privacy Policy | Clever Toys';
+const description=page ? (page.intro || markdownToText(page.body)) : 'Clever Toys privacy policy and information about customer data.';
 ---
 <head><title>{title}</title><meta name="description" content={description}/><link rel="canonical" href={new URL("/privacy", Astro.site ?? Astro.url.origin).href}/></head>
 <header class="site-header"></header>
+{page ? <ContentPageView page={page} /> : (
 <main>
   <section class="page-hero"><div class="container"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">Privacy Policy</span></nav><h1>Privacy Policy</h1><p>How Clever Toys handles information provided through the store.</p></div></section>
   <section class="section tight"><div class="container"><div class="content-card prose"><h2>Information we collect</h2><p>When you place an order, we may collect your name, phone number, delivery address and optional email address so we can process and deliver your order.</p><h2>How we use it</h2><p>We use order information to process purchases, contact customers about orders and provide customer support. We do not need payment-card information for cash-on-delivery orders.</p><h2>Accounts</h2><p>If you create an account, authentication is handled by our secure authentication provider. Your account lets you access your own order history.</p><h2>Data requests</h2><p>For questions about your information or to request correction, contact Clever Toys through the customer-support channel provided on the website.</p></div></div></section>
 </main>
+)}
 <footer class="site-footer"></footer>

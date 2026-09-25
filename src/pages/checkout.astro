@@ -10,7 +10,16 @@
 import '../styles/global.css';
 import { supabaseConfig } from '../lib/config';
 import { LEBANON_GOVERNORATES } from '../lib/lebanon';
+import { supabase } from '../lib/supabase';
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
+
+// Delivery fee per governorate (Admin → Discounts & delivery, supabase/cms.sql). Before that SQL is
+// run the table does not exist: everyone pays the standard fee and discount codes are hidden.
+type Zone = { governorate: string; fee: number; is_active: boolean; eta: string | null };
+const zonesResult = await supabase.from('delivery_zones').select('governorate,fee,is_active,eta');
+const cmsReady = !zonesResult.error;
+const zones = (zonesResult.data ?? []) as Zone[];
+const zoneFor = (g: string) => zones.find((z) => z.governorate.toLowerCase() === g.toLowerCase());
 ---
 <head>
   <title>Checkout | Clever Toys</title>
@@ -28,6 +37,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
       <section>
         <div class="section-header"><h1>Checkout</h1><p>No card needed: you pay in cash when your toys arrive.</p></div>
         <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+        <script type="application/json" id="delivery-zones" set:html={JSON.stringify(zones).replace(/</g, '\\u003c')}></script>
         {/* If "Place Order" is tapped before the page script has loaded (slow connection), this
             remembers the tap instead of reloading the page; the script then places the order. */}
         <form id="checkout-form" class="form-card" onsubmit="this.dataset.pending='1';return false">
@@ -39,12 +49,19 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
           </div>
           <h2 class="form-section-title">Delivery address</h2>
           <div class="form-grid">
-            <label>Governorate<select name="governorate" required autocomplete="address-level1"><option value="">Choose your governorate</option>{LEBANON_GOVERNORATES.map((g) => <option value={g}>{g}</option>)}</select></label>
+            <label>Governorate<select name="governorate" required autocomplete="address-level1"><option value="">Choose your governorate</option>{LEBANON_GOVERNORATES.map((g) => { const z = zoneFor(g); return <option value={g} disabled={z ? !z.is_active : false}>{g}{z && !z.is_active ? ' (no delivery yet)' : ''}</option>; })}</select><small id="delivery-eta" class="field-note" hidden></small></label>
             <label>City<input name="city" required autocomplete="address-level2" maxlength="80" /></label>
             <label class="wide">Area <span>(optional)</span><input name="area" autocomplete="address-level3" maxlength="120" /></label>
             <label class="wide">Full address<textarea name="address" required rows="3" autocomplete="street-address" maxlength="500" placeholder="Street, building, floor"></textarea></label>
             <label class="wide">Notes <span>(optional)</span><textarea name="notes" rows="2" maxlength="1000" placeholder="Best time to call, gift wrapping…"></textarea></label>
           </div>
+          {cmsReady && (
+            <div class="coupon-box" id="coupon-box">
+              <label for="coupon-code">Discount code <span>(optional)</span></label>
+              <div class="coupon-row"><input id="coupon-code" type="text" autocomplete="off" autocapitalize="characters" maxlength="30" placeholder="Enter code" /><button type="button" class="button secondary-button" id="coupon-apply">Apply</button></div>
+              <p id="coupon-message" class="coupon-message" role="status"></p>
+            </div>
+          )}
           <h2 class="form-section-title">Payment</h2>
           <div class="payment-option"><b aria-hidden="true">💵</b><div><strong>Cash on delivery</strong><span>Pay the driver when your order arrives.</span></div></div>
           <button class="button" type="submit">Place order</button>
@@ -85,14 +102,40 @@ const readCart = (): CartItem[] => {
 const branding = (window as any).__CLEVER_BRANDING__ || {};
 const codDeliveryPrice = Math.max(0, Number(branding.codDeliveryPrice || 0));
 const freeDeliveryThreshold = Math.max(0, Number(branding.freeDeliveryThreshold || 0));
-const deliveryFeeFor = (subtotal: number) => freeDeliveryThreshold > 0 && subtotal >= freeDeliveryThreshold ? 0 : codDeliveryPrice;
+// Fee per governorate (Admin → Discounts & delivery); null = no delivery there yet.
+type Zone = { governorate: string; fee: number; is_active: boolean; eta: string | null };
+let zones: Zone[] = [];
+try { zones = JSON.parse(document.getElementById('delivery-zones')?.textContent || '[]'); } catch {}
+const governorateSelect = form.elements.namedItem('governorate') as HTMLSelectElement;
+const zoneFor = (g: string) => zones.find((z) => z.governorate.toLowerCase() === g.toLowerCase());
+const deliveryFeeFor = (subtotal: number): number | null => {
+  const zone = zoneFor(governorateSelect.value || '');
+  if (zone && !zone.is_active) return null;
+  if (freeDeliveryThreshold > 0 && subtotal >= freeDeliveryThreshold) return 0;
+  return zone ? Math.max(0, Number(zone.fee)) : codDeliveryPrice;
+};
+
+// Discount code: checked with the store (check_coupon) and again when the order is placed.
+type Coupon = { code: string; type: 'percent' | 'fixed' | 'free_delivery'; value: number; message: string };
+let coupon: Coupon | null = null;
+const couponDiscount = (subtotal: number, delivery: number) => {
+  if (!coupon) return 0;
+  if (coupon.type === 'percent') return Math.round(subtotal * coupon.value) / 100;
+  if (coupon.type === 'fixed') return Math.min(coupon.value, subtotal);
+  return delivery;
+};
 
 /** Draws the order summary box and returns the totals shown in it. */
 function renderSummary() {
   const cart = readCart();
   const subtotal = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
-  const deliveryFee = deliveryFeeFor(subtotal);
-  const total = subtotal + deliveryFee;
+  const fee = deliveryFeeFor(subtotal);
+  const deliveryFee = fee ?? 0;
+  const discount = couponDiscount(subtotal, deliveryFee);
+  const total = Math.max(0, subtotal + deliveryFee - discount);
+  const zone = zoneFor(governorateSelect.value || '');
+  const eta = document.getElementById('delivery-eta');
+  if (eta) { eta.hidden = !(zone?.eta && zone.is_active); eta.textContent = zone?.eta ? `Delivery time: ${zone.eta}` : ''; }
   if (!cart.length) {
     summary.innerHTML = '<h2>Order Summary</h2><p>Your cart is empty.</p><a href="/products" class="button">Shop Toys</a>';
     return { cart, subtotal, deliveryFee, total };
@@ -103,8 +146,9 @@ function renderSummary() {
     : '';
   summary.innerHTML = `<h2>Order summary</h2>${lines}<hr>
     <div class="summary-line"><span>Subtotal</span><strong>${money(subtotal)}</strong></div>
-    <div class="summary-line"><span>COD delivery</span><strong>${deliveryFee === 0 ? 'Free' : money(deliveryFee)}</strong></div>
-    ${freeNote}
+    <div class="summary-line"><span>Delivery${governorateSelect.value ? ` · ${esc(governorateSelect.value)}` : ''}</span><strong>${fee === null ? 'Not available' : fee === 0 ? 'Free' : money(fee)}</strong></div>
+    ${discount > 0 ? `<div class="summary-line summary-discount"><span>Discount · ${esc(coupon?.code)}</span><strong>−${money(discount)}</strong></div>` : ''}
+    ${fee === null ? `<p class="delivery-note warn">Sorry, we do not deliver to ${esc(governorateSelect.value)} yet.</p>` : freeNote}
     <div class="summary-line summary-total"><strong>Total</strong><strong>${money(total)}</strong></div>
     <a href="/cart" class="summary-cart-link">Edit Cart</a>`;
   return { cart, subtotal, deliveryFee, total };
@@ -137,6 +181,7 @@ form.addEventListener('submit', async (event) => {
   if (submitting) return;
   const { cart, subtotal, deliveryFee, total } = renderSummary();
   if (!cart.length) { msg.textContent = 'Your cart is empty. Add a product before checkout.'; return; }
+  if (governorateSelect.value && deliveryFeeFor(subtotal) === null) { msg.textContent = `Sorry, we do not deliver to ${governorateSelect.value} yet.`; governorateSelect.focus(); return; }
   if (!form.reportValidity()) return;
 
   const data = Object.fromEntries([...new FormData(form).entries()].map(([k, v]) => [k, String(v).trim()]));
@@ -158,7 +203,7 @@ form.addEventListener('submit', async (event) => {
     const headers: Record<string, string> = { 'content-type': 'application/json' };
     const session = await getSession();
     if (session?.access_token) headers.authorization = `Bearer ${session.access_token}`;
-    const order = { ...data, items: cart, subtotal, delivery_fee: deliveryFee, total, payment_method: 'cash_on_delivery' };
+    const order = { ...data, coupon_code: coupon?.code || '', items: cart, subtotal, delivery_fee: deliveryFee, total, payment_method: 'cash_on_delivery' };
     const res = await fetch('/api/orders', { method: 'POST', headers, body: JSON.stringify(order) });
     const out = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(out.error || 'Unable to place order.');
@@ -171,8 +216,37 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
+governorateSelect.addEventListener('change', () => renderSummary());
+
+const couponInput = document.getElementById('coupon-code') as HTMLInputElement | null;
+const couponMessage = document.getElementById('coupon-message');
+async function applyCoupon() {
+  if (!couponInput || !couponMessage) return;
+  const code = couponInput.value.trim().toUpperCase();
+  if (!code) { coupon = null; couponMessage.textContent = ''; renderSummary(); return; }
+  couponMessage.textContent = 'Checking…';
+  couponMessage.className = 'coupon-message';
+  const supabase = await getSupabase();
+  const cart = readCart();
+  const subtotal = cart.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0);
+  const result = supabase ? await supabase.rpc('check_coupon', { p_code: code, p_subtotal: subtotal, p_governorate: governorateSelect.value || null }) : null;
+  const out = result?.data as { ok: boolean; code: string; type: Coupon['type']; value: number; message: string } | null;
+  if (!out?.ok) {
+    coupon = null;
+    couponMessage.textContent = out?.message || 'This code could not be checked. Please try again.';
+    couponMessage.className = 'coupon-message bad';
+  } else {
+    coupon = { code: out.code, type: out.type, value: Number(out.value), message: out.message };
+    couponMessage.textContent = `✓ ${out.message}`;
+    couponMessage.className = 'coupon-message good';
+  }
+  renderSummary();
+}
+document.getElementById('coupon-apply')?.addEventListener('click', applyCoupon);
+couponInput?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); applyCoupon(); } });
+
 renderSummary();
-prefill();
+prefill().then(() => renderSummary());
 // Place the order now if the shopper already tapped "Place Order" while the page was loading.
 if (form.dataset.pending) {
   delete form.dataset.pending;

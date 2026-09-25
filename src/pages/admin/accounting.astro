@@ -146,6 +146,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { allowPage } from '../../scripts/admin-access';
 import { exportPdf, exportXlsx, type ExportCell, type ExportColumn } from '../../scripts/table-export';
 
 type Row = Record<string, any>;
@@ -510,6 +511,8 @@ async function init() {
     const { data: isAdmin, error } = await supabase.rpc('is_admin');
     if (error) throw new Error(error.message);
     if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><a class="button" href="/">Back to store</a>'; return; }
+    // Staff roles (supabase/cms.sql): stop here if this role cannot open the page.
+    if (!(await allowPage(supabase, 'accounting', 'Accounting'))) return;
     const [a, b] = presetRange(period);
     $<HTMLInputElement>('#from').value = ymd(a);
     $<HTMLInputElement>('#to').value = ymd(b);

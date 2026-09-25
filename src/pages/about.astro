@@ -1,15 +1,22 @@
 ---
 /**
- * About page: /about. Plain text about the store; edit the wording directly below.
+ * About page: /about. Text comes from Admin → Pages (the text below is only a fallback).
  */
 import '../styles/global.css';
-const title='About Clever Toys | Clever Toys';
-const description='Learn about Clever Toys and our mission to make children’s play more fun, creative and educational.';
+import ContentPageView from '../components/ContentPageView.astro';
+import { getContentPage } from '../lib/content-pages';
+import { markdownToText } from '../lib/markdown';
+// Text from Admin → Pages when available; the original text below is the fallback.
+const page = await getContentPage('about');
+const title=page ? `${page.title} | Clever Toys` : 'About Clever Toys | Clever Toys';
+const description=page ? (page.intro || markdownToText(page.body)) : 'Learn about Clever Toys and our mission to make children’s play more fun, creative and educational.';
 ---
 <head><title>{title}</title><meta name="description" content={description}/><link rel="canonical" href={new URL("/about", Astro.site ?? Astro.url.origin).href}/></head>
 <header class="site-header"></header>
+{page ? <ContentPageView page={page} eyebrow="Clever Toys" /> : (
 <main>
   <section class="page-hero"><div class="container"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">Play. Learn. Discover.</span></nav><p class="eyebrow">Clever Toys</p><h1>Play. Learn. Discover.</h1><p>We believe the right toy can turn an ordinary moment into a chance to imagine, learn and create.</p></div></section>
   <section class="section tight"><div class="container"><div class="content-card prose"><h2>Our store</h2><p>Clever Toys brings together fun, educational and creative toys for children of different ages. We focus on practical products, clear information and a simple shopping experience.</p><h2>Our promise</h2><p>We aim to offer quality toys, straightforward prices and responsive customer service from browsing to delivery.</p><a class="button" href="/products">Explore our toys</a></div></div></section>
 </main>
+)}
 <footer class="site-footer"></footer>

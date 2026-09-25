@@ -1,0 +1,26 @@
+---
+/**
+ * Renders a page written in Admin → Pages: title, intro line and formatted text (src/lib/markdown.ts).
+ */
+import { renderMarkdown } from '../lib/markdown';
+import type { ContentPage } from '../lib/content-pages';
+
+interface Props { page: ContentPage; eyebrow?: string }
+const { page, eyebrow } = Astro.props;
+const html = renderMarkdown(page.body);
+---
+<main>
+  <section class="page-hero">
+    <div class="container">
+      <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">{page.title}</span></nav>
+      {eyebrow && <p class="eyebrow">{eyebrow}</p>}
+      <h1>{page.title}</h1>
+      {page.intro && <p>{page.intro}</p>}
+    </div>
+  </section>
+  <section class="section tight">
+    <div class="container">
+      <div class="content-card prose" set:html={html} />
+    </div>
+  </section>
+</main>

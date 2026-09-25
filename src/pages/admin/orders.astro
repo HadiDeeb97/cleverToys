@@ -19,6 +19,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <p id="orders-summary">Loading orders…</p>
       </div>
       <div class="quick-actions">
+        <button id="enable-alerts" class="button secondary-button" type="button" title="Show a pop-up on this computer when a new order arrives">🔔 Order alerts</button>
         <button id="export-csv" class="button secondary-button" type="button">Export CSV</button>
         <button id="refresh" class="button" type="button">Refresh</button>
       </div>
@@ -45,6 +46,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { allowPage, enableOrderNotifications, markOrdersSeen } from '../../scripts/admin-access';
 
 const STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
 const LABELS: Record<string, string> = { pending: 'Pending', confirmed: 'Confirmed', processing: 'Preparing', shipped: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -108,7 +110,7 @@ function detailsHtml(o: any) {
       <div><h3>Notes</h3><p>${o.notes ? esc(o.notes) : '<span class="muted">No notes</span>'}</p></div>
     </div>
     <table class="items-table"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody>
-    <tfoot><tr><td colspan="3">Subtotal</td><td>${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr>${Number(o.discount) ? `<tr><td colspan="3">Discount</td><td>−${money(o.discount)}</td></tr>` : ''}<tr class="grand"><td colspan="3">Total (cash on delivery)</td><td>${money(o.total)}</td></tr></tfoot></table>
+    <tfoot><tr><td colspan="3">Subtotal</td><td>${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr>${Number(o.discount) ? `<tr><td colspan="3">Discount${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</td><td>−${money(o.discount)}</td></tr>` : ''}<tr class="grand"><td colspan="3">Total (cash on delivery)</td><td>${money(o.total)}</td></tr></tfoot></table>
     <div class="order-actions">
       <a class="button whatsapp-action" target="_blank" rel="noopener" href="https://wa.me/${whatsappNumber(o.customer_phone)}?text=${encodeURIComponent(whatsappMessage(o))}">💬 Message on WhatsApp</a>
       <button class="button secondary-button" type="button" data-print="${o.id}">🧾 Print invoice</button>
@@ -127,7 +129,7 @@ function render() {
     <div class="order-row">
       <button type="button" class="order-toggle" aria-expanded="${expanded.has(o.id)}" data-toggle="${o.id}"><span class="chev" aria-hidden="true">›</span><span><strong>${esc(o.order_number)}</strong><small>${new Date(o.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</small></span></button>
       <div class="order-customer"><strong>${esc(o.customer_name)}</strong><small>${esc(o.customer_phone)} · ${esc(o.city || o.governorate || '')}</small></div>
-      <strong class="order-total">${money(o.total)}</strong>
+      <strong class="order-total">${money(o.total)}${o.coupon_code ? `<small class="order-coupon" title="Discount code">🏷️ ${esc(o.coupon_code)}</small>` : ''}</strong>
       <span class="status-pill status-${esc(o.status)}">${esc(LABELS[o.status] || o.status)}</span>
       <div class="order-status-edit">
         <label class="sr-only" for="status-${o.id}">Status for ${esc(o.order_number)}</label>
@@ -161,11 +163,12 @@ function printInvoice(o: any) {
   const items = itemsByOrder.get(o.id) || [];
   const win = window.open('', '_blank', 'width=800,height=900');
   if (!win) { toast('Allow pop-ups to print invoices.', 'error'); return; }
-  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${esc(o.order_number)}</title><style>body{font-family:system-ui,sans-serif;color:#1b1530;margin:40px}h1{margin:0}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}td:last-child,th:last-child{text-align:right}.meta{display:flex;justify-content:space-between;gap:24px;margin-top:24px}.total td{font-weight:800;font-size:1.1em}small{color:#666}</style></head><body>
+  win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Invoice ${esc(o.order_number)}</title><style>body{font-family:system-ui,sans-serif;color:#1b1530;margin:40px}h1{margin:0}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{padding:10px;border-bottom:1px solid #ddd;text-align:left}td:last-child,th:last-child{text-align:right}.meta{display:flex;justify-content:space-between;gap:24px;margin-top:24px}.total td{font-weight:800;font-size:1.1em}small{color:#666}.order-coupon{display:block;color:var(--success);font-size:.72rem;font-weight:800}
+</style></head><body>
     <h1>Clever Toys</h1><small>Invoice · Cash on delivery</small>
     <div class="meta"><div><strong>Bill to</strong><br>${esc(o.customer_name)}<br>${esc(o.customer_phone)}<br>${esc([o.governorate, o.city, o.area].filter(Boolean).join(', '))}<br>${esc(o.address)}</div><div><strong>Order ${esc(o.order_number)}</strong><br>${new Date(o.created_at).toLocaleString()}<br>Status: ${esc(LABELS[o.status] || o.status)}</div></div>
     <table><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${items.map((i) => `<tr><td>${esc(i.product_name)}${i.variant_name ? ` · ${esc(i.variant_name)}` : ''}</td><td>${Number(i.quantity)}</td><td>${money(i.unit_price)}</td><td>${money(i.total_price)}</td></tr>`).join('')}</tbody>
-    <tfoot><tr><td colspan="3">Subtotal</td><td>${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr><tr class="total"><td colspan="3">Total due on delivery</td><td>${money(o.total)}</td></tr></tfoot></table>
+    <tfoot><tr><td colspan="3">Subtotal</td><td>${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr>${Number(o.discount) ? `<tr><td colspan="3">Discount${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</td><td>−${money(o.discount)}</td></tr>` : ''}<tr class="total"><td colspan="3">Total due on delivery</td><td>${money(o.total)}</td></tr></tfoot></table>
     ${o.notes ? `<p><strong>Notes:</strong> ${esc(o.notes)}</p>` : ''}<p><small>Thank you for shopping with Clever Toys!</small></p></body></html>`);
   win.document.close();
   win.focus();
@@ -175,8 +178,8 @@ function printInvoice(o: any) {
 function exportCsv() {
   const rows = filtered();
   const cell = (v: unknown) => { const text = String(v ?? ''); return /[",\n]/.test(text) || /^[=+\-@]/.test(text) ? `"${text.replace(/^([=+\-@])/, "'$1").replace(/"/g, '""')}"` : text; };
-  const header = ['Order', 'Date', 'Status', 'Customer', 'Phone', 'Email', 'Governorate', 'City', 'Area', 'Address', 'Subtotal', 'Delivery', 'Total', 'Notes'];
-  const lines = [header, ...rows.map((o) => [o.order_number, new Date(o.created_at).toISOString(), o.status, o.customer_name, o.customer_phone, o.customer_email, o.governorate, o.city, o.area, o.address, o.subtotal, o.delivery_fee, o.total, o.notes])].map((r) => r.map(cell).join(','));
+  const header = ['Order', 'Date', 'Status', 'Customer', 'Phone', 'Email', 'Governorate', 'City', 'Area', 'Address', 'Subtotal', 'Delivery', 'Discount', 'Discount code', 'Total', 'Notes'];
+  const lines = [header, ...rows.map((o) => [o.order_number, new Date(o.created_at).toISOString(), o.status, o.customer_name, o.customer_phone, o.customer_email, o.governorate, o.city, o.area, o.address, o.subtotal, o.delivery_fee, o.discount, o.coupon_code, o.total, o.notes])].map((r) => r.map(cell).join(','));
   const blob = new Blob([`﻿${lines.join('\n')}`], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -213,7 +216,15 @@ document.addEventListener('change', (event) => {
 ['#order-search', '#date-from', '#date-to', '#order-sort'].forEach((sel) => $(sel).addEventListener('input', () => { visible = PAGE_SIZE; render(); }));
 $('#load-more').addEventListener('click', () => { visible += PAGE_SIZE; render(); });
 $('#export-csv').addEventListener('click', exportCsv);
-$('#refresh').addEventListener('click', async () => { itemsByOrder.clear(); await load(); toast('Orders refreshed.'); });
+$('#refresh').addEventListener('click', async () => { itemsByOrder.clear(); await load(); markOrdersSeen(); toast('Orders refreshed.'); });
+// Browser pop-ups for new orders (while any admin page is open). The badge and sound work without this.
+const alertsButton = $<HTMLButtonElement>('#enable-alerts');
+if ('Notification' in window && Notification.permission === 'granted') alertsButton.textContent = '🔔 Alerts on';
+alertsButton.addEventListener('click', async () => {
+  const ok = await enableOrderNotifications();
+  alertsButton.textContent = ok ? '🔔 Alerts on' : '🔔 Order alerts';
+  toast(ok ? 'You will get a pop-up here when a new order arrives.' : 'Your browser blocked notifications. Allow them in the site settings.', ok ? 'success' : 'error');
+});
 
 async function init() {
   const guard = $('#guard');
@@ -227,9 +238,12 @@ async function init() {
     const { data: isAdmin, error } = await supabase.rpc('is_admin');
     if (error) throw new Error(error.message);
     if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><a class="button" href="/">Back to store</a>'; return; }
+    // Staff roles (supabase/cms.sql): stop here if this role cannot open the page.
+    if (!(await allowPage(supabase, 'orders', 'Orders'))) return;
     guard.hidden = true;
     $('#orders-app').hidden = false;
     await load();
+    markOrdersSeen();
   } catch (error) {
     guard.hidden = false;
     guard.textContent = error instanceof Error ? error.message : 'Could not load orders.';

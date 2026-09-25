@@ -18,6 +18,7 @@ Set these variables in the Cloudflare Worker environment (or a local `.env` for 
 
 - `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (the `PUBLIC_` versions also work)
 - `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (optional, for new-order notifications)
+- `RESEND_API_KEY`, `ORDER_EMAIL_FROM` and `ORDER_EMAIL_TO` (optional, new-order emails to the shop and order confirmations to customers through [Resend](https://resend.com); the sender must be on a domain verified in Resend)
 
 ## Database
 
@@ -35,6 +36,7 @@ Run the SQL files in `supabase/` from the Supabase SQL Editor. They can safely b
 - `seo_advanced.sql`: Admin → SEO indexing, sitemap, verification and business details; fixes product/category fallback titles
 - `branding_assets.sql`: small, cached logo and the uploadable website icon (Admin → Branding)
 - `storefront_design.sql`: Admin → Storefront (fonts, homepage sections, texts, footer)
+- `cms.sql`: staff roles (owner / manager / orders / content), activity log, editable pages, home banners, discount codes, delivery fee per governorate, stock history and low-stock alerts, product reviews, customer list; order placing with discount codes and per-governorate fees. Safe to re-run; the site keeps working before it is run.
 
 ## Project structure
 

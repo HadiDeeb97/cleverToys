@@ -1,0 +1,231 @@
+---
+/**
+ * Admin → Pages: edit About, Privacy, Terms and Shipping & returns, and create your own pages
+ * (gift guide, FAQ, store policies…). Pages you create live at /pages/<address>, can be hidden
+ * (draft) and can be listed in the footer. Formatting: see src/lib/markdown.ts. Needs supabase/cms.sql.
+ */
+import '../../styles/global.css';
+import { supabaseConfig } from '../../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
+---
+<head>
+  <title>Pages | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Website</p>
+        <h1>Pages</h1>
+        <p>Write and update the store's information pages. No code needed.</p>
+      </div>
+      <div class="cms-actions"><button id="new-page" class="button" type="button">+ New page</button></div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+
+    <div id="app" hidden>
+      <div id="setup" hidden></div>
+      <div class="pages-layout">
+        <section class="admin-panel">
+          <div class="panel-title"><h2>All pages</h2></div>
+          <div id="page-list" class="cms-list"></div>
+        </section>
+
+        <section class="admin-panel">
+          <form id="page-form" class="cms-form" novalidate>
+            <div class="panel-title"><h2 id="form-title">New page</h2><a id="view-link" class="text-link" href="/" target="_blank" rel="noopener" hidden>View page ↗</a></div>
+            <div class="cms-row">
+              <label>Title<input name="title" required maxlength="160" placeholder="Gift guide" /></label>
+              <label>Address <span id="slug-hint">(/pages/…)</span><input name="slug" required maxlength="80" placeholder="gift-guide" /></label>
+            </div>
+            <label>Intro line <span>(under the title; also used by Google if SEO has nothing)</span><input name="intro" maxlength="240" placeholder="Our favourite toys for every age" /></label>
+            <div class="editor-toolbar" role="toolbar" aria-label="Formatting">
+              <button type="button" data-md="h2" title="Heading">H2</button>
+              <button type="button" data-md="h3" title="Smaller heading">H3</button>
+              <button type="button" data-md="bold" title="Bold"><b>B</b></button>
+              <button type="button" data-md="italic" title="Italic"><i>I</i></button>
+              <button type="button" data-md="list" title="Bullet list">• List</button>
+              <button type="button" data-md="olist" title="Numbered list">1. List</button>
+              <button type="button" data-md="link" title="Link">Link</button>
+              <button type="button" data-md="button" title="Button">Button</button>
+              <button type="button" data-md="quote" title="Quote">“ ”</button>
+            </div>
+            <div class="editor-split">
+              <label class="editor-text"><span class="sr-only">Page text</span><textarea name="body" rows="18" placeholder="## A heading&#10;Write your text here. **Bold**, *italic*, [a link](/products).&#10;&#10;- a list item"></textarea></label>
+              <div class="editor-preview"><p class="preview-label">Preview</p><div id="preview" class="prose"></div></div>
+            </div>
+            <div class="cms-row">
+              <label class="cms-check"><input class="toggle" name="is_published" type="checkbox" checked /> Published (visible on the site)</label>
+              <label class="cms-check" id="footer-toggle"><input class="toggle" name="show_in_footer" type="checkbox" /> Show in the footer</label>
+            </div>
+            <p class="cms-help">Search title and description: <a class="text-link" href="/admin/seo">Admin → SEO</a> (add the page address there).</p>
+            <div class="cms-actions">
+              <button class="button" type="submit" id="save">Save page</button>
+              <button class="button secondary-button" type="button" id="delete" hidden>Delete</button>
+              <span id="msg" class="cms-help" role="status"></span>
+            </div>
+          </form>
+        </section>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+import { startAdmin, esc, when, toast, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+import { renderMarkdown } from '../../lib/markdown';
+
+type Page = { id: string; slug: string; title: string; intro: string | null; body: string; is_published: boolean; show_in_footer: boolean; is_system: boolean; sort_order: number; updated_at: string };
+const SYSTEM_PATHS: Record<string, string> = { about: '/about', privacy: '/privacy', terms: '/terms', 'shipping-returns': '/shipping-returns' };
+const pathOf = (slug: string) => SYSTEM_PATHS[slug] || `/pages/${slug}`;
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+const form = $<HTMLFormElement>('#page-form');
+const field = <T extends HTMLInputElement | HTMLTextAreaElement = HTMLInputElement>(name: string) => form.elements.namedItem(name) as T;
+const body = field<HTMLTextAreaElement>('body');
+let supabase: Db;
+let pages: Page[] = [];
+let editing: Page | null = null;
+let dirty = false;
+
+const slugify = (v: string) => v.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+const preview = () => { $('#preview').innerHTML = renderMarkdown(body.value) || '<p class="muted">Start typing to see the page.</p>'; };
+
+function renderList() {
+  $('#page-list').innerHTML = pages.length ? pages.map((p) => `
+    <button type="button" class="cms-item${editing?.id === p.id ? ' is-active' : ''}" data-page="${esc(p.id)}" style="border:0;background:none;text-align:left;cursor:pointer;width:100%">
+      <span class="cms-item-main"><strong>${esc(p.title)}</strong><small>${esc(pathOf(p.slug))} · updated ${esc(when(p.updated_at))}</small></span>
+      ${p.is_system ? '<span class="cms-badge">Built-in</span>' : ''}${p.is_published ? '' : '<span class="cms-badge warn">Draft</span>'}${p.show_in_footer ? '<span class="cms-badge good">Footer</span>' : ''}
+    </button>`).join('') : '<p class="cms-empty">No pages yet.</p>';
+  document.querySelectorAll<HTMLButtonElement>('[data-page]').forEach((b) => b.onclick = () => {
+    if (dirty && !confirm('Leave this page without saving your changes?')) return;
+    edit(pages.find((p) => p.id === b.dataset.page) || null);
+  });
+}
+
+function edit(p: Page | null) {
+  editing = p;
+  form.reset();
+  field('title').value = p?.title || '';
+  field('slug').value = p?.slug || '';
+  field('slug').dataset.auto = p ? '' : '1';
+  field('slug').readOnly = Boolean(p?.is_system);
+  field('intro').value = p?.intro || '';
+  body.value = p?.body || '';
+  field('is_published').checked = p ? p.is_published : true;
+  field('show_in_footer').checked = Boolean(p?.show_in_footer);
+  // Built-in pages are already in the footer's Help/Company columns.
+  $('#footer-toggle').hidden = Boolean(p?.is_system);
+  $('#slug-hint').textContent = p?.is_system ? `(fixed: ${pathOf(p.slug)})` : '(/pages/…)';
+  $('#form-title').textContent = p ? `Edit: ${p.title}` : 'New page';
+  $('#delete').hidden = !p || p.is_system;
+  const link = $<HTMLAnchorElement>('#view-link'); link.hidden = !p || !p.is_published; if (p) link.href = pathOf(p.slug);
+  $('#msg').textContent = '';
+  dirty = false;
+  preview();
+  renderList();
+}
+
+async function load() {
+  const r = await supabase.from('pages').select('*').order('is_system', { ascending: false }).order('sort_order').order('title');
+  if (missingTable(r.error)) { $('#setup').innerHTML = setupNotice(); $('#setup').hidden = false; $<HTMLButtonElement>('#save').disabled = true; return false; }
+  if (r.error) throw new Error(r.error.message);
+  pages = (r.data ?? []) as Page[];
+  renderList();
+  return true;
+}
+
+form.addEventListener('input', (event) => {
+  dirty = true;
+  const target = event.target as HTMLInputElement;
+  if (target.name === 'title' && field('slug').dataset.auto) field('slug').value = slugify(target.value);
+  if (target.name === 'slug') field('slug').dataset.auto = '';
+  if (target.name === 'body') preview();
+});
+window.addEventListener('beforeunload', (event) => { if (dirty) event.preventDefault(); });
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const msg = $('#msg');
+  const title = field('title').value.trim();
+  const slug = slugify(field('slug').value || title);
+  if (!title) { msg.textContent = 'Give the page a title.'; field('title').focus(); return; }
+  if (!slug) { msg.textContent = 'Give the page an address (letters and numbers).'; field('slug').focus(); return; }
+  if (!editing?.is_system && SYSTEM_PATHS[slug]) { msg.textContent = `“${slug}” is used by a built-in page. Choose another address.`; return; }
+  if (pages.some((p) => p.slug === slug && p.id !== editing?.id)) { msg.textContent = `Another page already uses /pages/${slug}.`; return; }
+  const payload = {
+    title, slug: editing?.is_system ? editing.slug : slug,
+    intro: field('intro').value.trim() || null,
+    body: body.value,
+    is_published: field('is_published').checked,
+    show_in_footer: editing?.is_system ? false : field('show_in_footer').checked
+  };
+  const button = $<HTMLButtonElement>('#save'); button.disabled = true; msg.textContent = 'Saving…';
+  const r = editing
+    ? await supabase.from('pages').update(payload).eq('id', editing.id).select('*').single()
+    : await supabase.from('pages').insert({ ...payload, sort_order: pages.length + 1 }).select('*').single();
+  button.disabled = false;
+  if (r.error) { msg.textContent = r.error.message; return; }
+  dirty = false;
+  toast(`“${title}” saved. It is live on the site${payload.is_published ? '' : ' as a hidden draft'}.`);
+  await load();
+  edit(pages.find((p) => p.id === (r.data as Page).id) || null);
+});
+
+$('#delete').addEventListener('click', async () => {
+  if (!editing || editing.is_system || !confirm(`Delete “${editing.title}”? Its address will show “page not found”.`)) return;
+  const r = await supabase.from('pages').delete().eq('id', editing.id);
+  if (r.error) { toast(r.error.message, 'error'); return; }
+  toast('Page deleted.');
+  await load();
+  edit(null);
+});
+$('#new-page').addEventListener('click', () => { if (dirty && !confirm('Leave this page without saving your changes?')) return; edit(null); field('title').focus(); });
+
+// Formatting toolbar: wraps the selection or inserts an example.
+document.querySelectorAll<HTMLButtonElement>('[data-md]').forEach((b) => b.addEventListener('click', () => {
+  const start = body.selectionStart, end = body.selectionEnd;
+  const selected = body.value.slice(start, end);
+  const lineStart = body.value.lastIndexOf('\n', start - 1) + 1;
+  let insert = '', from = start, to = end;
+  switch (b.dataset.md) {
+    case 'bold': insert = `**${selected || 'bold text'}**`; break;
+    case 'italic': insert = `*${selected || 'italic text'}*`; break;
+    case 'link': { const url = prompt('Link address (for example /products or https://…)', '/products'); if (!url) return; insert = `[${selected || 'link text'}](${url.trim()})`; break; }
+    case 'button': { const url = prompt('Button link (for example /products)', '/products'); if (!url) return; insert = `\n[${selected || 'Shop now'}](${url.trim()})\n`; break; }
+    case 'h2': case 'h3': case 'list': case 'olist': case 'quote': {
+      const prefix = { h2: '## ', h3: '### ', list: '- ', olist: '1. ', quote: '> ' }[b.dataset.md as 'h2'];
+      from = lineStart; const lines = body.value.slice(lineStart, end || start).split('\n');
+      insert = lines.map((l, i) => (b.dataset.md === 'olist' ? `${i + 1}. ` : prefix) + (l.replace(/^(#{2,4}\s+|[-*]\s+|\d+[.)]\s+|>\s?)/, '') || (b.dataset.md!.startsWith('h') ? 'Heading' : 'Item'))).join('\n');
+      to = Math.max(end, start);
+      break;
+    }
+  }
+  body.setRangeText(insert, from, to, 'end');
+  body.focus();
+  dirty = true;
+  preview();
+}));
+
+(async () => {
+  const started = await startAdmin('content', 'Pages');
+  if (!started) return;
+  supabase = started.supabase;
+  if (!(await load())) return;
+  const want = new URLSearchParams(location.search).get('edit');
+  edit(pages.find((p) => p.slug === want || p.id === want) || pages[0] || null);
+})();
+</script>
+
+<style is:global>
+.pages-layout{display:grid;grid-template-columns:minmax(240px,.7fr) minmax(0,2fr);gap:18px;align-items:start}
+.editor-toolbar{display:flex;gap:4px;flex-wrap:wrap;padding:6px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.editor-toolbar button{min-width:38px;height:34px;padding:0 10px;border:0;border-radius:8px;background:var(--surface);font-weight:800;font-size:.84rem;cursor:pointer;box-shadow:var(--shadow-sm)}
+@media (hover:hover){.editor-toolbar button:hover{background:var(--ink);color:#fff}}
+.editor-split{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}
+.editor-text textarea{height:100%;min-height:380px!important;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88rem!important}
+.editor-preview{min-height:380px;max-height:560px;overflow-y:auto;padding:14px 18px;border:1.5px dashed var(--line-strong);border-radius:12px;background:var(--surface)}
+.editor-preview .preview-label{margin:0 0 6px;color:var(--muted);font-size:.72rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+@media (max-width:1100px){.pages-layout{grid-template-columns:1fr}.editor-split{grid-template-columns:1fr}}
+</style>

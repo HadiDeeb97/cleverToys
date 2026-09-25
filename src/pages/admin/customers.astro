@@ -1,0 +1,146 @@
+---
+/**
+ * Admin → Customers: everyone who has an account or placed an order. Guests are grouped by phone
+ * number (the same number written differently counts once). Click a customer to see their details
+ * and full order history. Needs supabase/cms.sql (admin_list_customers).
+ */
+import '../../styles/global.css';
+import { supabaseConfig } from '../../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
+---
+<head>
+  <title>Customers | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Sell</p>
+        <h1>Customers</h1>
+        <p>Accounts and guest buyers, with what they ordered and spent.</p>
+      </div>
+      <div class="cms-actions"><button id="export" class="button secondary-button" type="button">Export Excel</button></div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+
+    <div id="app" hidden>
+      <div id="setup" hidden></div>
+      <div class="cms-layout">
+        <section class="admin-panel">
+          <div class="panel-title">
+            <label class="sr-only" for="search">Search customers</label>
+            <input id="search" class="admin-input" type="search" placeholder="Search name, email or phone…" style="flex:1" />
+            <span id="count" class="cms-badge"></span>
+          </div>
+          <div class="table-wrap">
+            <table class="cms-table">
+              <thead><tr><th>Customer</th><th>Orders</th><th>Spent</th><th>Last order</th></tr></thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+          <div class="cms-actions" style="margin-top:12px;justify-content:space-between"><button id="prev" class="small-button" type="button">← Previous</button><span id="page" class="cms-help"></span><button id="next" class="small-button" type="button">Next →</button></div>
+        </section>
+        <section class="admin-panel" id="detail"><p class="cms-empty">Choose a customer to see their orders.</p></section>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+import { startAdmin, esc, money, when, missingFunction, setupNotice, type Db } from '../../scripts/admin-access';
+import { exportXlsx } from '../../scripts/table-export';
+
+type Customer = { customer_key: string; customer_id: string | null; name: string | null; email: string | null; phone: string | null; governorate: string | null; orders_count: number; total_spent: number; last_order_at: string | null; registered_at: string | null; total_rows: number };
+const PAGE = 50;
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+let supabase: Db;
+let rows: Customer[] = [];
+let offset = 0;
+let selected = '';
+// Same rule as phone_key() in supabase/cms.sql.
+const phoneKey = (p: string | null) => String(p || '').replace(/\D/g, '').replace(/^00/, '').replace(/^961/, '').replace(/^0/, '');
+
+async function load() {
+  const r = await supabase.rpc('admin_list_customers', { p_search: $<HTMLInputElement>('#search').value.trim() || null, p_limit: PAGE, p_offset: offset });
+  if (missingFunction(r.error)) { $('#setup').innerHTML = setupNotice(); $('#setup').hidden = false; return; }
+  if (r.error) { $('#rows').innerHTML = `<tr><td colspan="4">${esc(r.error.message)}</td></tr>`; return; }
+  rows = (r.data ?? []) as Customer[];
+  const total = Number(rows[0]?.total_rows || 0);
+  $('#count').textContent = `${total} ${total === 1 ? 'customer' : 'customers'}`;
+  $('#page').textContent = total ? `${offset + 1}–${offset + rows.length} of ${total}` : '';
+  $<HTMLButtonElement>('#prev').disabled = offset === 0;
+  $<HTMLButtonElement>('#next').disabled = offset + rows.length >= total;
+  $('#rows').innerHTML = rows.length ? rows.map((c) => `<tr data-key="${esc(c.customer_key)}" style="cursor:pointer"${selected === c.customer_key ? ' class="is-selected"' : ''}>
+    <td><strong>${esc(c.name || 'No name')}</strong>${c.customer_id ? ' <span class="cms-badge good">Account</span>' : ''}<br><small class="muted">${esc([c.phone, c.email].filter(Boolean).join(' · '))}</small></td>
+    <td>${c.orders_count}</td><td>${money(c.total_spent)}</td><td>${c.last_order_at ? esc(new Date(c.last_order_at).toLocaleDateString()) : '<span class="muted">No orders</span>'}</td></tr>`).join('') : '<tr><td colspan="4" class="cms-empty">No customers found.</td></tr>';
+  document.querySelectorAll<HTMLTableRowElement>('#rows tr[data-key]').forEach((tr) => tr.onclick = () => show(rows.find((c) => c.customer_key === tr.dataset.key)!));
+}
+
+async function show(c: Customer) {
+  selected = c.customer_key;
+  document.querySelectorAll('#rows tr').forEach((tr) => tr.classList.toggle('is-selected', (tr as HTMLElement).dataset.key === selected));
+  const detail = $('#detail');
+  detail.innerHTML = '<p class="cms-empty">Loading…</p>';
+  // Orders: by account, or (guests) by phone number written in any format.
+  let query = supabase.from('orders').select('order_number,status,total,discount,coupon_code,created_at,governorate,city,address,customer_phone').order('created_at', { ascending: false }).limit(200);
+  const key = phoneKey(c.phone);
+  query = c.customer_id ? query.eq('customer_id', c.customer_id) : query.ilike('customer_phone', `%${key.slice(-6)}%`);
+  const [orders, profile] = await Promise.all([
+    query,
+    c.customer_id ? supabase.from('customer_profiles').select('*').eq('id', c.customer_id).maybeSingle() : Promise.resolve({ data: null })
+  ]);
+  if (selected !== c.customer_key) return;
+  const list = ((orders.data ?? []) as any[]).filter((o) => c.customer_id || phoneKey(o.customer_phone) === key);
+  const p = (profile.data || {}) as Record<string, string>;
+  const address = [p.governorate || c.governorate, p.city || list[0]?.city, p.area].filter(Boolean).join(', ');
+  const phoneDigits = String(c.phone || '').replace(/[^\d+]/g, '');
+  const waNumber = phoneKey(c.phone) ? `961${phoneKey(c.phone)}` : '';
+  detail.innerHTML = `
+    <div class="panel-title"><h2>${esc(c.name || 'No name')}</h2>${c.customer_id ? '<span class="cms-badge good">Account</span>' : '<span class="cms-badge">Guest</span>'}</div>
+    <dl class="cust-facts">
+      ${c.phone ? `<dt>Phone</dt><dd><a class="text-link" href="tel:${esc(phoneDigits)}">${esc(c.phone)}</a>${waNumber ? ` · <a class="text-link" href="https://wa.me/${esc(waNumber)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}</dd>` : ''}
+      ${c.email ? `<dt>Email</dt><dd><a class="text-link" href="mailto:${esc(c.email)}">${esc(c.email)}</a></dd>` : ''}
+      ${address ? `<dt>Area</dt><dd>${esc(address)}</dd>` : ''}
+      ${p.address || list[0]?.address ? `<dt>Address</dt><dd>${esc(p.address || list[0]?.address)}</dd>` : ''}
+      ${c.registered_at ? `<dt>Joined</dt><dd>${esc(new Date(c.registered_at).toLocaleDateString())}</dd>` : ''}
+      <dt>Orders</dt><dd>${c.orders_count} · ${money(c.total_spent)} spent${c.orders_count ? ` · ${money(Number(c.total_spent) / c.orders_count)} average` : ''}</dd>
+    </dl>
+    <h3 style="margin:18px 0 8px">Order history</h3>
+    ${list.length ? `<div class="cms-list">${list.map((o) => `<a class="cms-item" href="/admin/orders?q=${encodeURIComponent(o.order_number)}"><span class="cms-item-main"><strong>${esc(o.order_number)}</strong><small>${esc(when(o.created_at))}${o.coupon_code ? ` · code ${esc(o.coupon_code)}` : ''}</small></span><span class="status-pill status-${esc(o.status)}">${esc(o.status)}</span><strong>${money(o.total)}</strong></a>`).join('')}</div>` : '<p class="cms-empty">No orders yet.</p>'}`;
+}
+
+let timer = 0;
+$('#search').addEventListener('input', () => { clearTimeout(timer); timer = window.setTimeout(() => { offset = 0; load(); }, 300); });
+$('#prev').addEventListener('click', () => { offset = Math.max(0, offset - PAGE); load(); });
+$('#next').addEventListener('click', () => { offset += PAGE; load(); });
+$('#export').addEventListener('click', async () => {
+  const all: Customer[] = [];
+  for (let from = 0; from < 20000; from += 500) {
+    const r = await supabase.rpc('admin_list_customers', { p_search: $<HTMLInputElement>('#search').value.trim() || null, p_limit: 500, p_offset: from });
+    if (r.error) break;
+    all.push(...((r.data ?? []) as Customer[]));
+    if ((r.data ?? []).length < 500) break;
+  }
+  await exportXlsx(`clever-toys-customers-${new Date().toISOString().slice(0, 10)}.xlsx`, 'Customers',
+    [{ header: 'Name', width: 24 }, { header: 'Phone', width: 18 }, { header: 'Email', width: 28 }, { header: 'Governorate', width: 16 }, { header: 'Account', width: 10 }, { header: 'Orders', width: 9 }, { header: 'Spent ($)', width: 11 }, { header: 'Last order', width: 14 }],
+    all.map((c) => [c.name, c.phone, c.email, c.governorate, c.customer_id ? 'Yes' : 'Guest', Number(c.orders_count), Number(c.total_spent), c.last_order_at ? c.last_order_at.slice(0, 10) : '']));
+});
+
+(async () => {
+  const started = await startAdmin('customers', 'Customers');
+  if (!started) return;
+  supabase = started.supabase;
+  await load();
+})();
+</script>
+
+<style is:global>
+.cust-facts{display:grid;grid-template-columns:auto 1fr;gap:8px 14px;margin:0}
+.cust-facts dt{color:var(--muted);font-size:.8rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+.cust-facts dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+#rows tr.is-selected td{background:color-mix(in srgb,var(--brand-soft) 45%,transparent)}
+@media (hover:hover){#rows tr:hover td{background:var(--surface-2)}}
+.cms-item{color:inherit;text-decoration:none}
+</style>

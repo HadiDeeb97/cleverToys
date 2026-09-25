@@ -1,0 +1,116 @@
+---
+/**
+ * Admin → Reviews: customers' product reviews wait here until approved. Approve, hide, reply or
+ * delete. Only approved reviews appear on product pages. Needs supabase/cms.sql.
+ */
+import '../../styles/global.css';
+import { supabaseConfig } from '../../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
+---
+<head>
+  <title>Reviews | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Catalog</p>
+        <h1>Reviews</h1>
+        <p>Approve what customers write before it appears on the product page.</p>
+      </div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+
+    <div id="app" hidden>
+      <div id="setup" hidden></div>
+      <div id="tabs" class="cms-tabs chip-row" role="tablist"></div>
+      <div id="list" class="review-admin-list"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+import { startAdmin, esc, when, toast, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+
+type Review = { id: string; product_id: string; author_name: string; rating: number; title: string | null; body: string; status: 'pending' | 'approved' | 'hidden'; verified: boolean; admin_reply: string | null; created_at: string; products?: { name: string; slug: string } | null };
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+const LABELS = { pending: 'Waiting', approved: 'Approved', hidden: 'Hidden' } as const;
+let supabase: Db;
+let reviews: Review[] = [];
+let tab: keyof typeof LABELS | 'all' = 'pending';
+const stars = (n: number) => '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
+
+function render() {
+  const counts = { all: reviews.length, pending: 0, approved: 0, hidden: 0 } as Record<string, number>;
+  reviews.forEach((r) => counts[r.status]++);
+  $('#tabs').innerHTML = (['pending', 'approved', 'hidden', 'all'] as const).map((t) => `<button type="button" role="tab" class="chip${tab === t ? ' active' : ''}" data-tab="${t}" aria-selected="${tab === t}">${t === 'all' ? 'All' : LABELS[t]} <b>${counts[t]}</b></button>`).join('');
+  document.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.onclick = () => { tab = b.dataset.tab as typeof tab; render(); });
+  const list = reviews.filter((r) => tab === 'all' || r.status === tab);
+  $('#list').innerHTML = list.length ? list.map((r) => `
+    <article class="admin-panel review-admin" data-id="${esc(r.id)}">
+      <div class="review-admin-head">
+        <div><span class="review-stars" aria-label="${r.rating} out of 5 stars">${stars(r.rating)}</span> <strong>${esc(r.title || '')}</strong></div>
+        <span class="cms-badge ${r.status === 'approved' ? 'good' : r.status === 'pending' ? 'warn' : ''}">${LABELS[r.status]}</span>
+      </div>
+      <p class="review-admin-body">${esc(r.body)}</p>
+      <p class="cms-help">${esc(r.author_name)}${r.verified ? ' · <span class="cms-badge good">Verified buyer</span>' : ''} · ${esc(when(r.created_at))} · ${r.products ? `<a class="text-link" href="/product/${encodeURIComponent(r.products.slug)}" target="_blank" rel="noopener">${esc(r.products.name)}</a>` : 'Deleted product'}</p>
+      <label class="review-reply"><span>Your reply <small>(optional, shown under the review)</small></span><textarea rows="2" maxlength="1000" data-reply>${esc(r.admin_reply || '')}</textarea></label>
+      <div class="cms-actions">
+        ${r.status !== 'approved' ? '<button type="button" class="small-button" data-act="approved">✓ Approve</button>' : ''}
+        ${r.status !== 'hidden' ? '<button type="button" class="small-button" data-act="hidden">Hide</button>' : ''}
+        <button type="button" class="small-button" data-act="reply">Save reply</button>
+        <button type="button" class="small-button danger-button" data-act="delete">Delete</button>
+      </div>
+    </article>`).join('') : `<p class="cms-empty">${tab === 'pending' ? 'No reviews waiting. 🎉' : 'Nothing here yet.'}</p>`;
+  document.querySelectorAll<HTMLElement>('.review-admin').forEach((card) => {
+    card.querySelectorAll<HTMLButtonElement>('[data-act]').forEach((b) => b.onclick = () => act(card.dataset.id!, b.dataset.act!, card));
+  });
+}
+
+async function act(id: string, action: string, card: HTMLElement) {
+  const review = reviews.find((r) => r.id === id);
+  if (!review) return;
+  const reply = (card.querySelector('[data-reply]') as HTMLTextAreaElement).value.trim() || null;
+  let error;
+  if (action === 'delete') {
+    if (!confirm('Delete this review for good?')) return;
+    ({ error } = await supabase.from('reviews').delete().eq('id', id));
+  } else if (action === 'reply') {
+    ({ error } = await supabase.from('reviews').update({ admin_reply: reply }).eq('id', id));
+  } else {
+    ({ error } = await supabase.from('reviews').update({ status: action, admin_reply: reply }).eq('id', id));
+  }
+  if (error) { toast(error.message, 'error'); return; }
+  toast(action === 'delete' ? 'Review deleted.' : action === 'reply' ? 'Reply saved.' : action === 'approved' ? 'Review approved. It is now on the product page.' : 'Review hidden.');
+  await load();
+}
+
+async function load() {
+  const r = await supabase.from('reviews').select('*,products(name,slug)').order('created_at', { ascending: false }).limit(500);
+  if (missingTable(r.error)) { $('#setup').innerHTML = setupNotice(); $('#setup').hidden = false; return; }
+  if (r.error) { toast(r.error.message, 'error'); return; }
+  reviews = (r.data ?? []) as Review[];
+  if (tab === 'pending' && !reviews.some((x) => x.status === 'pending') && reviews.length) tab = 'all';
+  render();
+}
+
+(async () => {
+  const started = await startAdmin('reviews', 'Reviews');
+  if (!started) return;
+  supabase = started.supabase;
+  await load();
+})();
+</script>
+
+<style is:global>
+.review-admin-list{display:grid;gap:14px}
+.review-admin{display:grid;gap:10px}
+.review-admin-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.review-stars{color:#f5a623;letter-spacing:1px;font-size:1.05rem}
+.review-admin-body{margin:0;line-height:1.6;white-space:pre-line}
+.review-reply{display:grid;gap:6px;font-size:.86rem;font-weight:700}
+.review-reply small{color:var(--muted);font-weight:500}
+.review-reply textarea{width:100%;padding:9px 12px;border:1.5px solid var(--line-strong);border-radius:12px;font:inherit;font-weight:500;resize:vertical}
+</style>

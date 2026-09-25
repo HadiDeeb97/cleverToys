@@ -10,6 +10,7 @@
  * The "Order on WhatsApp" button is rendered here and wired up by public/branding-ui.js.
  */
 import { supabase } from '../../lib/supabase';
+import { supabaseConfig } from '../../lib/config';
 import { getPageData } from '../../lib/page-data';
 import { placeholderFor } from '../../lib/design';
 import ProductCard, { type CardProduct } from '../../components/ProductCard.astro';
@@ -70,14 +71,21 @@ const inStock = Boolean(product && product.stock_quantity > 0);
 type SimilarProduct = { id: string; name: string; slug: string; price: number; sale_price: number | null; stock_quantity: number; primary_image_url: string | null; is_active?: boolean; is_featured?: boolean; created_at?: string };
 const similarFields = 'id,name,slug,price,sale_price,stock_quantity,primary_image_url,age_min,age_max,is_active,is_featured,created_at,product_variants(id,is_active,price,sale_price)';
 let similarProducts: SimilarProduct[] = [];
+// Approved reviews (Admin → Reviews, supabase/cms.sql). Missing table → no reviews section data.
+type Review = { id: string; author_name: string; rating: number; title: string | null; body: string; verified: boolean; admin_reply: string | null; created_at: string };
+let reviews: Review[] = [];
+let reviewsEnabled = false;
 if (product) {
   const categoryIds = [...new Set([...(product.product_categories ?? []).map((row: { category_id: string }) => row.category_id), ...(product.categories?.id ? [product.categories.id] : [])])];
-  const [related, filler] = await Promise.all([
+  const [related, filler, reviewsResult] = await Promise.all([
     categoryIds.length
       ? supabase.from('product_categories').select(`product_id,products:product_id(${similarFields})`).in('category_id', categoryIds).neq('product_id', product.id).limit(60)
       : Promise.resolve({ data: [] as any[] }),
-    supabase.from('products').select(similarFields).eq('is_active', true).neq('id', product.id).order('is_featured', { ascending: false }).order('created_at', { ascending: false }).limit(8)
+    supabase.from('products').select(similarFields).eq('is_active', true).neq('id', product.id).order('is_featured', { ascending: false }).order('created_at', { ascending: false }).limit(8),
+    supabase.from('reviews').select('id,author_name,rating,title,body,verified,admin_reply,created_at').eq('product_id', product.id).eq('status', 'approved').order('created_at', { ascending: false }).limit(50)
   ]);
+  reviewsEnabled = !reviewsResult.error;
+  reviews = (reviewsResult.data ?? []) as Review[];
   const byRank = (a: SimilarProduct, b: SimilarProduct) => Number(b.is_featured) - Number(a.is_featured) || String(b.created_at).localeCompare(String(a.created_at));
   const seen = new Set<string>([product.id]);
   const relatedProducts = ((related.data ?? []) as any[])
@@ -103,6 +111,10 @@ const productSchema = product ? {
   sku: product.sku || undefined,
   brand: product.brand ? { '@type': 'Brand', name: product.brand } : undefined,
   image: images.map((image) => image.image_url),
+  ...(reviews.length ? {
+    aggregateRating: { '@type': 'AggregateRating', ratingValue: (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1), reviewCount: reviews.length, bestRating: 5, worstRating: 1 },
+    review: reviews.slice(0, 5).map((r) => ({ '@type': 'Review', author: { '@type': 'Person', name: r.author_name }, datePublished: r.created_at.slice(0, 10), reviewBody: r.body, name: r.title || undefined, reviewRating: { '@type': 'Rating', ratingValue: r.rating, bestRating: 5, worstRating: 1 } }))
+  } : {}),
   offers: {
     '@type': 'Offer',
     url: canonicalUrl,
@@ -132,6 +144,8 @@ const placeholder = placeholderFor(product?.name || 'toy');
 const discount = baseOriginalPrice && baseOriginalPrice > baseDisplayPrice ? Math.round((1 - baseDisplayPrice / baseOriginalPrice) * 100) : 0;
 // Also tag the toy as on sale when only some of its options are discounted.
 const onSale = discount > 0 || variants.some((v) => v.originalPrice != null && v.originalPrice > v.displayPrice);
+const averageRating = reviews.length ? reviews.reduce((s, r) => s + r.rating, 0) / reviews.length : 0;
+const starText = (n: number) => '★★★★★'.slice(0, Math.round(n)) + '☆☆☆☆☆'.slice(0, 5 - Math.round(n));
 const perks = [['🚚', design.product.delivery], ['💵', design.product.payment], ['↩️', design.product.returns]].filter(([, text]) => text);
 const similarCards = similarProducts as unknown as CardProduct[];
 ---
@@ -195,6 +209,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
           <div class="product-details">
             <p class="eyebrow">{product.brand || product.categories?.name || 'Clever Toys'}</p>
             <h1>{product.name}</h1>
+            {reviews.length > 0 && <a class="product-rating" href="#reviews"><span class="review-stars" aria-hidden="true">{starText(averageRating)}</span> {averageRating.toFixed(1)} · {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}</a>}
             <div class="price-row">
               <span id="detail-price" class="detail-price">${baseDisplayPrice.toFixed(2)}</span>
               <span id="original-price" class="original-price" hidden={baseOriginalPrice == null}>{baseOriginalPrice != null ? `$${baseOriginalPrice.toFixed(2)}` : ''}</span>
@@ -260,6 +275,44 @@ const similarCards = similarProducts as unknown as CardProduct[];
               </details>
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+  )}
+
+  {/* Reviews: approved ones are shown; anyone can write one (it waits for approval in Admin → Reviews). */}
+  {product && reviewsEnabled && (
+    <section class="section tight reviews-section" id="reviews" aria-labelledby="reviews-title">
+      <div class="container">
+        <div class="section-heading-row">
+          <div>
+            <h2 id="reviews-title">Reviews</h2>
+            <p>{reviews.length ? <><span class="review-stars" aria-hidden="true">{starText(averageRating)}</span> <strong>{averageRating.toFixed(1)} out of 5</strong> from {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}</> : 'No reviews yet. Be the first to share how your little one liked it.'}</p>
+          </div>
+        </div>
+        <div class="reviews-layout">
+          <div class="review-list">
+            {reviews.map((r) => (
+              <article class="review-card">
+                <div class="review-head"><span class="review-stars" aria-label={`${r.rating} out of 5 stars`}>{starText(r.rating)}</span>{r.title && <strong>{r.title}</strong>}</div>
+                <p class="review-body">{r.body}</p>
+                <p class="review-meta">{r.author_name}{r.verified && <span class="review-verified">✓ Verified buyer</span>} · {new Date(r.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                {r.admin_reply && <p class="review-reply"><strong>Clever Toys:</strong> {r.admin_reply}</p>}
+              </article>
+            ))}
+          </div>
+          <div id="auth-config" data-url={supabaseConfig().url} data-key={supabaseConfig().key} hidden></div>
+          <form class="review-form content-card" id="review-form" data-product={product.id} novalidate>
+            <h3>Write a review</h3>
+            <fieldset class="rating-input"><legend>Your rating</legend>
+              {[5, 4, 3, 2, 1].map((n) => <><input type="radio" name="rating" value={n} id={`rate-${n}`} required /><label for={`rate-${n}`} title={`${n} stars`}>★<span class="sr-only">{n} stars</span></label></>)}
+            </fieldset>
+            <label>Your name<input name="name" required maxlength="60" autocomplete="given-name" /></label>
+            <label>Title <span>(optional)</span><input name="title" maxlength="120" /></label>
+            <label>Your review<textarea name="body" required rows="4" maxlength="2000" placeholder="What did your child think?"></textarea></label>
+            <button type="submit" class="button">Send review</button>
+            <p id="review-message" class="review-message" role="status"></p>
+          </form>
         </div>
       </div>
     </section>
@@ -394,3 +447,28 @@ const similarCards = similarProducts as unknown as CardProduct[];
   }
   </script>
 )}
+
+<script>
+// Review form: sends the review to the store (submit_review in supabase/cms.sql); it appears after approval.
+import { getSupabase } from '../../scripts/supabase-browser';
+const reviewForm = document.getElementById('review-form') as HTMLFormElement | null;
+reviewForm?.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const message = document.getElementById('review-message')!;
+  const data = new FormData(reviewForm);
+  const rating = Number(data.get('rating') || 0);
+  const name = String(data.get('name') || '').trim();
+  const body = String(data.get('body') || '').trim();
+  if (!rating) { message.textContent = 'Please choose a star rating.'; return; }
+  if (!name || body.length < 3) { message.textContent = 'Please add your name and a few words about the toy.'; return; }
+  const button = reviewForm.querySelector<HTMLButtonElement>('button[type=submit]')!;
+  button.disabled = true;
+  message.textContent = 'Sending…';
+  const supabase = await getSupabase();
+  const result = supabase ? await supabase.rpc('submit_review', { p_product_id: reviewForm.dataset.product, p_name: name, p_rating: rating, p_title: String(data.get('title') || ''), p_body: body }) : { error: { message: 'Reviews are not available right now.' } };
+  button.disabled = false;
+  if (result.error) { message.textContent = result.error.message; return; }
+  reviewForm.reset();
+  message.textContent = 'Thank you! Your review will appear here once we have checked it.';
+});
+</script>

@@ -13,11 +13,13 @@ type Entry = { path: string; lastmod?: string | null; priority?: number | null; 
 
 export const GET: APIRoute = async ({ site }) => {
   const origin = site?.origin || 'https://clevertoys.hadidib97.workers.dev';
-  const [settingsResult, pagesResult, productsResult, categoriesResult] = await Promise.all([
+  const [settingsResult, pagesResult, productsResult, categoriesResult, contentPagesResult] = await Promise.all([
     supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle(),
     supabase.from('seo_pages').select('*'),
     supabase.from('products').select('slug, name, updated_at, primary_image_url, product_images(image_url, alt_text)').eq('is_active', true),
-    supabase.from('categories').select('slug, name, updated_at, image_url').eq('is_active', true)
+    supabase.from('categories').select('slug, name, updated_at, image_url').eq('is_active', true),
+    // Pages created in Admin → Pages (supabase/cms.sql); the four built-in ones are in STATIC_PAGES.
+    supabase.from('pages').select('slug, updated_at, is_system').eq('is_published', true)
   ]);
   const settings = parseSeoSettings(settingsResult.data?.seo);
   const pages = new Map((pagesResult.data ?? []).map((row: any) => [row.path_key, row]));
@@ -39,6 +41,12 @@ export const GET: APIRoute = async ({ site }) => {
   for (const page of STATIC_PAGES) {
     const o = options(page.path);
     if (!o.skip) add({ path: page.path, lastmod: o.lastmod, priority: o.priority ?? page.priority, changefreq: o.changefreq ?? page.changefreq });
+  }
+  for (const page of (contentPagesResult.data ?? []) as Array<{ slug: string; updated_at: string; is_system: boolean }>) {
+    if (page.is_system) continue;
+    const path = `/pages/${page.slug}`;
+    const o = options(path);
+    if (!o.skip) add({ path, lastmod: page.updated_at, priority: o.priority ?? 0.4, changefreq: o.changefreq ?? 'monthly' });
   }
   // Extra public pages added in Admin → SEO.
   for (const [key] of pages) {

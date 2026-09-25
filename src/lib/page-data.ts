@@ -50,7 +50,7 @@ export const parseTheme = (d: any): PublishedTheme | null => {
 };
 
 export type MenuCategory = { name: string; slug: string; image_url: string | null };
-export type PageData = { storeSettings: Record<string, any>; published: PublishedTheme; seo: any; design: StoreDesign; categories: MenuCategory[]; hasSale: boolean };
+export type PageData = { storeSettings: Record<string, any>; published: PublishedTheme; seo: any; design: StoreDesign; categories: MenuCategory[]; hasSale: boolean; footerPages: Array<{ slug: string; title: string }> };
 
 /**
  * Loads the store settings (Admin → Branding), the published theme and the page's SEO row.
@@ -59,7 +59,7 @@ export type PageData = { storeSettings: Record<string, any>; published: Publishe
  */
 export async function loadPageData(path: string): Promise<PageData> {
   const { url: base, key } = supabaseConfig();
-  const data: PageData = { storeSettings: { ...defaultStoreSettings }, published: { mode: 'logo', theme: null }, seo: null, design: parseDesign(null), categories: [], hasSale: false };
+  const data: PageData = { storeSettings: { ...defaultStoreSettings }, published: { mode: 'logo', theme: null }, seo: null, design: parseDesign(null), categories: [], hasSale: false, footerPages: [] };
   if (!base || !key) return data;
   const rest = `${base.replace(/\/$/, '')}/rest/v1`;
   const init = { headers: { apikey: key, Authorization: `Bearer ${key}` }, cf: { cacheTtl: 0, cacheEverything: false } };
@@ -115,7 +115,16 @@ export async function loadPageData(path: string): Promise<PageData> {
     } catch {}
   };
 
-  await Promise.all([loadSettings(), loadSeo(), loadCategories(), loadHasSale()]);
+  // Pages from Admin → Pages marked "Show in the footer" (table exists after supabase/cms.sql).
+  const loadFooterPages = async () => {
+    if (path.startsWith('/admin')) return;
+    try {
+      const r = await fetch(`${rest}/pages?select=slug,title&is_published=eq.true&show_in_footer=eq.true&is_system=eq.false&order=sort_order.asc&limit=8`, init);
+      if (r.ok) data.footerPages = ((await r.json()) as Array<{ slug: string; title: string }>).filter((p) => p && p.slug && p.title);
+    } catch {}
+  };
+
+  await Promise.all([loadSettings(), loadSeo(), loadCategories(), loadHasSale(), loadFooterPages()]);
   return data;
 }
 

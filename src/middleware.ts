@@ -104,7 +104,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const html = await response.text();
   const isAdmin = path === '/admin' || path.startsWith('/admin/');
   const { url: base } = supabaseConfig();
-  const { storeSettings, published, seo, design, categories, hasSale } = await (pageDataPromise ?? loadPageData(path));
+  const { storeSettings, published, seo, design, categories, hasSale, footerPages } = await (pageDataPromise ?? loadPageData(path));
   // Logo from Admin → Branding: the versioned upload (store_settings.logo_url) or the older fixed file.
   const brandingFolder = base ? `${base.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/` : '';
   const savedLogo = String(storeSettings.logo_url ?? '').trim();
@@ -261,23 +261,62 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   if (isAdmin) {
     // One admin layout for every admin page: sidebar navigation on desktop, compact top bar on phones.
-    const adminLinks: Array<[string, string, string]> = [
-      ['/admin/dashboard', 'Dashboard', '<path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 4v4h6V4z"/>'],
-      ['/admin/orders', 'Orders', '<path d="M6 3h12l2 5v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8zM4 8h16M9 12h6"/>'],
-      ['/admin/accounting', 'Accounting', '<path d="M4 4h16v16H4zM4 9h16M9 9v11M13 13h4M13 17h4"/>'],
-      ['/admin', 'Products', '<path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/>'],
-      ['/admin/analytics', 'Visitors', '<path d="M3 20V10M9 20V4M15 20v-7M21 20v-11"/>'],
-      ['/admin/team', 'Team', '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>'],
-      ['/admin/seo', 'SEO', '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'],
-      ['/admin/storefront', 'Storefront', '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 13h8M8 16h5"/>'],
-      ['/admin/branding', 'Branding & settings', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>']
+    // Sidebar groups. Each link names the permission it needs (see supabase/cms.sql → admin_role_allows);
+    // public/admin-ui.js hides links the signed-in staff member's role cannot open.
+    const I = {
+      dashboard: '<path d="M4 13h6V4H4zM14 20h6v-9h-6zM4 20h6v-4H4zM14 4v4h6V4z"/>',
+      orders: '<path d="M6 3h12l2 5v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8zM4 8h16M9 12h6"/>',
+      customers: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+      accounting: '<path d="M4 4h16v16H4zM4 9h16M9 9v11M13 13h4M13 17h4"/>',
+      products: '<path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/>',
+      reviews: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
+      discounts: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
+      banners: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/>',
+      pages: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9zM14 3v6h6M8 13h8M8 17h6"/>',
+      storefront: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 13h8M8 16h5"/>',
+      branding: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
+      seo: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+      visitors: '<path d="M3 20V10M9 20V4M15 20v-7M21 20v-11"/>',
+      team: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/>',
+      log: '<path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/>',
+      backup: '<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>'
+    };
+    const adminGroups: Array<[string, Array<[string, string, string, string]>]> = [
+      ['Sell', [
+        ['/admin/dashboard', 'Dashboard', I.dashboard, 'orders'],
+        ['/admin/orders', 'Orders', I.orders, 'orders'],
+        ['/admin/customers', 'Customers', I.customers, 'customers'],
+        ['/admin/accounting', 'Accounting', I.accounting, 'accounting']
+      ]],
+      ['Catalog', [
+        ['/admin', 'Products', I.products, 'products'],
+        ['/admin/reviews', 'Reviews', I.reviews, 'reviews']
+      ]],
+      ['Marketing', [
+        ['/admin/discounts', 'Discounts & delivery', I.discounts, 'marketing'],
+        ['/admin/banners', 'Home banners', I.banners, 'content']
+      ]],
+      ['Website', [
+        ['/admin/pages', 'Pages', I.pages, 'content'],
+        ['/admin/storefront', 'Storefront & menus', I.storefront, 'content'],
+        ['/admin/branding', 'Branding & settings', I.branding, 'settings'],
+        ['/admin/seo', 'SEO', I.seo, 'seo']
+      ]],
+      ['Insights', [
+        ['/admin/analytics', 'Visitors', I.visitors, 'analytics'],
+        ['/admin/activity', 'Activity log', I.log, 'logs']
+      ]],
+      ['Admin', [
+        ['/admin/team', 'Team', I.team, 'team'],
+        ['/admin/backup', 'Backup', I.backup, 'backup']
+      ]]
     ];
-    const adminNav = adminLinks.map(([href, label, icon]) => `<a href="${href}"${path === href || (href !== '/admin' && path.startsWith(href + '/')) ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg><span>${label}</span></a>`).join('');
+    const adminNav = adminGroups.map(([group, links]) => `<p class="admin-nav-group">${group}</p>${links.map(([href, label, icon, perm]) => `<a href="${href}" data-perm="${perm}"${path === href || (href !== '/admin' && path.startsWith(href + '/')) ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg><span>${label}</span></a>`).join('')}`).join('');
     const adminSidebar = `<aside class="admin-sidebar" aria-label="Admin"><a href="/admin/dashboard" class="admin-brand"><span class="admin-brand-mark" aria-hidden="true">🧸</span><span>Clever Toys<small>Admin</small></span></a><nav class="admin-nav" aria-label="Admin navigation">${adminNav}</nav><div class="admin-sidebar-footer"><a href="/" target="_blank" rel="noopener">View store ↗</a><button type="button" id="admin-signout">Sign out</button></div></aside>`;
     const adminHeaderPattern = /<header([^>]*class=["'][^"']*site-header[^"']*["'][^>]*)>[\s\S]*?<\/header>/i;
     if (adminHeaderPattern.test(output)) output = output.replace(adminHeaderPattern, () => adminSidebar);
     else output = output.replace('</head>', () => `</head>${adminSidebar}`);
-    output = output.replace('</head>', '<script src="/admin-ui.js?v=20260924-1" defer></script></head>');
+    output = output.replace('</head>', '<script src="/admin-ui.js?v=20260929-1" defer></script></head>');
   }
 
   if (!isAdmin) {
@@ -292,6 +331,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       design,
       categories,
       hasSale,
+      footerPages,
       whatsappUrl,
       instagramUrl,
       showWhatsapp,

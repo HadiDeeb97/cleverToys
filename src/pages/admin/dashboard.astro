@@ -31,7 +31,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <article class="kpi"><span>Orders · 30 days</span><strong id="kpi-orders">0</strong><small id="kpi-orders-delta"></small></article>
         <article class="kpi"><span>Average order</span><strong id="kpi-aov">$0.00</strong><small>Excludes cancelled orders</small></article>
         <a class="kpi kpi-link" href="/admin/orders?status=pending"><span>Pending orders</span><strong id="kpi-pending">0</strong><small>Need confirmation →</small></a>
-        <a class="kpi kpi-link" href="/admin?filter=low"><span>Low stock</span><strong id="kpi-low">0</strong><small>5 or fewer left →</small></a>
+        <a class="kpi kpi-link" href="/admin?filter=low"><span>Low stock</span><strong id="kpi-low">0</strong><small id="kpi-low-note">5 or fewer left →</small></a>
         <a class="kpi kpi-link" href="/admin?filter=out"><span>Out of stock</span><strong id="kpi-out">0</strong><small>Active products →</small></a>
       </section>
 
@@ -64,6 +64,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { allowPage } from '../../scripts/admin-access';
 
 // Order fields come from anonymous checkout input, so everything rendered as HTML is escaped.
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
@@ -86,11 +87,15 @@ const delta = (current: number, previous: number) => {
 
 async function load() {
   const since = new Date(Date.now() - 60 * DAY).toISOString();
-  const [ordersRes, productsRes, variantsRes] = await Promise.all([
+  const [ordersRes, productsRes, variantsRes, settingsRes] = await Promise.all([
     supabase.from('orders').select('id,order_number,customer_name,total,status,created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(2000),
     supabase.from('products').select('id,name,stock_quantity,is_active,primary_image_url'),
-    supabase.from('product_variants').select('id,product_id,name,stock_quantity,is_active')
+    supabase.from('product_variants').select('id,product_id,name,stock_quantity,is_active'),
+    supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle()
   ]);
+  // "Low stock" limit from Admin → Branding & settings (supabase/cms.sql); 5 before that.
+  const lowAt = Math.max(0, Number((settingsRes.data as any)?.low_stock_threshold ?? 5));
+  $('kpi-low-note').textContent = `${lowAt} or fewer left →`;
   const error = ordersRes.error || productsRes.error;
   if (error) throw new Error(error.message);
   const orders = (ordersRes.data ?? []) as any[];
@@ -110,7 +115,7 @@ async function load() {
   $('kpi-aov').textContent = money(last30.length ? sum(last30) / last30.length : 0);
   $('kpi-pending').textContent = String(orders.filter((o) => o.status === 'pending').length);
   const active = products.filter((p) => p.is_active);
-  $('kpi-low').textContent = String(active.filter((p) => p.stock_quantity > 0 && p.stock_quantity <= 5).length);
+  $('kpi-low').textContent = String(active.filter((p) => p.stock_quantity > 0 && p.stock_quantity <= lowAt).length);
   $('kpi-out').textContent = String(active.filter((p) => p.stock_quantity <= 0).length);
 
   // 14-day revenue bars
@@ -135,8 +140,8 @@ async function load() {
 
   const productName = new Map(products.map((p) => [p.id, p.name]));
   const low = [
-    ...active.filter((p) => p.stock_quantity <= 5).map((p) => ({ id: p.id, name: p.name, stock: p.stock_quantity })),
-    ...variants.filter((v) => v.is_active && v.stock_quantity <= 3 && productName.has(v.product_id)).map((v) => ({ id: v.product_id, name: `${productName.get(v.product_id)} · ${v.name}`, stock: v.stock_quantity }))
+    ...active.filter((p) => p.stock_quantity <= lowAt && !variants.some((v) => v.product_id === p.id && v.is_active)).map((p) => ({ id: p.id, name: p.name, stock: p.stock_quantity })),
+    ...variants.filter((v) => v.is_active && v.stock_quantity <= lowAt && productName.has(v.product_id)).map((v) => ({ id: v.product_id, name: `${productName.get(v.product_id)} · ${v.name}`, stock: v.stock_quantity }))
   ].sort((a, b) => a.stock - b.stock).slice(0, 8);
   $('low-stock').innerHTML = low.length ? low.map((p) => `<li><a href="/admin?edit=${encodeURIComponent(p.id)}">${esc(p.name)}</a><strong class="${p.stock <= 0 ? 'out' : 'low'}">${p.stock <= 0 ? 'Out of stock' : `${p.stock} left`}</strong></li>`).join('') : '<li class="muted">Everything is well stocked. 🎉</li>';
 
@@ -158,6 +163,8 @@ async function init() {
     const { data: isAdmin, error } = await supabase.rpc('is_admin');
     if (error) throw new Error(error.message);
     if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><a class="button" href="/">Back to store</a>'; return; }
+    // Staff roles (supabase/cms.sql): stop here if this role cannot open the page.
+    if (!(await allowPage(supabase, 'orders', 'Dashboard'))) return;
     guard.hidden = true;
     dash.hidden = false;
     await load();

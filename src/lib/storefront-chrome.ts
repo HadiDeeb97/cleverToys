@@ -39,6 +39,8 @@ export type ChromeOptions = {
   logoUrl: string;
   design: StoreDesign;
   categories: MenuCategory[];
+  /** Pages from Admin → Pages marked "Show in the footer". */
+  footerPages: Array<{ slug: string; title: string }>;
   /** Something is on sale: show "Sale" links (they open /products?sale=1). */
   hasSale: boolean;
   whatsappUrl: string;
@@ -51,6 +53,9 @@ export type ChromeOptions = {
 
 const isActive = (path: string, href: string) => path === href || (href !== '/' && path.startsWith(href + '/'));
 const current = (path: string, href: string) => isActive(path, href) ? ' aria-current="page"' : '';
+/** Links typed in the admin: escaped, and https links open in a new tab. */
+const linkAttrs = (href: string) => `href="${esc(href)}"${/^https:/i.test(href) ? ' target="_blank" rel="noopener noreferrer"' : ''}`;
+const navLink = (path: string, href: string, label: string) => `<a ${linkAttrs(href)}${current(path, href)}>${esc(label)}</a>`;
 
 const logoMarkup = (logoUrl: string) => logoUrl
   ? `<img class="site-logo-image" src="${esc(logoUrl)}" alt="Clever Toys" decoding="async" onerror="this.hidden=true"><span class="logo-text">Clever Toys</span>`
@@ -77,10 +82,7 @@ export function renderHeader(o: ChromeOptions) {
     <a href="/" class="logo" aria-label="Clever Toys home">${logoMarkup(o.logoUrl)}</a>
     <nav class="main-nav" aria-label="Main navigation">
       <div class="nav-item"><a class="nav-link" href="/products"${current(o.path, '/products')}>Shop ${ICONS.chevron}</a>${mega}</div>${o.hasSale ? '<a class="nav-sale" href="/products?sale=1">Sale</a>' : ''}
-      <a href="/categories"${current(o.path, '/categories')}>Categories</a>
-      <a href="/about"${current(o.path, '/about')}>About</a>
-      <a href="/contact"${current(o.path, '/contact')}>Contact</a>
-      <a href="/track-order"${current(o.path, '/track-order')}>Track order</a>
+      ${o.design.menus.header.map((l) => navLink(o.path, l.href, l.label)).join('')}
     </nav>
     <div class="header-actions">
       <form class="header-search" action="/products" method="get" role="search">${ICONS.search}<label class="sr-only" for="header-search-input">Search toys</label><input id="header-search-input" name="q" type="search" value="${esc(o.searchValue)}" placeholder="Search toys…" autocomplete="off" /></form>
@@ -95,7 +97,10 @@ export function renderHeader(o: ChromeOptions) {
 
 /** Slide-in menu for phones and tablets (opened by the ☰ button). */
 export function renderMenuDrawer(o: ChromeOptions) {
-  const links: Array<[string, string]> = [['/', 'Home'], ['/products', 'Shop all toys'], ...(o.hasSale ? [['/products?sale=1', 'Sale'] as [string, string]] : []), ['/categories', 'Categories'], ['/track-order', 'Track your order'], ['/about', 'About us'], ['/contact', 'Contact'], ['/account', 'My account']];
+  // Home, shop and sale first, then the header menu from Admin → Storefront & menus, then the account.
+  const all: Array<[string, string]> = [['/', 'Home'], ['/products', 'Shop all toys'], ...(o.hasSale ? [['/products?sale=1', 'Sale'] as [string, string]] : []),
+    ...o.design.menus.header.map((l): [string, string] => [l.href, l.label]), ['/account', 'My account']];
+  const links = all.filter(([href], i) => all.findIndex(([h]) => h === href) === i);
   const categories = o.categories.map((c) => `<a href="/category/${encodeURIComponent(c.slug)}">${tileMedia(c.name, c.image_url)}<span>${esc(c.name)}</span></a>`).join('');
   return `<div class="drawer site-drawer" id="site-drawer" hidden>
   <div class="drawer-backdrop" data-drawer-close></div>
@@ -103,7 +108,7 @@ export function renderMenuDrawer(o: ChromeOptions) {
     <div class="drawer-head"><strong>Menu</strong><button type="button" class="icon-button" data-drawer-close aria-label="Close menu">${ICONS.close}</button></div>
     <div class="drawer-body">
       <form class="drawer-search" action="/products" method="get" role="search">${ICONS.search}<label class="sr-only" for="drawer-search-input">Search toys</label><input id="drawer-search-input" name="q" type="search" value="${esc(o.searchValue)}" placeholder="Search toys…" autocomplete="off" enterkeyhint="search" /></form>
-      <nav class="drawer-nav" aria-label="Menu">${links.map(([href, label]) => `<a href="${href}"${current(o.path, href)}>${label}<span aria-hidden="true">→</span></a>`).join('')}</nav>
+      <nav class="drawer-nav" aria-label="Menu">${links.map(([href, label]) => `<a ${linkAttrs(href)}${current(o.path, href)}>${esc(label)}<span aria-hidden="true">→</span></a>`).join('')}</nav>
       ${categories ? `<p class="drawer-section-title">Shop by category</p><div class="drawer-categories">${categories}</div>` : ''}
       <p class="drawer-section-title">Need help?</p>
       <div class="drawer-contact">
@@ -128,13 +133,13 @@ export function renderFooter(o: ChromeOptions) {
     o.showInstagram && `<a href="${esc(o.instagramUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Instagram">${ICONS.instagram}</a>`
   ].filter(Boolean).join('');
   const shopLinks = [['/products', 'All toys'], ['/products?sort=newest', 'New arrivals'], ...(o.hasSale ? [['/products?sale=1', 'Sale']] : []), ...o.categories.slice(0, 5).map((c) => [`/category/${encodeURIComponent(c.slug)}`, c.name])];
-  const col = (title: string, items: string[][]) => `<nav class="footer-col" aria-label="${esc(title)}"><h2>${esc(title)}</h2><ul>${items.map(([href, label]) => `<li><a href="${href}">${esc(label)}</a></li>`).join('')}</ul></nav>`;
+  const col = (title: string, items: string[][]) => `<nav class="footer-col" aria-label="${esc(title)}"><h2>${esc(title)}</h2><ul>${items.map(([href, label]) => `<li><a ${linkAttrs(href)}>${esc(label)}</a></li>`).join('')}</ul></nav>`;
   return `<footer class="site-footer"><div class="container">
   <div class="footer-grid">
     <div class="footer-brand"><strong>Clever Toys</strong><p>${esc(f.about)}</p>${contact ? `<ul class="footer-contact">${contact}</ul>` : ''}${socials ? `<div class="footer-socials">${socials}</div>` : ''}</div>
     ${col('Shop', shopLinks)}
-    ${col('Help', [['/track-order', 'Track your order'], ['/shipping-returns', 'Shipping & returns'], ['/contact', 'Contact us'], ['/account', 'My account']])}
-    ${col('Company', [['/about', 'About us'], ['/privacy', 'Privacy policy'], ['/terms', 'Terms of sale']])}
+    ${o.design.menus.help.length ? col('Help', o.design.menus.help.map((l) => [l.href, l.label])) : ''}
+    ${col('Company', [...o.design.menus.company.map((l) => [l.href, l.label]), ...o.footerPages.map((p) => [`/pages/${encodeURIComponent(p.slug)}`, p.title])])}
   </div>
   <div class="footer-badges"><span>💵 Cash on delivery</span><span>🚚 Delivery across Lebanon</span><span>🔒 Secure checkout</span></div>
   <div class="footer-bottom"><p>© ${new Date().getFullYear()} Clever Toys. All rights reserved.</p><p>${esc(f.note)}</p></div>

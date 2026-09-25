@@ -46,6 +46,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <button class="tab" data-tab="home" role="tab" aria-selected="false" type="button">Home page</button>
         <button class="tab" data-tab="product" role="tab" aria-selected="false" type="button">Product page</button>
         <button class="tab" data-tab="footer" role="tab" aria-selected="false" type="button">Footer &amp; contact</button>
+        <button class="tab" data-tab="menus" role="tab" aria-selected="false" type="button">Menus</button>
       </div>
 
       <form id="design-form" novalidate>
@@ -215,6 +216,28 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
           </div>
         </section>
 
+        <section class="sf-tab" id="tab-menus" hidden>
+          <div class="sf-grid">
+            <div class="admin-panel sf-panel">
+              <h2>Header menu</h2>
+              <p class="muted">Links next to “Shop” (and in the phone menu). “Shop” and “Sale” are always there. Up to 7 links.</p>
+              <div class="sf-menu" data-menu="header"></div>
+              <button type="button" class="small-button" data-menu-add="header">+ Add link</button>
+            </div>
+            <div class="admin-panel sf-panel">
+              <h2>Footer: Help</h2>
+              <p class="muted">Leave empty to hide this column.</p>
+              <div class="sf-menu" data-menu="help"></div>
+              <button type="button" class="small-button" data-menu-add="help">+ Add link</button>
+              <h2 style="margin-top:22px">Footer: Company</h2>
+              <p class="muted">Pages marked “Show in the footer” in <a class="text-link" href="/admin/pages">Pages</a> are added here automatically.</p>
+              <div class="sf-menu" data-menu="company"></div>
+              <button type="button" class="small-button" data-menu-add="company">+ Add link</button>
+            </div>
+          </div>
+          <p class="muted small">Links can be a page on this site (for example <code>/products?sort=newest</code>, <code>/category/puzzles-games</code>, <code>/pages/gift-guide</code>) or a full <code>https://</code> address.</p>
+        </section>
+
         <div class="sf-savebar">
           <span id="save-state" class="muted" role="status">All changes saved</span>
           <button type="button" class="small-button" id="reset-defaults">Reset to defaults</button>
@@ -227,6 +250,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { allowPage, toWebp } from '../../scripts/admin-access';
 import { DEFAULT_DESIGN, FONT_PRESETS, HOME_SECTIONS, parseDesign, safeLink, type StoreDesign } from '../../lib/design';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -266,6 +290,7 @@ function fillForm() {
   document.querySelectorAll<HTMLElement>('[data-image]').forEach(renderImage);
   renderSections();
   renderTrust();
+  renderMenus();
   ($('#c-phone') as HTMLInputElement).value = seoSettings.org_phone || '';
   ($('#c-email') as HTMLInputElement).value = seoSettings.org_email || '';
   ($('#c-city') as HTMLInputElement).value = seoSettings.org_city || '';
@@ -355,15 +380,6 @@ function renderImage(box: HTMLElement) {
   box.innerHTML = `${url ? `<img src="${esc(url)}" alt="" />` : '<span class="sf-image-empty">No picture</span>'}
     <div class="sf-image-actions"><label class="small-button">${url ? 'Replace' : 'Upload'}<input type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" data-upload="${esc(path)}" /></label>${url ? `<button type="button" class="small-button" data-remove-image="${esc(path)}">Remove</button>` : ''}</div>`;
 }
-async function toWebp(file: File) {
-  const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(bmp.width * scale));
-  canvas.height = Math.max(1, Math.round(bmp.height * scale));
-  canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-  return new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => b ? resolve(b) : reject(new Error('Could not convert the picture.')), 'image/webp', 0.84));
-}
 document.addEventListener('change', async (event) => {
   const input = event.target as HTMLInputElement;
   if (!input.dataset.upload || !input.files?.[0]) return;
@@ -408,6 +424,52 @@ $('#design-form').addEventListener('input', (event) => {
   } else if (['c-phone', 'c-email', 'c-city'].includes(el.id)) {
     markDirty();
   }
+});
+
+// ---------- Menus ----------
+type MenuKey = 'header' | 'help' | 'company';
+const MENU_MAX: Record<MenuKey, number> = { header: 7, help: 8, company: 8 };
+function renderMenus() {
+  (['header', 'help', 'company'] as MenuKey[]).forEach((key) => {
+    const list = design.menus[key];
+    $(`[data-menu="${key}"]`).innerHTML = list.map((l, i) => `
+      <div class="sf-menu-row">
+        <input class="admin-input" data-menu-item="${key}" data-i="${i}" data-key="label" value="${esc(l.label)}" maxlength="40" placeholder="Label" aria-label="Link label" />
+        <input class="admin-input" data-menu-item="${key}" data-i="${i}" data-key="href" value="${esc(l.href)}" maxlength="500" placeholder="/page or https://…" aria-label="Link address" data-link pattern="^(/(?!/)[^\\s&quot;<>]*|https://[^\\s&quot;<>]+)$" />
+        <span class="sf-menu-moves"><button type="button" class="small-button" data-menu-move="${key}" data-i="${i}" data-dir="-1" aria-label="Move up"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" class="small-button" data-menu-move="${key}" data-i="${i}" data-dir="1" aria-label="Move down"${i === list.length - 1 ? ' disabled' : ''}>↓</button></span>
+        <button type="button" class="small-button danger-button" data-menu-remove="${key}" data-i="${i}" aria-label="Remove link">✕</button>
+      </div>`).join('') || '<p class="muted small">No links.</p>';
+    $<HTMLButtonElement>(`[data-menu-add="${key}"]`).disabled = list.length >= MENU_MAX[key];
+  });
+}
+$('#tab-menus').addEventListener('input', (event) => {
+  const el = event.target as HTMLInputElement;
+  if (!el.dataset.menuItem) return;
+  (design.menus[el.dataset.menuItem as MenuKey][Number(el.dataset.i)] as any)[el.dataset.key!] = el.value;
+  markDirty();
+});
+$('#tab-menus').addEventListener('click', (event) => {
+  const target = event.target as HTMLElement;
+  const add = target.closest<HTMLButtonElement>('[data-menu-add]');
+  const remove = target.closest<HTMLButtonElement>('[data-menu-remove]');
+  const move = target.closest<HTMLButtonElement>('[data-menu-move]');
+  if (add) {
+    const key = add.dataset.menuAdd as MenuKey;
+    if (design.menus[key].length >= MENU_MAX[key]) return;
+    design.menus[key].push({ label: '', href: '' });
+    renderMenus();
+    $<HTMLInputElement>(`[data-menu-item="${key}"][data-i="${design.menus[key].length - 1}"][data-key="label"]`)?.focus();
+  } else if (remove) {
+    design.menus[remove.dataset.menuRemove as MenuKey].splice(Number(remove.dataset.i), 1);
+    renderMenus();
+  } else if (move) {
+    const list = design.menus[move.dataset.menuMove as MenuKey];
+    const i = Number(move.dataset.i), j = i + Number(move.dataset.dir);
+    if (j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    renderMenus();
+  } else return;
+  markDirty();
 });
 
 // ---------- Tabs ----------
@@ -469,6 +531,8 @@ async function init() {
     const { data: isAdmin, error } = await supabase.rpc('is_admin');
     if (error) throw new Error(error.message);
     if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><a class="button" href="/">Back to store</a>'; return; }
+    // Staff roles (supabase/cms.sql): stop here if this role cannot open the page.
+    if (!(await allowPage(supabase, 'content', 'Storefront'))) return;
     const settings = await supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle();
     if (settings.error) throw new Error(settings.error.message);
     const row: Record<string, any> = settings.data || {};
@@ -482,7 +546,7 @@ async function init() {
     guard.hidden = true;
     $('#app').hidden = false;
     const start = location.hash.slice(1);
-    if (['style', 'home', 'product', 'footer'].includes(start)) showTab(start);
+    if (['style', 'home', 'product', 'footer', 'menus'].includes(start)) showTab(start);
   } catch (error) {
     guard.hidden = false;
     guard.innerHTML = `<h2>Storefront settings could not load</h2><p>${esc(error instanceof Error ? error.message : 'Unknown error')}</p>`;
@@ -544,6 +608,11 @@ init();
 .sf-image-actions label{cursor:pointer}
 .sf-image.is-busy{opacity:.5;pointer-events:none}
 .sf-trust{display:grid;gap:8px;margin-bottom:12px}
+.sf-menu{display:grid;gap:8px;margin:10px 0 12px}
+.sf-menu-row{display:grid;grid-template-columns:1fr 1.4fr auto auto;gap:8px;align-items:center}
+.sf-menu-moves{display:flex;gap:4px}
+.sf-menu-moves .small-button,.sf-menu-row>.small-button{min-width:38px;padding:0 10px}
+@media(max-width:600px){.sf-menu-row{grid-template-columns:1fr auto auto}.sf-menu-row input:nth-child(2){grid-column:1/-1;grid-row:2}}
 .sf-trust-row{display:grid;grid-template-columns:64px 1fr 1.4fr auto;gap:8px}
 .sf-emoji{text-align:center;font-size:1.2rem}
 .sf-savebar{position:sticky;bottom:0;z-index:5;display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:18px;padding:14px 18px;border:1px solid var(--line);border-radius:18px;background:color-mix(in srgb,var(--surface) 94%,transparent);box-shadow:0 -8px 30px rgba(0,0,0,.06);backdrop-filter:blur(10px)}

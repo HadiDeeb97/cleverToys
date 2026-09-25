@@ -1,0 +1,109 @@
+---
+/**
+ * Admin → Backup (owners only): download everything the store has (products, orders, customers,
+ * content, settings…) as one JSON file, or any single table as an Excel sheet.
+ * Nothing leaves the browser except the download itself.
+ */
+import '../../styles/global.css';
+import { supabaseConfig } from '../../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
+---
+<head>
+  <title>Backup | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Admin</p>
+        <h1>Backup & export</h1>
+        <p>Keep a copy of your store on your computer. We suggest a full backup once a week.</p>
+      </div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+
+    <div id="app" hidden>
+      <div class="cms-layout">
+        <section class="admin-panel">
+          <h2>Full backup</h2>
+          <p class="cms-help">One file with every table: products, options, photos, categories, orders, customers, discount codes, delivery fees, pages, banners, reviews, SEO, settings, stock history and the activity log. Keep it somewhere safe: it contains customer details.</p>
+          <div class="cms-actions" style="margin-top:14px"><button id="full" class="button" type="button">Download full backup (.json)</button></div>
+          <p id="full-status" class="cms-help" role="status" style="margin-top:10px"></p>
+          <p class="cms-help" style="margin-top:14px">Supabase also keeps its own daily backups of the database (Project → Database → Backups).</p>
+        </section>
+        <section class="admin-panel">
+          <h2>Export one table to Excel</h2>
+          <div id="tables" class="cms-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+import { startAdmin, esc, toast, type Db } from '../../scripts/admin-access';
+import { exportXlsx } from '../../scripts/table-export';
+
+// [table, label, order column]
+const TABLES: Array<[string, string, string]> = [
+  ['products', 'Products', 'created_at'], ['product_variants', 'Product options', 'created_at'], ['product_images', 'Product photos', 'created_at'],
+  ['categories', 'Categories', 'sort_order'], ['product_categories', 'Product ↔ category links', 'created_at'],
+  ['orders', 'Orders', 'created_at'], ['order_items', 'Order items', 'created_at'], ['customer_profiles', 'Customer profiles', 'created_at'],
+  ['expenses', 'Expenses', 'spent_on'], ['coupons', 'Discount codes', 'created_at'], ['delivery_zones', 'Delivery fees', 'governorate'],
+  ['pages', 'Pages', 'sort_order'], ['banners', 'Home banners', 'sort_order'], ['reviews', 'Reviews', 'created_at'],
+  ['seo_pages', 'SEO pages', 'path_key'], ['store_settings', 'Store settings', 'id'], ['stock_movements', 'Stock history', 'created_at'],
+  ['admin_activity', 'Activity log', 'created_at']
+];
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+let supabase: Db;
+
+/** Reads a whole table, 1000 rows at a time. Returns null when the table does not exist yet. */
+async function readAll(table: string, order: string): Promise<any[] | null> {
+  const rows: any[] = [];
+  for (let from = 0; ; from += 1000) {
+    const r = await supabase.from(table).select('*').order(order, { ascending: true }).range(from, from + 999);
+    if (r.error) return from === 0 ? null : rows;
+    rows.push(...(r.data ?? []));
+    if ((r.data ?? []).length < 1000) return rows;
+  }
+}
+const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+const cell = (v: unknown) => v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : typeof v === 'number' ? v : String(v);
+
+$('#full').addEventListener('click', async () => {
+  const button = $<HTMLButtonElement>('#full'); button.disabled = true;
+  const status = $('#full-status');
+  const backup: Record<string, unknown> = { store: 'Clever Toys', created_at: new Date().toISOString(), tables: {} };
+  let total = 0;
+  for (const [table, label, order] of TABLES) {
+    status.textContent = `Reading ${label}…`;
+    const rows = await readAll(table, order);
+    if (rows) { (backup.tables as Record<string, unknown[]>)[table] = rows; total += rows.length; }
+  }
+  const blob = new Blob([JSON.stringify(backup, null, 1)], { type: 'application/json' });
+  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `clever-toys-backup-${stamp()}.json`;
+  document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+  status.textContent = `Done: ${total.toLocaleString()} rows from ${Object.keys(backup.tables as object).length} tables.`;
+  toast('Backup downloaded.');
+  button.disabled = false;
+});
+
+(async () => {
+  const started = await startAdmin('backup', 'Backup');
+  if (!started) return;
+  supabase = started.supabase;
+  $('#tables').innerHTML = TABLES.map(([table, label]) => `<div class="cms-item"><span class="cms-item-main"><strong>${esc(label)}</strong><small><code>${esc(table)}</code></small></span><button type="button" class="small-button" data-table="${esc(table)}">Excel</button></div>`).join('');
+  document.querySelectorAll<HTMLButtonElement>('[data-table]').forEach((b) => b.onclick = async () => {
+    const entry = TABLES.find(([t]) => t === b.dataset.table)!;
+    b.disabled = true; b.textContent = 'Reading…';
+    const rows = await readAll(entry[0], entry[2]);
+    b.disabled = false; b.textContent = 'Excel';
+    if (!rows) { toast(`${entry[1]} is not available yet (run supabase/cms.sql) or your role cannot read it.`, 'error'); return; }
+    if (!rows.length) { toast(`${entry[1]} is empty.`); return; }
+    const keys = Object.keys(rows[0]);
+    await exportXlsx(`clever-toys-${entry[0]}-${stamp()}.xlsx`, entry[1].slice(0, 31), keys.map((k) => ({ header: k, width: Math.min(40, Math.max(10, k.length + 4)) })), rows.map((r) => keys.map((k) => cell(r[k]))));
+  });
+})();
+</script>

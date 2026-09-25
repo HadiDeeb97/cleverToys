@@ -12,7 +12,9 @@ export type FontPreset = 'premium' | 'modern' | 'playful' | 'classic';
 export type Corners = 'sharp' | 'soft' | 'round';
 export type Background = 'cream' | 'white' | 'tint';
 export type ButtonStyle = 'pill' | 'rounded';
-export type HomeSectionId = 'hero' | 'trust' | 'categories' | 'featured' | 'promo' | 'new' | 'ages' | 'story' | 'help';
+export type HomeSectionId = 'banners' | 'hero' | 'trust' | 'categories' | 'featured' | 'promo' | 'new' | 'ages' | 'story' | 'help';
+/** A menu link: site path (/…) or https link. */
+export type MenuLink = { label: string; href: string };
 
 export type StoreDesign = {
   font: FontPreset;
@@ -30,6 +32,8 @@ export type StoreDesign = {
   help: { title: string; text: string; button_label: string };
   product: { delivery: string; payment: string; returns: string };
   footer: { about: string; address: string; hours: string; note: string };
+  /** Editable menus (Admin → Storefront & menus → Menus). */
+  menus: { header: MenuLink[]; help: MenuLink[]; company: MenuLink[] };
 };
 
 /** Font pairs. `href` is the Google Fonts stylesheet; families are used by CSS through html[data-font]. */
@@ -41,6 +45,7 @@ export const FONT_PRESETS: Record<FontPreset, { label: string; description: stri
 };
 
 export const HOME_SECTIONS: Record<HomeSectionId, { label: string; description: string }> = {
+  banners: { label: 'Banner slideshow', description: 'Your scheduled banners from Admin → Home banners (hidden when none are live)' },
   hero: { label: 'Hero banner', description: 'Big headline, buttons and image at the top' },
   trust: { label: 'Store promises', description: 'Short reasons to buy (delivery, payment…)' },
   categories: { label: 'Shop by category', description: 'Your categories as tiles' },
@@ -76,7 +81,7 @@ export const DEFAULT_DESIGN: StoreDesign = {
     { icon: '⭐', title: 'Hand-picked quality', text: 'Safe, durable and fun' },
     { icon: '💬', title: 'Real help on WhatsApp', text: 'Ask us anything about a toy' }
   ],
-  sections: (['hero', 'trust', 'categories', 'featured', 'promo', 'new', 'ages', 'story', 'help'] as HomeSectionId[]).map((id) => ({ id, enabled: true })),
+  sections: (['banners', 'hero', 'trust', 'categories', 'featured', 'promo', 'new', 'ages', 'story', 'help'] as HomeSectionId[]).map((id) => ({ id, enabled: true })),
   titles: {
     categories: { title: 'Shop by category', subtitle: 'Find the right kind of play for every child.' },
     featured: { title: 'Featured toys', subtitle: 'Our favourites, loved by kids and parents.' },
@@ -111,6 +116,11 @@ export const DEFAULT_DESIGN: StoreDesign = {
     address: '',
     hours: '',
     note: 'Made for curious minds 🧸'
+  },
+  menus: {
+    header: [{ label: 'Categories', href: '/categories' }, { label: 'About', href: '/about' }, { label: 'Contact', href: '/contact' }, { label: 'Track order', href: '/track-order' }],
+    help: [{ label: 'Track your order', href: '/track-order' }, { label: 'Shipping & returns', href: '/shipping-returns' }, { label: 'Contact us', href: '/contact' }, { label: 'My account', href: '/account' }],
+    company: [{ label: 'About us', href: '/about' }, { label: 'Privacy policy', href: '/privacy' }, { label: 'Terms of sale', href: '/terms' }]
   }
 };
 
@@ -123,6 +133,13 @@ const text = (value: unknown, fallback: string, max: number) => {
 const paragraph = (value: unknown, fallback: string, max: number) => typeof value === 'string' ? value.replace(/\r/g, '').trim().slice(0, max) : fallback;
 const oneOf = <T extends string>(value: unknown, options: readonly T[], fallback: T): T => options.includes(value as T) ? (value as T) : fallback;
 const bool = (value: unknown, fallback: boolean) => typeof value === 'boolean' ? value : fallback;
+/** A saved menu: up to `max` links with a label and a safe link; the default when never saved. */
+const menu = (value: unknown, fallback: MenuLink[], max: number): MenuLink[] => {
+  if (!Array.isArray(value)) return fallback;
+  return value.slice(0, max)
+    .map((item: any) => ({ label: text(item?.label, '', 40), href: safeLink(item?.href, '') }))
+    .filter((item) => item.label && item.href);
+};
 /** Site paths (/products?…) or https links only, never javascript: or data: links. */
 export const safeLink = (value: unknown, fallback: string) => {
   const v = typeof value === 'string' ? value.trim() : '';
@@ -146,6 +163,8 @@ export function parseDesign(value: unknown): StoreDesign {
   const known = Object.keys(HOME_SECTIONS) as HomeSectionId[];
   const saved = Array.isArray(d.sections) ? d.sections.filter((s: any) => known.includes(s?.id)) : [];
   const seen = new Set<string>();
+  // The banner slideshow (added later) goes to the top for designs saved before it existed.
+  if (saved.length && !saved.some((s: any) => s.id === 'banners')) saved.unshift({ id: 'banners', enabled: true });
   const sections = [...saved, ...D.sections]
     .filter((s: any) => !seen.has(s.id) && seen.add(s.id))
     .map((s: any) => ({ id: s.id as HomeSectionId, enabled: bool(s.enabled, true) }));
@@ -212,6 +231,11 @@ export function parseDesign(value: unknown): StoreDesign {
       address: text(footer.address, D.footer.address, 160),
       hours: text(footer.hours, D.footer.hours, 120),
       note: text(footer.note, D.footer.note, 80)
+    },
+    menus: {
+      header: menu(d.menus?.header, D.menus.header, 7),
+      help: menu(d.menus?.help, D.menus.help, 8),
+      company: menu(d.menus?.company, D.menus.company, 8)
     }
   };
 }

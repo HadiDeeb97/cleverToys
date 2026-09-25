@@ -1,0 +1,37 @@
+---
+/**
+ * Pages created in Admin → Pages: /pages/<address> (for example /pages/gift-guide).
+ * The four built-in pages (About, Privacy, Terms, Shipping & returns) keep their own addresses and
+ * are sent there. Unknown or unpublished pages show the 404 message.
+ */
+import '../../styles/global.css';
+import ContentPageView from '../../components/ContentPageView.astro';
+import { getContentPage, SYSTEM_PAGE_PATHS } from '../../lib/content-pages';
+import { markdownToText } from '../../lib/markdown';
+
+const slug = String(Astro.params.slug || '').toLowerCase();
+if (SYSTEM_PAGE_PATHS[slug]) return Astro.redirect(SYSTEM_PAGE_PATHS[slug], 301);
+const page = /^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) ? await getContentPage(slug) : null;
+if (!page) Astro.response.status = 404;
+const title = page ? `${page.title} | Clever Toys` : 'Page not found | Clever Toys';
+const description = page ? (page.intro || markdownToText(page.body)) : 'This page does not exist.';
+---
+<head>
+  <title>{title}</title>
+  <meta name="description" content={description} />
+  {page ? <link rel="canonical" href={new URL(`/pages/${page.slug}`, Astro.site ?? Astro.url.origin).href} /> : <meta name="robots" content="noindex" />}
+</head>
+<header class="site-header"></header>
+{page ? <ContentPageView page={page} /> : (
+  <main class="section">
+    <div class="container narrow">
+      <div class="empty-state">
+        <p class="eyebrow">404</p>
+        <h1>Page not found</h1>
+        <p>This page does not exist or is no longer available.</p>
+        <a class="button" href="/">Back to the store</a>
+      </div>
+    </div>
+  </main>
+)}
+<footer class="site-footer"></footer>

@@ -9,7 +9,7 @@
  */
 import { supabase } from '../lib/supabase';
 import { getPageData, DEFAULT_WHATSAPP_URL } from '../lib/page-data';
-import { AGE_RANGES, placeholderFor } from '../lib/design';
+import { AGE_RANGES, placeholderFor, safeLink } from '../lib/design';
 import ProductCard, { type CardProduct } from '../components/ProductCard.astro';
 import QuickView from '../components/QuickView.astro';
 import '../styles/global.css';
@@ -17,17 +17,26 @@ import '../styles/global.css';
 const cardFields = 'id,name,slug,price,sale_price,stock_quantity,primary_image_url,short_description,age_min,age_max,created_at,product_variants(id,is_active,price,sale_price)';
 
 // Settings, categories, featured toys and new arrivals all load at the same time.
-const [pageData, featuredResult, newestResult, categoriesResult] = await Promise.all([
+const [pageData, featuredResult, newestResult, categoriesResult, bannersResult] = await Promise.all([
   getPageData(Astro),
   supabase.from('products').select(cardFields).eq('is_active', true).eq('is_featured', true).order('created_at', { ascending: false }).limit(8),
   supabase.from('products').select(cardFields).eq('is_active', true).order('created_at', { ascending: false }).limit(8),
-  supabase.from('categories').select('id,name,slug,description,image_url').eq('is_active', true).order('sort_order', { ascending: true })
+  supabase.from('categories').select('id,name,slug,description,image_url').eq('is_active', true).order('sort_order', { ascending: true }),
+  // Live banners from Admin → Home banners (the database only returns ones inside their dates).
+  supabase.from('banners').select('id,title,subtitle,image_url,link_url,button_text,text_tone,background').order('sort_order', { ascending: true }).limit(8)
 ]);
 const { design, storeSettings } = pageData;
 const featured = (featuredResult.data ?? []) as unknown as CardProduct[];
 const newest = (newestResult.data ?? []) as unknown as CardProduct[];
 const categories = categoriesResult.data ?? [];
 const sections = design.sections.filter((s) => s.enabled).map((s) => s.id);
+type Banner = { id: string; title: string; subtitle: string | null; image_url: string | null; link_url: string | null; button_text: string | null; text_tone: 'light' | 'dark'; background: string | null };
+const banners = ((bannersResult.data ?? []) as Banner[]).map((b) => ({
+  ...b,
+  link_url: safeLink(b.link_url, ''),
+  image_url: /^https:\/\//i.test(b.image_url || '') || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(b.image_url || '') ? b.image_url : null,
+  background: /^#[0-9a-f]{3,8}$/i.test(b.background || '') ? b.background : '#1b1822'
+}));
 const whatsappUrl = /^https:\/\//.test(String(storeSettings.whatsapp_url || '')) ? String(storeSettings.whatsapp_url) : DEFAULT_WHATSAPP_URL;
 
 // Hero picture: the uploaded hero image, otherwise a composition of product photos or toy emoji tiles.
@@ -61,6 +70,30 @@ const tile = (name: string) => placeholderFor(name);
 <header class="site-header"></header>
 <main>
   {sections.map((id) => {
+    /* ---------- Banner slideshow (Admin → Home banners) ---------- */
+    if (id === 'banners') return banners.length > 0 && (
+      <section class="banner-slider" aria-roledescription="carousel" aria-label="Offers">
+        <div class="banner-track" data-banner-track>
+          {banners.map((b, i) => (
+            <article class={`banner-slide tone-${b.text_tone}`} style={`--banner-bg:${b.background}`} aria-roledescription="slide" aria-label={`${i + 1} of ${banners.length}`}>
+              {b.image_url && <img class="banner-image" src={b.image_url} alt="" loading={i === 0 ? 'eager' : 'lazy'} fetchpriority={i === 0 ? 'high' : 'auto'} decoding="async" />}
+              <div class="container banner-copy">
+                <h2>{b.title}</h2>
+                {b.subtitle && <p>{b.subtitle}</p>}
+                {b.link_url && b.button_text && <a class="button" href={b.link_url}>{b.button_text}</a>}
+              </div>
+              {b.link_url && !b.button_text && <a class="banner-link" href={b.link_url} aria-label={b.title}></a>}
+            </article>
+          ))}
+        </div>
+        {banners.length > 1 && (
+          <div class="banner-dots" role="tablist" aria-label="Choose offer">
+            {banners.map((b, i) => <button type="button" role="tab" aria-selected={i === 0 ? 'true' : 'false'} aria-label={`Show offer ${i + 1}: ${b.title}`} data-banner-dot={i}></button>)}
+          </div>
+        )}
+      </section>
+    );
+
     /* ---------- Hero ---------- */
     if (id === 'hero') return (
       <section class="home-hero">
@@ -214,4 +247,24 @@ const tile = (name: string) => placeholderFor(name);
   })}
 </main>
 <QuickView />
+{banners.length > 1 && (
+  <script>
+    // Banner slideshow: swipe or tap the dots; moves on every 6 seconds (paused while hovered,
+    // focused or when the visitor prefers less motion).
+    document.querySelectorAll<HTMLElement>('.banner-slider').forEach((slider) => {
+      const track = slider.querySelector<HTMLElement>('[data-banner-track]')!;
+      const dots = [...slider.querySelectorAll<HTMLButtonElement>('[data-banner-dot]')];
+      const count = track.children.length;
+      const current = () => Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+      const go = (i: number) => track.scrollTo({ left: ((i + count) % count) * track.clientWidth, behavior: 'smooth' });
+      dots.forEach((dot, i) => dot.addEventListener('click', () => go(i)));
+      track.addEventListener('scroll', () => { const i = current(); dots.forEach((d, j) => d.setAttribute('aria-selected', String(i === j))); }, { passive: true });
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      let paused = false;
+      ['pointerenter', 'focusin', 'touchstart'].forEach((e) => slider.addEventListener(e, () => { paused = true; }, { passive: true }));
+      ['pointerleave', 'focusout'].forEach((e) => slider.addEventListener(e, () => { paused = false; }));
+      setInterval(() => { if (!paused && !document.hidden) go(current() + 1); }, 6000);
+    });
+  </script>
+)}
 <footer class="site-footer"></footer>

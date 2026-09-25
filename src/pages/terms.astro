@@ -1,15 +1,22 @@
 ---
 /**
- * Terms of sale: /terms. Edit the wording directly below.
+ * Terms of sale: /terms. Text comes from Admin → Pages (the text below is only a fallback).
  */
 import '../styles/global.css';
-const title='Terms & Conditions | Clever Toys';
-const description='Clever Toys terms and conditions for using the online store and placing orders.';
+import ContentPageView from '../components/ContentPageView.astro';
+import { getContentPage } from '../lib/content-pages';
+import { markdownToText } from '../lib/markdown';
+// Text from Admin → Pages when available; the original text below is the fallback.
+const page = await getContentPage('terms');
+const title=page ? `${page.title} | Clever Toys` : 'Terms & Conditions | Clever Toys';
+const description=page ? (page.intro || markdownToText(page.body)) : 'Clever Toys terms and conditions for using the online store and placing orders.';
 ---
 <head><title>{title}</title><meta name="description" content={description}/><link rel="canonical" href={new URL("/terms", Astro.site ?? Astro.url.origin).href}/></head>
 <header class="site-header"></header>
+{page ? <ContentPageView page={page} /> : (
 <main>
   <section class="page-hero"><div class="container"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">Terms & Conditions</span></nav><h1>Terms & Conditions</h1><p>Terms for using the Clever Toys store.</p></div></section>
   <section class="section tight"><div class="container"><div class="content-card prose"><h2>Product information</h2><p>We make reasonable efforts to keep product names, descriptions, prices and stock information accurate. Availability can change before an order is confirmed.</p><h2>Orders</h2><p>Submitting an order is a request to purchase. Clever Toys may contact you to confirm availability and delivery details before fulfillment.</p><h2>Prices</h2><p>Prices shown on the website are in US dollars unless stated otherwise. The final order total is calculated by the store when the order is placed.</p><h2>Delivery</h2><p>Orders are normally handled using cash on delivery. Delivery details and any applicable fee are confirmed with the customer.</p></div></div></section>
 </main>
+)}
 <footer class="site-footer"></footer>

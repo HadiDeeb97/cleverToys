@@ -1,0 +1,110 @@
+---
+/**
+ * Admin → Activity log: every change made in the admin panel: who, what, when, and the old and
+ * new values. Recorded by the database itself (supabase/cms.sql), so it cannot be skipped.
+ */
+import '../../styles/global.css';
+import { supabaseConfig } from '../../lib/config';
+const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
+---
+<head>
+  <title>Activity log | Clever Toys Admin</title>
+</head>
+<header class="site-header"></header>
+<main>
+  <div class="container">
+    <div class="admin-head">
+      <div>
+        <p class="eyebrow">Insights</p>
+        <h1>Activity log</h1>
+        <p>Who changed what in the admin panel, and when.</p>
+      </div>
+    </div>
+    <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <div id="guard" class="empty-state">Checking admin access…</div>
+
+    <div id="app" hidden>
+      <div id="setup" hidden></div>
+      <section class="admin-panel">
+        <div class="panel-title" style="flex-wrap:wrap">
+          <div class="cms-actions">
+            <label class="sr-only" for="f-entity">Area</label>
+            <select id="f-entity" class="admin-input"><option value="">Everything</option></select>
+            <label class="sr-only" for="f-user">Person</label>
+            <select id="f-user" class="admin-input"><option value="">Everyone</option></select>
+          </div>
+          <span id="count" class="cms-badge"></span>
+        </div>
+        <div id="log" class="log-list"></div>
+        <div class="cms-actions" style="margin-top:12px;justify-content:center"><button id="more" class="button secondary-button" type="button" hidden>Show older</button></div>
+      </section>
+    </div>
+  </div>
+</main>
+
+<script>
+import { startAdmin, esc, when, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+
+type Entry = { id: number; user_email: string | null; action: 'create' | 'update' | 'delete'; entity: string; entity_id: string | null; label: string | null; changes: Record<string, [unknown, unknown]> | null; created_at: string };
+const PAGE = 100;
+const ENTITIES: Record<string, [string, string]> = {
+  products: ['Product', '🧸'], product_variants: ['Product option', '🧩'], categories: ['Category', '🗂️'], orders: ['Order', '🛒'],
+  expenses: ['Expense', '💸'], seo_pages: ['SEO page', '🔎'], store_settings: ['Store settings', '⚙️'], pages: ['Page', '📄'],
+  banners: ['Home banner', '🖼️'], coupons: ['Discount code', '🏷️'], delivery_zones: ['Delivery fee', '🚚'], reviews: ['Review', '⭐'], admin_users: ['Team member', '👤']
+};
+const FIELD_NAMES: Record<string, string> = { stock_quantity: 'stock', sale_price: 'sale price', cost_price: 'cost', is_active: 'visible', is_featured: 'featured', status: 'status', price: 'price', name: 'name', role: 'role', fee: 'fee', is_published: 'published' };
+const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
+let supabase: Db;
+let entries: Entry[] = [];
+
+const show = (v: unknown) => v === null || v === undefined || v === '' ? '—' : typeof v === 'boolean' ? (v ? 'yes' : 'no') : typeof v === 'object' ? 'changed' : String(v);
+function describe(e: Entry) {
+  const [kind, icon] = ENTITIES[e.entity] || [e.entity, '•'];
+  const verb = e.action === 'create' || (e.action as string) === 'insert' ? 'added' : e.action === 'delete' ? 'deleted' : 'changed';
+  const changes = e.changes && e.action === 'update'
+    ? Object.entries(e.changes).slice(0, 6).map(([k, v]) => Array.isArray(v) ? `<li><b>${esc(FIELD_NAMES[k] || k.replace(/_/g, ' '))}</b>: ${esc(show(v[0]))} → ${esc(show(v[1]))}</li>` : `<li><b>${esc(k)}</b>: ${esc(show(v))}</li>`).join('')
+    : e.changes && e.action !== 'update' && e.entity === 'admin_users' ? `<li><b>role</b>: ${esc(show((e.changes as any).role))}</li>` : '';
+  return `<div class="log-row"><span class="log-icon" aria-hidden="true">${icon}</span><div class="log-main"><p><strong>${esc(e.user_email || 'Someone')}</strong> ${verb} ${esc(kind.toLowerCase())} <strong>${esc(e.label || '')}</strong></p>${changes ? `<ul class="log-changes">${changes}</ul>` : ''}</div><time datetime="${esc(e.created_at)}">${esc(when(e.created_at))}</time></div>`;
+}
+
+async function load(append = false) {
+  let q = supabase.from('admin_activity').select('*').order('id', { ascending: false }).limit(PAGE);
+  const entity = $<HTMLSelectElement>('#f-entity').value, user = $<HTMLSelectElement>('#f-user').value;
+  if (entity) q = q.eq('entity', entity);
+  if (user) q = q.eq('user_email', user);
+  if (append && entries.length) q = q.lt('id', entries[entries.length - 1].id);
+  const r = await q;
+  if (missingTable(r.error)) { $('#setup').innerHTML = setupNotice(); $('#setup').hidden = false; return; }
+  if (r.error) { $('#log').innerHTML = `<p class="cms-empty">${esc(r.error.message)}</p>`; return; }
+  const page = (r.data ?? []) as Entry[];
+  entries = append ? [...entries, ...page] : page;
+  $('#more').hidden = page.length < PAGE;
+  $('#count').textContent = `${entries.length}${page.length === PAGE ? '+' : ''} changes`;
+  $('#log').innerHTML = entries.length ? entries.map(describe).join('') : '<p class="cms-empty">No changes recorded yet. Everything done in the admin panel from now on appears here.</p>';
+}
+
+(async () => {
+  const started = await startAdmin('logs', 'Activity log');
+  if (!started) return;
+  supabase = started.supabase;
+  $('#f-entity').insertAdjacentHTML('beforeend', Object.entries(ENTITIES).map(([k, [label]]) => `<option value="${k}">${esc(label)}s</option>`).join(''));
+  const people = await supabase.rpc('admin_list_admins');
+  if (!people.error) $('#f-user').insertAdjacentHTML('beforeend', ((people.data ?? []) as Array<{ email: string }>).map((p) => `<option>${esc(p.email)}</option>`).join(''));
+  else $('#f-user').hidden = true; // only owners can list the team
+  $('#f-entity').addEventListener('change', () => load());
+  $('#f-user').addEventListener('change', () => load());
+  $('#more').addEventListener('click', () => load(true));
+  await load();
+})();
+</script>
+
+<style is:global>
+.log-list{display:grid}
+.log-row{display:grid;grid-template-columns:36px minmax(0,1fr) auto;gap:12px;align-items:start;padding:12px 4px;border-top:1px solid var(--line)}
+.log-row:first-child{border-top:0}
+.log-icon{display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:var(--surface-2)}
+.log-main p{margin:6px 0 0;overflow-wrap:anywhere}
+.log-changes{margin:6px 0 0;padding-left:18px;color:var(--muted);font-size:.86rem;overflow-wrap:anywhere}
+.log-row time{padding-top:6px;color:var(--muted);font-size:.8rem;white-space:nowrap}
+@media (max-width:640px){.log-row{grid-template-columns:36px 1fr}.log-row time{grid-column:2;padding:0}}
+</style>
