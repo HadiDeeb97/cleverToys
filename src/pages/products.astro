@@ -163,7 +163,7 @@ const heading = activeCategoryTitle || (search ? `Results for “${search}”` :
 
         <div class="shop-results">
           <div class="shop-toolbar">
-            <div class="shop-result-row"><p>{categoryFilterError || variantFilterError ? 'Some filters could not be loaded.' : totalProducts === 0 ? 'No toys found' : `${totalProducts} ${totalProducts === 1 ? 'toy' : 'toys'}`}</p></div>
+            <div class="shop-result-row"><p>{totalProducts === 0 ? 'No toys found' : `${totalProducts} ${totalProducts === 1 ? 'toy' : 'toys'}`}</p></div>
             <div class="shop-controls">
               <button class="button secondary-button small filter-button" type="button" id="filter-toggle" aria-expanded="false" aria-controls="filter-panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filters{filterCount ? ` (${filterCount})` : ''}</button>
               <form method="get" action="/products" class="sort-form">
