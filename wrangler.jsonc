@@ -1,0 +1,13 @@
+// Cloudflare Worker settings. The Astro Cloudflare adapter fills in everything else
+// (entry point, static assets, bindings) when it builds the site.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "clever-toys",
+  "compatibility_date": "2026-09-11",
+  // The Supabase database is in Tokyo (ap-northeast-1) and every page makes several requests to it.
+  // Smart Placement lets Cloudflare run the Worker close to the database when that is faster than
+  // running it close to the shopper, so those requests no longer cross the world one by one.
+  // https://developers.cloudflare.com/workers/configuration/placement/
+  "placement": { "mode": "smart" },
+  "observability": { "enabled": true }
+}

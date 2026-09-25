@@ -252,8 +252,14 @@
   bindImageViewer();
   initReveal();
   // Analytics waits until the page has finished loading so it never competes with the page itself.
-  if (document.readyState === 'complete') loadVisitorAnalytics();
-  else window.addEventListener('load', loadVisitorAnalytics, { once: true });
+  // A page the browser loaded ahead of time (speculation rules in src/middleware.ts) is only counted
+  // once the shopper actually opens it.
+  const startVisitorAnalytics = () => {
+    if (document.readyState === 'complete') loadVisitorAnalytics();
+    else window.addEventListener('load', loadVisitorAnalytics, { once: true });
+  };
+  if (document.prerendering) document.addEventListener('prerenderingchange', startVisitorAnalytics, { once: true });
+  else startVisitorAnalytics();
 
   // Keep counters in sync: cart changed on this page, in another tab, or page restored with the Back button.
   window.addEventListener('clever-cart-updated', updateCartUI);

@@ -21,41 +21,22 @@ const ageMin = ageMinParam !== '' && Number.isFinite(Number(ageMinParam)) ? Math
 const ageMax = ageMaxParam !== '' && Number.isFinite(Number(ageMaxParam)) ? Math.max(0, Number(ageMaxParam)) : null;
 const sort = Astro.url.searchParams.get('sort') || 'newest';
 
-const [categoriesResult, variantsResult] = await Promise.all([
-  supabase.from('categories').select('id, name, slug').eq('is_active', true).order('sort_order', { ascending: true }),
-  supabase.from('product_variants').select('name').eq('is_active', true).order('name', { ascending: true })
-]);
-
-const categories = categoriesResult.data || [];
-const variantOptions = [...new Set((variantsResult.data || []).map(v => String(v.name || '').trim()).filter(Boolean))];
-const selectedCategoryIds = categories.filter(c => selectedCategorySlugs.includes(c.slug)).map(c => c.id);
-const selectedCategoryNames = categories.filter(c => selectedCategorySlugs.includes(c.slug)).map(c => c.name);
-const activeCategoryTitle = selectedCategoryNames.length === 1 ? selectedCategoryNames[0] : selectedCategoryNames.length > 1 ? 'Filtered toys' : '';
-
-// Option (variant) and category filters each need a lookup of matching product ids. Run both at once.
-const [variantRows, categoryRows] = await Promise.all([
-  selectedVariantFilters.length ? supabase.from('product_variants').select('product_id').eq('is_active', true).in('name', selectedVariantFilters) : null,
-  selectedCategoryIds.length ? supabase.from('product_categories').select('product_id').in('category_id', selectedCategoryIds) : null
-]);
-const variantProductIdsByFilter = new Set((variantRows?.data || []).map(row => row.product_id));
-const variantFilterError = variantRows?.error ?? null;
-const categoryProductIds = categoryRows ? new Set((categoryRows.data || []).map(row => row.product_id)) : null;
-const categoryFilterError = categoryRows?.error ?? null;
-
 const from = (requestedPage - 1) * pageSize;
 const to = from + pageSize - 1;
 
+// The database is far away, so every sequential request adds a noticeable wait. The category and
+// option filters are applied inside the products query itself (joined tables with !inner), which
+// lets all three requests below run at the same time: one round trip for the whole page.
 const buildProductsQuery = (head = false) => {
-  let query = supabase.from('products').select('id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, category_id, age_min, age_max', { count: 'exact', head }).eq('is_active', true);
+  const joins = [
+    selectedCategorySlugs.length ? 'product_categories!inner(categories!inner(slug))' : '',
+    selectedVariantFilters.length ? 'product_variants!inner(name)' : ''
+  ].filter(Boolean);
+  const columns = ['id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, category_id, age_min, age_max', ...joins].join(', ');
+  let query = supabase.from('products').select(columns, { count: 'exact', head }).eq('is_active', true);
   if (search) query = query.ilike('name', `%${search}%`);
-  if (selectedCategoryIds.length) {
-    const ids = [...(categoryProductIds || [])];
-    query = ids.length ? query.in('id', ids) : query.in('id', ['00000000-0000-0000-0000-000000000000']);
-  }
-  if (selectedVariantFilters.length) {
-    const ids = [...variantProductIdsByFilter];
-    query = ids.length ? query.in('id', ids) : query.in('id', ['00000000-0000-0000-0000-000000000000']);
-  }
+  if (selectedCategorySlugs.length) query = query.eq('product_categories.categories.is_active', true).in('product_categories.categories.slug', selectedCategorySlugs);
+  if (selectedVariantFilters.length) query = query.eq('product_variants.is_active', true).in('product_variants.name', selectedVariantFilters);
   if (ageMin !== null) query = query.or(`age_max.gte.${ageMin},age_max.is.null`);
   if (ageMax !== null) query = query.or(`age_min.lte.${ageMax},age_min.is.null`);
   return query;
@@ -67,7 +48,20 @@ else if (sort === 'price-desc') query = query.order('price', { ascending: false 
 else if (sort === 'name') query = query.order('name', { ascending: true });
 else query = query.order('created_at', { ascending: false });
 
-const { data: products, count, error } = await query.range(from, to);
+type ShopProduct = { id: string; name: string; slug: string; price: number; sale_price: number | null; stock_quantity: number; primary_image_url: string | null; short_description: string | null };
+const [categoriesResult, variantsResult, productsResult] = await Promise.all([
+  supabase.from('categories').select('id, name, slug').eq('is_active', true).order('sort_order', { ascending: true }),
+  supabase.from('product_variants').select('name').eq('is_active', true).order('name', { ascending: true }),
+  query.range(from, to)
+]);
+
+const categories = categoriesResult.data || [];
+const variantOptions = [...new Set((variantsResult.data || []).map(v => String(v.name || '').trim()).filter(Boolean))];
+const selectedCategoryNames = categories.filter(c => selectedCategorySlugs.includes(c.slug)).map(c => c.name);
+const activeCategoryTitle = selectedCategoryNames.length === 1 ? selectedCategoryNames[0] : selectedCategoryNames.length > 1 ? 'Filtered toys' : '';
+
+const { count, error } = productsResult;
+const products = productsResult.data as unknown as ShopProduct[] | null;
 // Pages past the end (e.g. after products are removed) make the range query fail; send them to the last valid page.
 if (requestedPage > 1 && (error || !products?.length)) {
   const { count: availableCount, error: countError } = await buildProductsQuery(true);
@@ -151,16 +145,17 @@ const canonicalUrl = new URL('/products', Astro.site ?? Astro.url.origin).href;
       <div class="filter-actions"><a class="button secondary-button" href="/products">Clear all</a><button class="button" type="submit">Apply filters</button></div>
     </form>
 
-    <div class="shop-result-row"><p>{categoryFilterError || variantFilterError ? 'Some filters could not be loaded.' : totalProducts === 0 ? 'No toys found.' : `Showing ${from + 1}–${Math.min(from + (products?.length ?? 0), totalProducts)} of ${totalProducts} toys`}</p>{hasFilters && <a href="/products">Clear filters</a>}</div>
-    {error ? <div class="empty-state"><h2>We couldn't load the toys</h2><p>Please try again in a moment.</p></div> : products?.length ? <div class="product-grid shop-grid">{products.map(product => {
+    <div class="shop-result-row"><p>{totalProducts === 0 ? 'No toys found.' : `Showing ${from + 1}–${Math.min(from + (products?.length ?? 0), totalProducts)} of ${totalProducts} toys`}</p>{hasFilters && <a href="/products">Clear filters</a>}</div>
+    {error ? <div class="empty-state"><h2>We couldn't load the toys</h2><p>Please try again in a moment.</p></div> : products?.length ? <div class="product-grid shop-grid">{products.map((product, index) => {
       const displayPrice=Number(product.sale_price??product.price);
       const originalPrice=product.sale_price!=null?Number(product.price):null;
       const inStock=product.stock_quantity>0;
       return <article class="product-card shop-card">
-        {/* Photo link + "Quick view" button side by side (a button is not allowed inside a link). */}
+        {/* Photo link + "Quick view" button side by side (a button is not allowed inside a link).
+            The first row of photos is visible right away, so it loads immediately instead of lazily. */}
         <div class="product-media">
           <a href={`/product/${product.slug}`} class="product-image-link" tabindex="-1" aria-hidden="true">
-            {product.primary_image_url?<img class="product-image" src={product.primary_image_url} alt="" loading="lazy" decoding="async" width="400" height="400"/>:<div class="product-placeholder"><span>No image yet</span></div>}
+            {product.primary_image_url?<img class="product-image" src={product.primary_image_url} alt="" loading={index < 4 ? 'eager' : 'lazy'} fetchpriority={index < 2 ? 'high' : 'auto'} decoding="async" width="400" height="400"/>:<div class="product-placeholder"><span>No image yet</span></div>}
             {product.sale_price!=null&&<span class="sale-badge">Sale</span>}
             {!inStock&&<span class="stock-badge">Out of stock</span>}
           </a>
