@@ -76,7 +76,7 @@
   --header-h:76px;
   --container:1240px;
   --gutter:clamp(16px,4vw,40px);
-  --section-space:clamp(56px,8vw,112px);
+  --section-space:clamp(44px,6vw,88px);
   --ease:cubic-bezier(.2,.7,.2,1);
   --page-hero-bg:radial-gradient(circle at 90% 0%,color-mix(in srgb,var(--theme-accent) 28%,transparent) 0 180px,transparent 181px),linear-gradient(180deg,color-mix(in srgb,var(--brand-soft) 55%,var(--bg)),var(--bg));
 
@@ -251,7 +251,7 @@ body.has-drawer,html:has(body.has-drawer){overflow:hidden}
 
 /* 5. Page sections --------------------------------------------------------------------- */
 .section{padding:var(--section-space) 0}
-.section.tight{padding:clamp(40px,5vw,64px) 0}
+.section.tight{padding:clamp(28px,4vw,52px) 0}
 .section-header{margin-bottom:clamp(24px,3vw,40px)}
 .section-header h1,.section-header h2{margin:0 0 10px}
 .section-header h1{font-size:clamp(2.2rem,4.5vw,3.4rem)}
@@ -260,11 +260,11 @@ body.has-drawer,html:has(body.has-drawer){overflow:hidden}
 .section-header-row{display:flex;justify-content:space-between;align-items:end;gap:24px}
 .section-header.center{text-align:center}
 .section-header.center p{margin-inline:auto}
-.page-hero{padding:clamp(28px,5vw,64px) 0 clamp(24px,3vw,40px);background:var(--page-hero-bg)}
-.page-hero+.section{padding-top:clamp(24px,3vw,40px)}
-.page-hero h1{font-size:clamp(2.4rem,5.5vw,4.2rem);margin-bottom:14px}
-.page-hero p{max-width:640px;margin:0;color:var(--muted);font-size:1.08rem}
-.breadcrumbs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:24px;color:var(--muted);font-size:.86rem;font-weight:600}
+.page-hero{padding:clamp(18px,3vw,36px) 0 clamp(16px,2.4vw,28px);background:var(--page-hero-bg)}
+.page-hero+.section{padding-top:clamp(18px,2.4vw,28px)}
+.page-hero h1{font-size:clamp(2rem,4vw,3.1rem);margin-bottom:10px}
+.page-hero p{max-width:640px;margin:0;color:var(--muted);font-size:1rem}
+.breadcrumbs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;color:var(--muted);font-size:.86rem;font-weight:600}
 .breadcrumbs a{color:var(--muted)}
 @media (hover:hover){.breadcrumbs a:hover{color:var(--ink)}}
 .breadcrumbs span[aria-current]{color:var(--ink)}
@@ -280,21 +280,22 @@ body.has-drawer,html:has(body.has-drawer){overflow:hidden}
 .order-number{display:inline-block;padding:10px 18px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink)}
 
 /* 6. Home page ------------------------------------------------------------------------- */
-.home-hero{position:relative;overflow:hidden;padding:clamp(36px,6vw,84px) 0 clamp(48px,7vw,96px);background:
+.home-hero{position:relative;overflow:hidden;padding:clamp(28px,4.5vw,64px) 0 clamp(36px,5vw,72px);background:
   radial-gradient(ellipse 60% 70% at 85% 30%,color-mix(in srgb,var(--brand-soft) 90%,transparent),transparent 70%),
   radial-gradient(circle at 8% 110%,color-mix(in srgb,var(--theme-accent) 22%,transparent) 0 160px,transparent 161px),
   var(--bg)}
 .home-hero-inner{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:clamp(28px,5vw,72px);align-items:center}
-.hero-copy h1{margin:0 0 22px;font-size:clamp(2.7rem,6.2vw,5.4rem);line-height:.98}
+.hero-copy h1{margin:0 0 18px;font-size:clamp(2.5rem,4.8vw,4.3rem);line-height:1}
 .hero-highlight{display:inline;font-style:italic;padding-right:.08em}
 html[data-font=modern] .hero-highlight,html[data-font=playful] .hero-highlight{font-style:normal}
-.hero-copy p{max-width:520px;margin:0 0 32px;color:var(--muted);font-size:clamp(1.02rem,1.4vw,1.18rem);line-height:1.7}
+.hero-copy p{max-width:520px;margin:0 0 26px;color:var(--muted);font-size:clamp(1.02rem,1.4vw,1.18rem);line-height:1.7}
 .hero-actions{display:flex;gap:12px;flex-wrap:wrap}
 .hero-proof{display:flex;align-items:center;gap:14px;margin-top:34px;color:var(--muted);font-size:.9rem;font-weight:600}
 .hero-proof-dots{display:flex}
 .hero-proof-dots span{display:grid;place-items:center;width:34px;height:34px;margin-left:-8px;border:2px solid var(--bg);border-radius:50%;background:hsl(var(--h) 80% 90%);font-size:1rem}
 .hero-proof-dots span:first-child{margin-left:0}
-.hero-visual{position:relative;aspect-ratio:1/1;max-height:560px;width:100%;justify-self:end}
+/* The hero picture never gets taller than the screen space below the header. */
+.hero-visual{position:relative;aspect-ratio:1/1;width:min(100%,480px,calc(100svh - var(--header-h) - 150px));min-width:260px;justify-self:end}
 .hero-visual>img{width:100%;height:100%;object-fit:cover;border-radius:calc(var(--radius-lg) * 1.4);box-shadow:var(--shadow-lg)}
 .hero-art{position:absolute;inset:0}
 .hero-art .art-main{position:absolute;inset:6% 14% 12% 6%;display:grid;place-items:center;border-radius:calc(var(--radius-lg) * 1.6);background:var(--brand-gradient);box-shadow:var(--shadow-lg);font-size:clamp(5rem,14vw,10rem);overflow:hidden}
@@ -387,11 +388,10 @@ html[data-font=modern] .hero-highlight,html[data-font=playful] .hero-highlight{f
 @media (hover:hover){.quick-add:hover{background:var(--ink);color:#fff}}
 .quick-add.is-added{background:var(--success);color:#fff}
 /* Quick view sits on the left and stops before the round Add / Options button, so they never overlap. */
-/* Quick view: round eye button just left of the Add / Options button (or in its place on sold-out toys).
+/* Quick view: round eye button in the bottom-left corner of the photo (Add / Options sits bottom-right).
    Computers: appears when the card is hovered. Phones and tablets: always visible. */
-.quick-view-trigger{position:absolute;right:62px;bottom:12px;z-index:4;display:grid;place-items:center;width:42px;height:42px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.95);color:var(--ink);box-shadow:var(--shadow);cursor:pointer;transition:opacity .25s,transform .25s var(--ease),background .2s,color .2s}
+.quick-view-trigger{position:absolute;left:12px;bottom:12px;z-index:4;display:grid;place-items:center;width:42px;height:42px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.95);color:var(--ink);box-shadow:var(--shadow);cursor:pointer;transition:opacity .25s,transform .25s var(--ease),background .2s,color .2s}
 .quick-view-trigger svg{width:19px;height:19px}
-.product-media:not(:has(.quick-add)) .quick-view-trigger{right:12px}
 @media (hover:hover){.quick-view-trigger{opacity:0;transform:translateY(8px)}.product-card:hover .quick-view-trigger{opacity:1;transform:none}.quick-view-trigger:hover{background:var(--ink);color:#fff}}
 .quick-view-trigger:focus-visible{opacity:1;transform:none}
 .view-product{display:none}
@@ -495,18 +495,19 @@ body.has-quick-view,html:has(body.has-quick-view){overflow:hidden}
 .pagination span{color:var(--muted)}
 
 /* 10. Product page ---------------------------------------------------------------------- */
-.product-detail{padding-top:clamp(18px,3vw,32px)}
-.product-layout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:clamp(24px,5vw,72px);align-items:start}
-.gallery{position:sticky;top:calc(var(--header-h) + 20px);display:grid;gap:12px;min-width:0}
+.section.product-detail{padding-top:clamp(12px,2vw,22px)}
+.product-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(24px,5vw,72px);align-items:start}
+/* Product photos: the whole picture always fits on screen (with its thumbnails) on any computer. */
+.gallery{position:sticky;top:calc(var(--header-h) + 16px);display:grid;gap:12px;min-width:0;width:min(100%,max(300px,calc(100svh - var(--header-h) - 190px)));justify-self:center}
 .gallery-main{position:relative;overflow:hidden;border-radius:calc(var(--radius-lg) * 1.2);background:var(--surface-2)}
 .gallery-main img,.gallery-main .product-placeholder{width:100%;aspect-ratio:1/1;object-fit:contain}
 .gallery-main .product-placeholder{object-fit:initial;font-size:clamp(6rem,16vw,11rem)}
 .gallery-thumbnails{display:flex;gap:10px;overflow-x:auto;scrollbar-width:none}
-.thumbnail{flex:0 0 78px;width:78px;height:78px;padding:0;overflow:hidden;border:2px solid transparent;border-radius:var(--radius);background:var(--surface-2);cursor:pointer;transition:border-color .2s}
+.thumbnail{flex:0 0 68px;width:68px;height:68px;padding:0;overflow:hidden;border:2px solid transparent;border-radius:var(--radius);background:var(--surface-2);cursor:pointer;transition:border-color .2s}
 .thumbnail.active{border-color:var(--ink)}
 .thumbnail img{width:100%;height:100%;object-fit:cover}
 .product-details{min-width:0}
-.product-details h1{margin:0 0 14px;font-size:clamp(2rem,4vw,3.2rem);line-height:1.04}
+.product-details h1{margin:0 0 12px;font-size:clamp(1.8rem,3vw,2.6rem);line-height:1.08}
 .price-row{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px 14px;margin:0 0 10px}
 .detail-price{font-family:var(--font-body);font-size:clamp(1.6rem,3vw,2rem);font-weight:800;color:var(--ink)}
 .original-price{color:var(--subtle);font-size:1.1rem;font-weight:600;text-decoration:line-through}
@@ -908,7 +909,7 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .cart-link{padding:0 12px!important;min-height:42px}
   .cart-label{display:none}
   .home-hero-inner,.promo-banner,.story-block,.product-layout,.category-heading{grid-template-columns:1fr}
-  .hero-visual{aspect-ratio:16/11;max-height:300px;justify-self:stretch}
+  .hero-visual{aspect-ratio:16/11;width:100%;min-width:0;max-height:300px;justify-self:stretch}
   .hero-art .art-main{inset:4% 22% 4% 4%}
   .hero-art .art-a{width:26%;top:0}
   .hero-art .art-b{width:20%}
@@ -953,7 +954,11 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .shop-controls>*{flex:1}
   .sort-form label{display:none}
   .sort-form select{width:100%}
-  .product-details h1{font-size:clamp(1.8rem,8vw,2.4rem)}
+  .product-details h1{font-size:clamp(1.6rem,7vw,2.1rem)}
+  /* Phones: a shorter photo so the name and price show on the first screen; the whole picture stays visible. */
+  .gallery{width:100%}
+  .gallery-main img,.gallery-main .product-placeholder{aspect-ratio:auto;height:min(90vw,46svh)}
+  .thumbnail{flex-basis:58px;width:58px;height:58px}
   .buy-bar{display:flex}
   .cart-item{grid-template-columns:80px minmax(0,1fr);gap:12px;padding:16px 0}
   .cart-item img,.cart-placeholder,.cart-item .product-placeholder{width:80px;height:80px;font-size:1.8rem}
@@ -975,8 +980,7 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .wa-dialog-fields{grid-template-columns:1fr}
   .wa-dialog-actions .button{flex:1 1 100%}
   .quick-view-dialog{grid-template-columns:1fr}
-  .quick-view-trigger{right:52px;bottom:8px;width:38px;height:38px}
-  .product-media:not(:has(.quick-add)) .quick-view-trigger{right:8px}
+  .quick-view-trigger{left:8px;bottom:8px;width:38px;height:38px}
   .quick-view-trigger svg{width:17px;height:17px}
   /* Quick view on phones: a sheet that slides up from the bottom. */
   .quick-view-modal{place-items:end center;padding:0}
