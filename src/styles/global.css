@@ -244,7 +244,10 @@ button,input,textarea,select{font:inherit;color:inherit}
 .drawer-categories .tile-media{flex:0 0 44px;width:44px;height:44px;border-radius:var(--radius-sm);font-size:1.3rem}
 .drawer-contact{display:grid;gap:10px}
 .drawer-contact .button{width:100%}
-body.has-drawer{overflow:hidden}
+/* While a menu, cart or filter panel is open, only that panel scrolls (html too, for iPhone Safari). */
+body.has-drawer,html:has(body.has-drawer){overflow:hidden}
+.drawer-panel,.filter-panel{overscroll-behavior:contain}
+.filter-scrim,.drawer-backdrop{touch-action:none}
 
 /* 5. Page sections --------------------------------------------------------------------- */
 .section{padding:var(--section-space) 0}
@@ -427,7 +430,9 @@ html[data-font=modern] .hero-highlight,html[data-font=playful] .hero-highlight{f
 .category-pills a{flex:0 0 auto;padding:9px 16px;border:1.5px solid var(--line);border-radius:var(--radius-pill);background:var(--surface);font-weight:700;font-size:.88rem;white-space:nowrap;transition:border-color .18s,background .18s,color .18s}
 @media (hover:hover){.category-pills a:hover{border-color:var(--ink)}}
 .category-pills a.active{border-color:var(--ink);background:var(--ink);color:#fff}
-.filter-panel{position:sticky;top:calc(var(--header-h) + 20px);display:grid;gap:22px}
+.filter-panel{position:sticky;top:calc(var(--header-h) + 20px);display:grid;gap:22px;align-content:start}
+/* Computers: a long filter list scrolls inside the sidebar on its own; reaching its end doesn't scroll the page. */
+@media (min-width:1101px){.filter-panel{max-height:calc(100vh - var(--header-h) - 40px);max-height:calc(100dvh - var(--header-h) - 40px);overflow-y:auto;overscroll-behavior:contain;padding-right:8px;scrollbar-width:thin;scrollbar-color:var(--line-strong) transparent}}
 .filter-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .filter-panel-head strong{font-family:var(--font-display);font-size:1.4rem;font-weight:var(--display-weight)}
 .filter-panel-subtitle{display:none}
@@ -441,7 +446,8 @@ html[data-font=modern] .hero-highlight,html[data-font=playful] .hero-highlight{f
 .age-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .age-grid label{display:grid;gap:6px;color:var(--muted);font-size:.82rem;font-weight:700}
 .age-grid input{width:100%;min-height:44px;padding:0 12px;border:1.5px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--surface);font-size:16px}
-.filter-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+/* Clear / Apply stay pinned to the bottom of the filters while the list scrolls. */
+.filter-actions{position:sticky;bottom:0;z-index:2;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 0 4px;background:var(--bg);box-shadow:0 -12px 14px -12px rgba(20,16,28,.18)}
 .filter-actions .button{min-height:46px;padding:0 12px}
 .active-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
 .active-filters a{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:var(--radius-pill);background:var(--surface-2);font-size:.84rem;font-weight:700}
@@ -834,8 +840,9 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .shop-layout{grid-template-columns:1fr}
   .filter-button{display:inline-flex}
   /* Filters become a slide-in panel */
-  .filter-panel{position:fixed;inset:0 auto 0 0;z-index:15000;width:min(400px,92vw);padding:20px;overflow-y:auto;background:var(--bg);box-shadow:var(--shadow-lg);transform:translateX(-102%);transition:transform .35s var(--ease);display:grid!important;align-content:start}
+  .filter-panel{position:fixed;inset:0 auto 0 0;z-index:15000;width:min(400px,92vw);height:100dvh;max-height:none;padding:20px;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg);box-shadow:var(--shadow-lg);transform:translateX(-102%);transition:transform .35s var(--ease);display:grid!important;align-content:start}
   .filter-panel.is-open{transform:none}
+  .filter-panel .filter-actions{bottom:-20px;margin:0 -20px -20px;padding:12px 20px calc(20px + env(safe-area-inset-bottom))}
   .filter-close{display:inline-grid}
   .filter-scrim{position:fixed;inset:0;z-index:14999;background:rgba(20,16,28,.45)}
   .cart-layout,#cart-root:has(.cart-list),.checkout-layout{grid-template-columns:1fr}

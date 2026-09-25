@@ -6,12 +6,26 @@
  */
 import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
+import { getPageData } from '../../lib/page-data';
+import { FONT_PRESETS } from '../../lib/design';
 
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 const logoUrl = supabaseUrl
   ? `${supabaseUrl.replace(/\/$/, '')}/storage/v1/object/public/product-images/branding/logo.webp`
   : '';
+
+// The live preview uses the store's own fonts (Admin → Storefront → Style), not the admin panel's.
+const { design } = await getPageData(Astro);
+const PREVIEW_FONTS: Record<string, string> = {
+  premium: '--font-body:"Plus Jakarta Sans",system-ui,sans-serif;--font-display:"Fraunces",Georgia,serif;--display-weight:600;--display-tracking:-.025em',
+  modern: '--font-body:"Plus Jakarta Sans",system-ui,sans-serif;--font-display:"Plus Jakarta Sans",system-ui,sans-serif;--display-weight:800;--display-tracking:-.035em',
+  playful: '--font-body:"Nunito",system-ui,sans-serif;--font-display:"Fredoka","Nunito",system-ui,sans-serif;--display-weight:600;--display-tracking:-.01em',
+  classic: '--font-body:"DM Sans",system-ui,sans-serif;--font-display:"Playfair Display",Georgia,serif;--display-weight:600;--display-tracking:-.015em'
+};
+const previewFont = PREVIEW_FONTS[design.font] || PREVIEW_FONTS.premium;
+const previewFontHref = FONT_PRESETS[design.font]?.href || FONT_PRESETS.premium.href;
 ---
+<link rel="stylesheet" href={previewFontHref} media="print" onload="this.media='all'" />
 <header class="site-header">
   <div class="container header-inner">
     <a class="logo" href="/admin">Clever Toys Admin</a>
@@ -153,18 +167,27 @@ const logoUrl = supabaseUrl
         </div>
         <div class="theme-preview-wrap">
           <p class="preview-label">Live preview</p>
-          <div id="theme-preview" class="theme-preview" aria-hidden="true">
-            <div class="tp-header"><b>Clever Toys</b><span class="tp-nav"><i></i><i></i><i></i></span><span class="tp-cart">🛒 Cart <em>2</em></span></div>
-            <div class="tp-ribbon">🚚 Free delivery on orders above $60</div>
+          {/* A small copy of the real store (same layout, fonts and badges), recoloured with the theme you pick. */}
+          <div id="theme-preview" class="theme-preview" aria-hidden="true" style={previewFont}>
+            <div class="tp-ribbon">Free delivery on orders above $60</div>
+            <div class="tp-header">
+              <b class="tp-logo">Clever Toys</b>
+              <span class="tp-nav"><span>Shop</span><span class="tp-sale">Sale</span><span>About</span></span>
+              <span class="tp-search">Search toys…</span>
+              <span class="tp-cart"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8h12l-1 12H7L6 8Z"/><path d="M9 8a3 3 0 0 1 6 0"/></svg>Cart <em>2</em></span>
+            </div>
             <div class="tp-hero">
-              <span class="tp-eyebrow">NEW ARRIVALS</span>
-              <strong>Play. Learn. Discover.</strong>
-              <div class="tp-buttons"><span class="tp-primary">Shop Toys</span><span class="tp-secondary">Categories</span></div>
-              <span class="tp-bubble tp-bubble-1">🧸</span><span class="tp-bubble tp-bubble-2">🚀</span>
+              <div class="tp-copy">
+                <span class="tp-eyebrow">New arrivals</span>
+                <strong>Toys that spark <i>big</i> imaginations</strong>
+                <div class="tp-buttons"><span class="tp-primary">Shop toys →</span><span class="tp-secondary">Categories</span></div>
+              </div>
+              <span class="tp-art"><span>🧸</span><em>🚀</em></span>
             </div>
             <div class="tp-products">
-              <div class="tp-card"><div class="tp-image">🧩<em>Sale</em></div><small>Rainbow Puzzle</small><b>$12.00</b></div>
-              <div class="tp-card"><div class="tp-image">🦖</div><small>Dino Explorer</small><b>$24.99</b></div>
+              <div class="tp-card"><div class="tp-image" style="--h:48">🧩<em class="tp-badge-sale">Sale −20%</em><span class="tp-add">+</span></div><small>Rainbow Puzzle</small><b class="tp-price on-sale">$12.00 <s>$15.00</s></b></div>
+              <div class="tp-card"><div class="tp-image" style="--h:145">🦖<em class="tp-badge-new">New</em><span class="tp-add">+</span></div><small>Dino Explorer</small><b class="tp-price">$24.99</b></div>
+              <div class="tp-card"><div class="tp-image" style="--h:222">🚂<span class="tp-add">+</span></div><small>Wooden Train</small><b class="tp-price">$34.50</b></div>
             </div>
           </div>
         </div>
@@ -273,9 +296,9 @@ const themes = [
   { id: 'bubblegum', name: 'Bubblegum', primary: '#db2777', gradient: '#a21caf', soft: '#ffe8f3', accent: '#ffd166', emoji: '🍭', desc: 'Pink + lemon' },
   { id: 'grape', name: 'Grape Soda', primary: '#7c3aed', gradient: '#db2777', soft: '#f1eaff', accent: '#5eead4', emoji: '🦄', desc: 'Violet + mint' },
   { id: 'jungle', name: 'Jungle Gym', primary: '#15803d', gradient: '#0f766e', soft: '#e3f6e8', accent: '#ffb627', emoji: '🦖', desc: 'Leafy green + mango' },
-  { id: 'tangerine', name: 'Tangerine', primary: '#c2410c', gradient: '#be123c', soft: '#fff0e5', accent: '#7dd3fc', emoji: '🧡', desc: 'Orange + sky blue' },
+  { id: 'tangerine', name: 'Tangerine', primary: 'var(--danger)', gradient: '#be123c', soft: '#fff0e5', accent: '#7dd3fc', emoji: '🧡', desc: 'Orange + sky blue' },
   { id: 'ocean', name: 'Ocean Splash', primary: '#0e7490', gradient: '#1d4ed8', soft: '#e0f6f9', accent: '#ff9eb5', emoji: '🐳', desc: 'Teal + coral pink' },
-  { id: 'cherry', name: 'Cherry Pop', primary: '#dc2626', gradient: '#c2410c', soft: '#ffeceb', accent: '#fcd34d', emoji: '🍒', desc: 'Toy red + yellow' },
+  { id: 'cherry', name: 'Cherry Pop', primary: '#dc2626', gradient: 'var(--danger)', soft: '#ffeceb', accent: '#fcd34d', emoji: '🍒', desc: 'Toy red + yellow' },
   { id: 'midnight', name: 'Midnight Stars', primary: '#312e81', gradient: '#7c3aed', soft: '#ebeafd', accent: '#f9a8d4', emoji: '🌙', desc: 'Navy + candy pink' }
 ];
 let useGradient = true;
@@ -341,7 +364,9 @@ function applyColors(theme) {
     '--brand-text-on-primary': readableText(theme.primary),
     '--theme-text-on-accent': readableText(theme.accent)
   };
-  Object.entries(vars).forEach(([name, value]) => document.documentElement.style.setProperty(name, value));
+  // Only the preview box changes; the real store changes when the theme is published.
+  const target = themePreview || document.documentElement;
+  Object.entries(vars).forEach(([name, value]) => target.style.setProperty(name, value));
 }
 
 // Darken a color until white button text on it passes WCAG AA contrast.
@@ -468,6 +493,9 @@ function updateRibbonPreview() {
   if (!ribbonPreview) return;
   ribbonPreview.textContent = text || 'Your ribbon preview will appear here.';
   ribbonPreview.classList.toggle('muted', !text);
+  // Same text in the theme preview's ribbon.
+  const tpRibbon = themePreview?.querySelector('.tp-ribbon');
+  if (tpRibbon) { tpRibbon.textContent = text; tpRibbon.hidden = !text; }
 }
 
 function updateCodPreview() {
@@ -811,31 +839,39 @@ initAuth();
 .custom-note{margin:0;padding:8px 12px;border-radius:10px;background:var(--accent-soft);font-size:.85rem;font-weight:700}
 .theme-preview-wrap{position:sticky;top:calc(var(--header-h) + 16px)}
 .preview-label{margin:0 0 8px;color:var(--muted);font-size:.78rem;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
-.theme-preview{overflow:hidden;border:1.5px solid var(--line);border-radius:20px;background:var(--bg);box-shadow:var(--shadow)}
-.tp-header{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
-.tp-header b{font-family:var(--font-display);color:var(--primary-strong);font-size:.95rem}
-.tp-nav{display:flex;gap:5px;margin-right:auto}
-.tp-nav i{display:block;width:26px;height:8px;border-radius:99px;background:var(--surface-2)}
-.tp-nav i:first-child{background:var(--brand-soft)}
-.tp-cart{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:99px;background:var(--brand-gradient);color:var(--brand-text-on-primary);font-size:.72rem;font-weight:800}
-.tp-cart em{padding:1px 6px;border-radius:99px;background:var(--theme-accent);color:var(--theme-text-on-accent);font-style:normal;font-weight:900}
-.tp-ribbon{padding:6px;background:linear-gradient(90deg,var(--brand-primary),var(--brand-primary-2));color:var(--brand-text-on-primary);font-size:.7rem;font-weight:800;text-align:center}
-.tp-hero{position:relative;display:grid;gap:8px;padding:20px 16px;background:var(--page-hero-bg);overflow:hidden}
-.tp-eyebrow{justify-self:start;padding:3px 8px;border-radius:99px;background:var(--accent-soft);color:var(--primary-strong);font-size:.62rem;font-weight:900;letter-spacing:.06em}
-.tp-hero strong{max-width:60%;font-family:var(--font-display);font-size:1.35rem;line-height:1.05;color:var(--ink)}
-.tp-buttons{display:flex;gap:6px}
-.tp-primary,.tp-secondary{padding:6px 12px;border-radius:99px;font-size:.72rem;font-weight:800}
-.tp-primary{background:var(--brand-gradient);color:var(--brand-text-on-primary);box-shadow:0 2px 0 var(--primary-strong)}
-.tp-secondary{background:var(--surface);color:var(--primary-strong);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
-.tp-bubble{position:absolute;display:grid;place-items:center;border-radius:50%;box-shadow:var(--shadow-sm)}
-.tp-bubble-1{right:40px;top:18px;width:58px;height:58px;background:var(--brand-gradient);font-size:30px}
-.tp-bubble-2{right:10px;bottom:10px;width:40px;height:40px;background:var(--theme-accent);font-size:20px}
-.tp-products{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px}
-.tp-card{overflow:hidden;border:1.5px solid var(--line);border-radius:14px;background:var(--surface)}
-.tp-image{position:relative;display:grid;place-items:center;height:64px;background:var(--surface-2);font-size:30px}
-.tp-image em{position:absolute;left:6px;top:6px;padding:1px 7px;border-radius:99px;background:var(--theme-accent);color:var(--theme-text-on-accent);font-size:.6rem;font-style:normal;font-weight:900}
-.tp-card small{display:block;padding:7px 9px 0;font-size:.72rem;font-weight:800}
-.tp-card b{display:block;padding:0 9px 8px;font-family:var(--font-display);color:var(--primary-strong);font-size:.9rem}
+/* Live preview: its own copy of the theme colours, so picking a theme recolours only this box
+   (the colours derived from them are re-declared here for the same reason). */
+.theme-preview{--brand-gradient:linear-gradient(135deg,var(--brand-primary),var(--brand-primary-2));--primary-strong:color-mix(in srgb,var(--brand-primary) 78%,#000);--accent-soft:color-mix(in srgb,var(--theme-accent) 22%,#fff);--tp-ink:color-mix(in srgb,var(--brand-primary) 6%,#1b1822);--tp-bg:#fbf7f1;overflow:hidden;border:1.5px solid var(--line);border-radius:20px;background:var(--tp-bg);box-shadow:var(--shadow);font-family:var(--font-body);color:var(--tp-ink)}
+.tp-ribbon{padding:6px;background:var(--tp-ink);color:#fff;font-size:.62rem;font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp-header{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(0,0,0,.06)}
+.tp-logo{font-family:var(--font-display);font-weight:var(--display-weight);letter-spacing:var(--display-tracking);font-size:1rem;white-space:nowrap}
+.tp-nav{display:flex;gap:9px;font-size:.62rem;font-weight:700;color:color-mix(in srgb,var(--tp-ink) 80%,#fff)}
+.tp-nav .tp-sale{color:var(--danger)}
+.tp-search{margin-left:auto;padding:4px 10px;border:1px solid rgba(0,0,0,.1);border-radius:99px;background:#fff;color:#9b96a5;font-size:.58rem;white-space:nowrap}
+.tp-cart{display:inline-flex;align-items:center;gap:4px;padding:5px 6px 5px 9px;border-radius:99px;background:var(--tp-ink);color:#fff;font-size:.62rem;font-weight:700}
+.tp-cart em{display:grid;place-items:center;min-width:15px;height:15px;border-radius:99px;background:var(--theme-accent);color:var(--theme-text-on-accent);font-style:normal;font-size:.55rem;font-weight:800}
+.tp-hero{display:grid;grid-template-columns:1.3fr 1fr;align-items:center;gap:10px;padding:18px 14px;background:radial-gradient(circle at 85% 20%,var(--accent-soft),transparent 60%),radial-gradient(circle at 0% 100%,color-mix(in srgb,var(--brand-primary) 10%,transparent),transparent 55%)}
+.tp-copy{display:grid;gap:8px;justify-items:start}
+.tp-eyebrow{color:var(--primary-strong);font-size:.55rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
+.tp-copy strong{font-family:var(--font-display);font-weight:var(--display-weight);letter-spacing:var(--display-tracking);font-size:1.3rem;line-height:1.02}
+.tp-copy strong i{color:var(--primary-strong)}
+.tp-buttons{display:flex;gap:6px;flex-wrap:wrap}
+.tp-primary,.tp-secondary{padding:6px 12px;border-radius:99px;font-size:.62rem;font-weight:700;white-space:nowrap}
+.tp-primary{background:var(--brand-gradient);color:var(--brand-text-on-primary)}
+.tp-secondary{background:#fff;box-shadow:inset 0 0 0 1.5px rgba(0,0,0,.14)}
+.tp-art{position:relative;display:grid;place-items:center;aspect-ratio:1;width:100%;max-width:130px;justify-self:end;border-radius:22px;background:var(--brand-gradient);font-size:2.6rem}
+.tp-art em{position:absolute;right:-6px;bottom:-6px;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--theme-accent);font-size:1rem;font-style:normal;box-shadow:0 4px 10px rgba(0,0,0,.15)}
+.tp-products{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:4px 12px 14px}
+.tp-card{display:grid;gap:3px;min-width:0}
+.tp-image{position:relative;display:grid;place-items:center;aspect-ratio:1;border-radius:12px;background:hsl(var(--h) 70% 92%);font-size:1.7rem}
+.tp-image em{position:absolute;left:5px;top:5px;padding:2px 6px;border-radius:99px;font-size:.5rem;font-style:normal;font-weight:800}
+.tp-badge-sale{background:var(--danger);color:#fff}
+.tp-badge-new{background:var(--theme-accent);color:var(--theme-text-on-accent)}
+.tp-add{position:absolute;right:5px;bottom:5px;display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#fff;font-size:.7rem;font-weight:800;box-shadow:0 2px 6px rgba(0,0,0,.12)}
+.tp-card small{font-size:.62rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tp-price{font-size:.66rem;font-weight:800}
+.tp-price.on-sale{color:var(--danger)}
+.tp-price s{color:#9b96a5;font-weight:600}
 .theme-actions{display:flex;gap:10px;flex-wrap:wrap}
 .publish-status{margin:0;padding:10px 14px;border-radius:12px;background:var(--surface-2);color:var(--muted);font-size:.9rem;font-weight:700}
 .logo-preview{min-height:180px;display:grid;place-items:center;padding:26px;border:1px dashed var(--line-strong);border-radius:16px;background:linear-gradient(135deg,var(--surface-2),#fff)}
