@@ -13,12 +13,29 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
 <head>
   <title>My Account | Clever Toys</title>
+  {/* Runs before anything is drawn: guests (no saved sign-in in this browser) go straight to the
+      sign-in page, so they never see an empty "My Account" page first. Signed-in visitors see the
+      page once their session is confirmed by the script at the bottom. */}
+  <script is:inline>
+    (function () {
+      var signedIn = false;
+      try { signedIn = Object.keys(localStorage).some(function (k) { return /^sb-.+-auth-token$/.test(k) && localStorage.getItem(k); }); } catch (e) {}
+      document.documentElement.classList.add(signedIn ? 'account-checking' : 'account-redirecting');
+      if (!signedIn) location.replace('/login?next=/account');
+    })();
+  </script>
+  <style>
+    html.account-redirecting main, html.account-checking .account-page > :not(.account-loading) { visibility: hidden; }
+    html:not(.account-checking) .account-loading { display: none; }
+    .account-loading { visibility: visible; padding: 40px 0; text-align: center; color: var(--muted); }
+  </style>
 </head>
 {/* Replaced by the shared store header in src/middleware.ts */}
 <header class="site-header"></header>
 <main class="section">
   <div class="container narrow account-page">
     <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
+    <p class="account-loading" role="status">Loading your account…</p>
     <div class="section-header account-head">
       <div><h1>My Account</h1><p id="account-email">Loading…</p></div>
       <button id="logout" class="button secondary-button" type="button">Sign Out</button>
@@ -90,7 +107,9 @@ async function init() {
     if (!url || !key) throw new Error('Supabase browser configuration is missing.');
     supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) { location.href = '/login?next=/account'; return; }
+    // Saved sign-in expired or invalid: go to sign-in without leaving /account in the Back history.
+    if (!session?.user) { location.replace('/login?next=/account'); return; }
+    document.documentElement.classList.remove('account-checking');
     userId = session.user.id;
     email.textContent = session.user.email || '';
 
@@ -110,6 +129,7 @@ async function init() {
     if (!values.full_name) values.full_name = session.user.user_metadata?.full_name || '';
     for (const name of FIELDS) (form.elements.namedItem(name) as HTMLInputElement).value = name === 'governorate' ? matchGovernorate(values[name] || '') : values[name] || '';
   } catch (error) {
+    document.documentElement.classList.remove('account-checking');
     message.textContent = error instanceof Error ? error.message : 'Could not load your account.';
   }
 }

@@ -377,6 +377,13 @@
   // The product page (and anything else) can ask for the cart drawer after adding an item.
   window.addEventListener('clever-cart-added', (event) => openCartDrawer(event.detail?.trigger));
 
+  // ---------- Account links for guests ----------
+  // Visitors who are not signed in go straight to the sign-in page (then back to their account),
+  // instead of opening /account first and being redirected from there.
+  let signedIn = false;
+  try { signedIn = Object.keys(localStorage).some((k) => /^sb-.+-auth-token$/.test(k) && localStorage.getItem(k)); } catch {}
+  if (!signedIn) document.querySelectorAll('a[href="/account"]').forEach((a) => { a.href = '/login?next=/account'; });
+
   // ---------- Broken product photos ----------
   // If a product photo fails to load (deleted file, bad link), hide it so the card shows its soft
   // background instead of the browser's broken-image icon. Errors don't bubble, so listen in the capture phase.

@@ -140,7 +140,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const fontHref = FONT_PRESETS[isAdmin ? 'modern' : design.font].href;
   const fontLinks = `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="${fontHref}" media="print" onload="this.media='all'" /><noscript><link rel="stylesheet" href="${fontHref}" /></noscript>`;
   // Bump the ?v= number whenever these files change, so browsers fetch the new version.
-  const storeScript = '<script src="/store-ui.js?v=20260928-1" defer></script><script src="/branding-ui.js?v=20260927-1" defer></script>';
+  const storeScript = '<script src="/store-ui.js?v=20260928-2" defer></script><script src="/branding-ui.js?v=20260927-1" defer></script>';
   // Instant page changes: when a shopper hovers over (computer) or touches (phone) a store link, the
   // browser starts loading that page right away, so it is usually ready by the time the tap finishes.
   // Supported by Chrome, Edge and Samsung Internet; other browsers ignore it. Cart, checkout, account
