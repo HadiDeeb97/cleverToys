@@ -743,3 +743,12 @@ END $$;
 
 -- Tell the API about the new tables and functions right away.
 NOTIFY pgrst, 'reload schema';
+
+-- Trigger-only functions are never called directly; small helpers get a fixed search path.
+REVOKE EXECUTE ON FUNCTION public.log_admin_change() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.record_stock_change() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.restock_on_cancel() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.touch_updated_at() FROM PUBLIC, anon, authenticated;
+ALTER FUNCTION public.admin_role_allows(text, text) SET search_path = public, pg_temp;
+ALTER FUNCTION public.phone_key(text) SET search_path = public, pg_temp;
+ALTER FUNCTION public.touch_updated_at() SET search_path = public, pg_temp;
