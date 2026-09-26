@@ -214,7 +214,7 @@ const previewFontHref = FONT_PRESETS[design.font]?.href || FONT_PRESETS.premium.
       </div>
       <div class="logo-preview"><img id="preview" src={logoUrl} alt="Current Clever Toys logo" /></div>
       <label for="logo-file">Choose logo<input id="logo-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
-      <div class="icon-bg-row"><label class="icon-bg-toggle"><input id="logo-white-bg" type="checkbox" class="toggle" /> Add a background</label><label class="icon-color">Colour<input id="logo-bg-color" type="color" value="#ffffff" /></label><small id="logo-bg-note" class="muted" hidden>Always on for Rounded and Circle, so the shape shows.</small></div>
+      <div class="icon-bg-row"><label class="icon-bg-toggle"><input id="logo-white-bg" type="checkbox" class="toggle" /> Add a background</label><label class="icon-color">Colour<input id="logo-bg-color" type="color" value="#ffffff" /></label></div>
       <fieldset class="icon-options">
         <legend>Logo shape</legend>
         <div class="icon-choice-row">
@@ -232,7 +232,7 @@ const previewFontHref = FONT_PRESETS[design.font]?.href || FONT_PRESETS.premium.
           <label class="icon-color">Colour<input id="logo-border-color" type="color" value="#1f2937" /></label>
         </div>
       </fieldset>
-      <small class="wa-usage">The shape and border are added to the logo when you upload it. To change them later, choose the logo file again and upload.</small>
+      <small class="wa-usage">Rounded and Circle cut the logo itself into that shape. The shape and border are added when you upload it. To change them later, choose the logo file again and upload.</small>
       <button id="save-logo" class="button" type="button" disabled>Upload Logo</button>
       <p id="logo-message" role="status"></p>
     </section>
@@ -255,7 +255,7 @@ const previewFontHref = FONT_PRESETS[design.font]?.href || FONT_PRESETS.premium.
         <div class="icon-home-preview" aria-hidden="true"><img id="icon-preview-home" src="/apple-touch-icon.png" alt="" width="60" height="60" /><small>Clever Toys</small></div>
       </div>
       <label for="icon-file">Choose icon image<input id="icon-file" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" /></label>
-      <div class="icon-bg-row"><label class="icon-bg-toggle"><input id="icon-white-bg" type="checkbox" class="toggle" /> Add a background</label><label class="icon-color">Colour<input id="icon-bg-color" type="color" value="#ffffff" /></label><small id="icon-bg-note" class="muted" hidden>Always on for Rounded and Circle, so the shape shows.</small></div>
+      <div class="icon-bg-row"><label class="icon-bg-toggle"><input id="icon-white-bg" type="checkbox" class="toggle" /> Add a background</label><label class="icon-color">Colour<input id="icon-bg-color" type="color" value="#ffffff" /></label></div>
       <fieldset class="icon-options">
         <legend>Icon shape</legend>
         <div class="icon-choice-row">
@@ -709,7 +709,7 @@ let logoColumnReady = false;
 /** The shape, border and background chosen in the "Store Logo" card (same choices as the website icon). */
 function logoStyle() {
   return {
-    whiteBackground: document.querySelector('#logo-white-bg').checked || (document.querySelector('input[name=logo-shape]:checked')?.value || 'none') !== 'none',
+    whiteBackground: document.querySelector('#logo-white-bg').checked,
     background: document.querySelector('#logo-bg-color').value || '#ffffff',
     shape: document.querySelector('input[name=logo-shape]:checked')?.value || 'none',
     border: document.querySelector('input[name=logo-border]:checked')?.value || 'none',
@@ -727,19 +727,45 @@ function logoShapePath(ctx, w, h, shape, inset) {
 }
 
 /**
- * Draws the logo at header size (at most 600 × 200 px; a circle is a 200 px badge) in the chosen shape
- * and border, and returns it as WebP.
+ * Cuts empty see-through edges off a picture, so a shape is cut from the picture itself (a logo with
+ * transparent margins would otherwise look unchanged when rounded). Returns a canvas.
+ */
+function trimTransparent(bitmap) {
+  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(bitmap.width * scale)); c.height = Math.max(1, Math.round(bitmap.height * scale));
+  const x = c.getContext('2d');
+  x.drawImage(bitmap, 0, 0, c.width, c.height);
+  const { data } = x.getImageData(0, 0, c.width, c.height);
+  let top = c.height, left = c.width, right = -1, bottom = -1;
+  for (let y = 0; y < c.height; y++) for (let px = 0; px < c.width; px++) {
+    if (data[(y * c.width + px) * 4 + 3] > 10) { if (px < left) left = px; if (px > right) right = px; if (y < top) top = y; if (y > bottom) bottom = y; }
+  }
+  if (right < 0) return c; // fully transparent: nothing to trim
+  const out = document.createElement('canvas');
+  out.width = right - left + 1; out.height = bottom - top + 1;
+  out.getContext('2d').drawImage(c, left, top, out.width, out.height, 0, 0, out.width, out.height);
+  return out;
+}
+
+/**
+ * Draws the logo at header size (at most 600 × 200 px; a circle is a 200 px round logo) and returns it
+ * as WebP. Rounded and Circle cut the picture itself into that shape (it fills the shape, like a round
+ * profile photo); nothing is added behind it unless "Add a background" is on.
  */
 async function logoWebp(bitmap, style) {
   const { whiteBackground, background, shape, border, borderColor } = style;
-  const framed = shape !== 'none' || border !== 'none' || whiteBackground;
+  const src = shape === 'none' ? bitmap : trimTransparent(bitmap);
   const line = border === 'none' ? 0 : border === 'thick' ? 8 : 4;
-  // Room inside the frame (a little padding when framed, more in a circle so a wide logo fits inside);
-  // the finished logo always fits in 600 × 200.
-  const pad = shape === 'circle' ? 32 : framed ? 18 + line : 0;
-  const scale = Math.min(1, (600 - pad * 2) / bitmap.width, (200 - pad * 2) / bitmap.height);
-  let w = Math.max(1, Math.round(bitmap.width * scale)) + pad * 2, h = Math.max(1, Math.round(bitmap.height * scale)) + pad * 2;
-  if (shape === 'circle') w = h = Math.min(200, Math.max(w, h));
+  let w, h, dw, dh;
+  if (shape === 'circle') {
+    w = h = Math.max(1, Math.min(200, Math.max(src.width, src.height)));
+    const cover = Math.max(w / src.width, h / src.height);
+    dw = src.width * cover; dh = src.height * cover;
+  } else {
+    const fit = Math.min(1, 600 / src.width, 200 / src.height);
+    w = dw = Math.max(1, Math.round(src.width * fit)); h = dh = Math.max(1, Math.round(src.height * fit));
+  }
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
   const ctx = canvas.getContext('2d');
@@ -748,11 +774,8 @@ async function logoWebp(bitmap, style) {
   logoShapePath(ctx, w, h, shape, 0);
   ctx.clip();
   if (whiteBackground) { ctx.fillStyle = background; ctx.fillRect(0, 0, w, h); }
-  const box = { w: w - pad * 2, h: h - pad * 2 };
-  const fit = Math.min(box.w / bitmap.width, box.h / bitmap.height);
-  const dw = bitmap.width * fit, dh = bitmap.height * fit;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bitmap, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  ctx.drawImage(src, (w - dw) / 2, (h - dh) / 2, dw, dh);
   ctx.restore();
   if (line) {
     logoShapePath(ctx, w, h, shape, line / 2);
@@ -779,19 +802,6 @@ async function previewLogo() {
   }
 }
 document.querySelectorAll('#logo-file, input[name=logo-shape], input[name=logo-border], #logo-border-color, #logo-white-bg, #logo-bg-color').forEach((el) => el.addEventListener(el.id === 'logo-file' ? 'change' : 'input', previewLogo));
-
-// A transparent logo cut into a rounded or circle shape looks unchanged, so those shapes always get
-// a background (shown ticked and locked).
-function syncShapeBackground(kind, plain) {
-  const shaped = (document.querySelector(`input[name=${kind}-shape]:checked`)?.value || plain) !== plain;
-  const toggle = document.querySelector(`#${kind}-white-bg`);
-  if (shaped) { toggle.dataset.userChoice ??= String(toggle.checked); toggle.checked = true; }
-  else if (toggle.dataset.userChoice !== undefined) { toggle.checked = toggle.dataset.userChoice === 'true'; delete toggle.dataset.userChoice; }
-  toggle.disabled = shaped;
-  document.querySelector(`#${kind}-bg-note`).hidden = !shaped;
-}
-document.querySelectorAll('input[name=logo-shape]').forEach((el) => el.addEventListener('change', () => syncShapeBackground('logo', 'none')));
-document.querySelectorAll('input[name=icon-shape]').forEach((el) => el.addEventListener('change', () => syncShapeBackground('icon', 'square')));
 
 saveLogoButton?.addEventListener('click', async () => {
   const file = document.querySelector('#logo-file')?.files?.[0];
@@ -848,7 +858,7 @@ function showIcon(faviconUrl, columnReady) {
 /** The shape and border chosen in the "Website icon" card. */
 function iconStyle() {
   return {
-    whiteBackground: document.querySelector('#icon-white-bg').checked || (document.querySelector('input[name=icon-shape]:checked')?.value || 'square') !== 'square',
+    whiteBackground: document.querySelector('#icon-white-bg').checked,
     background: document.querySelector('#icon-bg-color').value || '#ffffff',
     shape: document.querySelector('input[name=icon-shape]:checked')?.value || 'square',
     border: document.querySelector('input[name=icon-border]:checked')?.value || 'none',
@@ -879,13 +889,21 @@ async function iconPng(bitmap, size, style) {
   ctx.save();
   shapePath(ctx, size, shape, 0);
   ctx.clip();
-  if (whiteBackground || size === 180) { ctx.fillStyle = whiteBackground ? background : '#ffffff'; ctx.fillRect(0, 0, size, size); }
-  const padding = (size >= 180 && (whiteBackground || size === 180) ? Math.round(size * 0.08) : 0) + (line ? line * 1.5 : 0);
-  const box = size - padding * 2;
-  const scale = Math.min(box / bitmap.width, box / bitmap.height);
-  const w = bitmap.width * scale, h = bitmap.height * scale;
+  if (whiteBackground) { ctx.fillStyle = background; ctx.fillRect(0, 0, size, size); }
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(bitmap, (size - w) / 2, (size - h) / 2, w, h);
+  if (shape !== 'square') {
+    // Rounded / Circle: the picture itself fills the shape and is cut to it.
+    const src = trimTransparent(bitmap);
+    const cover = Math.max(size / src.width, size / src.height);
+    const w = src.width * cover, h = src.height * cover;
+    ctx.drawImage(src, (size - w) / 2, (size - h) / 2, w, h);
+  } else {
+    const padding = (size >= 180 && (whiteBackground || size === 180) ? Math.round(size * 0.08) : 0) + (line ? line * 1.5 : 0);
+    const box = size - padding * 2;
+    const scale = Math.min(box / bitmap.width, box / bitmap.height);
+    const w = bitmap.width * scale, h = bitmap.height * scale;
+    ctx.drawImage(bitmap, (size - w) / 2, (size - h) / 2, w, h);
+  }
   ctx.restore();
   if (line) {
     shapePath(ctx, size, shape, line / 2);
