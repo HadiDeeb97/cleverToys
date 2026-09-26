@@ -191,6 +191,9 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
             <p class="muted">Proves to Google and Bing that you own the site, so you can see search data and submit your sitemap.</p>
             <label class="seo-field">Google Search Console code<input id="g-verify" class="admin-input" placeholder="Paste the code or the whole meta tag" /><small>In Search Console choose <strong>HTML tag</strong> and paste it here.</small></label>
             <label class="seo-field">Bing Webmaster code<input id="b-verify" class="admin-input" placeholder="Paste the code or the whole meta tag" /></label>
+            <h2 class="seo-gap">Meta (Facebook &amp; Instagram) Pixel</h2>
+            <p class="muted">Measures visits, add-to-carts and orders from your Facebook and Instagram ads. Leave empty to turn it off.</p>
+            <label class="seo-field">Pixel ID<input id="meta-pixel" class="admin-input" inputmode="numeric" placeholder="e.g. 123456789012345, or paste the whole Pixel code" /><small>In Meta Events Manager open <strong>Data sources</strong>, pick your Pixel and copy its ID.</small></label>
             <h2 class="seo-gap">Default share image</h2>
             <p class="muted">Used when a page without its own image is shared.</p>
             <div class="seo-image-row"><img id="default-image-preview" alt="" hidden /><div class="seo-actions"><label class="small-button seo-file">Upload image<input id="default-image-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" /></label><button id="default-image-remove" class="small-button" type="button" hidden>Remove</button></div></div>
@@ -702,6 +705,7 @@ const verification = (value: string) => { const raw = value.trim(); const code =
 function fillSettings() {
   $<HTMLInputElement>('#g-verify').value = seo.google_verification || '';
   $<HTMLInputElement>('#b-verify').value = seo.bing_verification || '';
+  $<HTMLInputElement>('#meta-pixel').value = seo.meta_pixel_id || '';
   $<HTMLInputElement>('#o-name').value = seo.site_name || 'Clever Toys';
   $<HTMLInputElement>('#o-phone').value = seo.org_phone || '';
   $<HTMLInputElement>('#o-email').value = seo.org_email || '';
@@ -877,8 +881,12 @@ function wire() {
     const g = $<HTMLInputElement>('#g-verify').value, b = $<HTMLInputElement>('#b-verify').value;
     if (g.trim() && !verification(g)) { toast('That Google code does not look right. Paste the code from the HTML tag option.', 'error'); return; }
     if (b.trim() && !verification(b)) { toast('That Bing code does not look right.', 'error'); return; }
+    // The Pixel ID alone, or taken from the whole Pixel code (fbq('init', '123…')).
+    const pixelRaw = $<HTMLInputElement>('#meta-pixel').value.trim();
+    const pixel = (pixelRaw.match(/fbq\(\s*['"]init['"]\s*,\s*['"](\d{5,20})['"]/)?.[1] ?? pixelRaw.match(/[?&]id=(\d{5,20})/)?.[1] ?? pixelRaw).replace(/\s/g, '');
+    if (pixel && !/^\d{5,20}$/.test(pixel)) { toast('That Pixel ID does not look right. It is a number, usually 15 or 16 digits.', 'error'); return; }
     const url = (sel: string) => { const v = $<HTMLInputElement>(sel).value.trim(); return /^https?:\/\//i.test(v) ? v : v ? `https://${v}` : ''; };
-    const saved = await saveSeoSettings({ google_verification: verification(g), bing_verification: verification(b), site_name: $<HTMLInputElement>('#o-name').value.trim() || 'Clever Toys', org_phone: $<HTMLInputElement>('#o-phone').value.trim(), org_email: $<HTMLInputElement>('#o-email').value.trim(), org_city: $<HTMLInputElement>('#o-city').value.trim(), facebook_url: url('#o-facebook'), tiktok_url: url('#o-tiktok'), default_image: defaultImage }, $<HTMLButtonElement>('#settings-save'));
+    const saved = await saveSeoSettings({ meta_pixel_id: pixel, google_verification: verification(g), bing_verification: verification(b), site_name: $<HTMLInputElement>('#o-name').value.trim() || 'Clever Toys', org_phone: $<HTMLInputElement>('#o-phone').value.trim(), org_email: $<HTMLInputElement>('#o-email').value.trim(), org_city: $<HTMLInputElement>('#o-city').value.trim(), facebook_url: url('#o-facebook'), tiktok_url: url('#o-tiktok'), default_image: defaultImage }, $<HTMLButtonElement>('#settings-save'));
     if (saved) fillSettings();
   };
 }

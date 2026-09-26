@@ -14,6 +14,7 @@ export type SeoSettings = {
   sitemap_categories: boolean;
   sitemap_images: boolean;
   robots_extra: string;
+  meta_pixel_id: string;
 };
 
 export const defaultSeoSettings: SeoSettings = {
@@ -29,7 +30,8 @@ export const defaultSeoSettings: SeoSettings = {
   sitemap_products: true,
   sitemap_categories: true,
   sitemap_images: true,
-  robots_extra: ''
+  robots_extra: '',
+  meta_pixel_id: ''
 };
 
 const text = (value: unknown, max = 300) => String(value ?? '').trim().slice(0, max);
@@ -57,7 +59,9 @@ export function parseSeoSettings(value: unknown): SeoSettings {
     sitemap_products: flag(s.sitemap_products, true),
     sitemap_categories: flag(s.sitemap_categories, true),
     sitemap_images: flag(s.sitemap_images, true),
-    robots_extra: text(s.robots_extra, 4000)
+    robots_extra: text(s.robots_extra, 4000),
+    // Meta (Facebook) Pixel ID: digits only.
+    meta_pixel_id: /^\d{5,20}$/.test(String(s.meta_pixel_id ?? '').trim()) ? String(s.meta_pixel_id).trim() : ''
   };
 }
 

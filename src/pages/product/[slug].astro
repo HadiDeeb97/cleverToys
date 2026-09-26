@@ -249,6 +249,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
               </div>
               <p id="cart-message" class="cart-message" aria-live="polite"></p>
               {/* Rendered on the server so it never pops in and moves the page; public/branding-ui.js makes it work. */}
+              <script type="application/json" id="pixel-product" set:html={JSON.stringify({ id: product.id, name: product.name, price: baseDisplayPrice }).replace(/</g, '\\u003c')} />
               <script type="application/json" id="wa-delivery-data" set:html={JSON.stringify({ governorates: LEBANON_GOVERNORATES, zones: deliveryZones }).replace(/</g, '\\u003c')} />
               <div class="whatsapp-order" data-buy-whatsapp>
                 <button type="button" class="button whatsapp-buy-button" disabled={!inStock}>

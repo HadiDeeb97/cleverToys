@@ -220,11 +220,11 @@ button,input,textarea,select{font:inherit;color:inherit}
 @media (hover:hover){.clever-header-social:hover{background:var(--surface-2)}}
 .clever-header-social-icon{display:block;width:21px;height:21px}
 /* Slide-in panels: site menu (left) and cart (right). */
-.drawer{position:fixed;inset:0;z-index:15000;pointer-events:none}
+.drawer{position:fixed;inset:0;z-index:15000;pointer-events:none;visibility:hidden;transition:visibility 0s .36s}
 .drawer-backdrop{position:absolute;inset:0;background:rgba(20,16,28,.45);opacity:0;transition:opacity .3s var(--ease);backdrop-filter:blur(2px)}
 .drawer-panel{position:absolute;top:0;bottom:0;left:0;display:flex;flex-direction:column;width:min(420px,92vw);background:var(--bg);box-shadow:var(--shadow-lg);transform:translateX(-102%);transition:transform .35s var(--ease);overflow:hidden}
 .drawer.from-right .drawer-panel{left:auto;right:0;transform:translateX(102%)}
-.drawer.is-open{pointer-events:auto}
+.drawer.is-open{pointer-events:auto;visibility:visible;transition-delay:0s}
 .drawer.is-open .drawer-backdrop{opacity:1}
 .drawer.is-open .drawer-panel{transform:none}
 .drawer-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
@@ -999,6 +999,21 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
 .hero-copy>:nth-child(3),.page-hero .container>:nth-child(3),.category-heading>div>:nth-child(3){animation-delay:.14s}
 .hero-copy>:nth-child(n+4),.category-heading>div>:nth-child(n+4){animation-delay:.21s}
 .hero-visual{animation:ct-rise .9s var(--ease) .1s both}
+/* Product page: the photo and the first details rise in on computers, like every other page's heading.
+   (On phones the details start below the photo, so they fade up on scroll instead.) */
+@media (min-width:761px){
+  .product-layout>.gallery{animation:ct-rise .8s var(--ease) both}
+  .product-details>:nth-child(-n+5){animation:ct-rise .7s var(--ease) both}
+  .product-details>:nth-child(2){animation-delay:.06s}.product-details>:nth-child(3){animation-delay:.12s}
+  .product-details>:nth-child(4){animation-delay:.18s}.product-details>:nth-child(5){animation-delay:.24s}
+}
+/* Cart and checkout are filled in from this browser's saved cart after the page loads: space is kept
+   for them so the page below does not jump, and the content fades in when it appears. */
+#cart-root{min-height:min(70vh,560px)}
+.checkout-summary:empty{min-height:320px}
+@keyframes ct-fade{from{opacity:0}to{opacity:1}}
+/* (on the box itself, so redrawing it later, e.g. a new delivery fee, does not flash again) */
+#cart-root:not(:empty),.checkout-summary:not(:empty){animation:ct-fade .35s ease both}
 /* Set by store-ui.js only for elements that start below the fold, so nothing visible ever flashes. */
 .reveal-pending{opacity:0;transform:translateY(24px)}
 .reveal-in{transition:opacity .6s ease var(--reveal-delay,0ms),transform .6s var(--ease) var(--reveal-delay,0ms)}

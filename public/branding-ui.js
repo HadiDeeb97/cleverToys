@@ -296,6 +296,8 @@
     button.addEventListener('click', () => {
       if (addButton.disabled) return;
       openDetailsDialog(collectOrder(), (order, details) => {
+        // Meta Pixel (if set up): a WhatsApp order counts as a lead.
+        try { if (typeof window.fbq === 'function') window.fbq('track', 'Lead', { content_name: order.productName, value: order.total, currency: 'USD' }); } catch {}
         window.open(buildWhatsappUrl(getBranding().whatsappUrl, buildMessage(order, details)), '_blank', 'noopener,noreferrer');
       });
     });

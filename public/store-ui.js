@@ -234,6 +234,8 @@
     ].join(', ');
     document.querySelectorAll(REVEAL).forEach((element) => {
       if (element.dataset.reveal) return;
+      // Inside another block that already fades in (e.g. a dropdown inside the details column): animate once only.
+      if (element.parentElement?.closest('[data-reveal]')) return;
       element.dataset.reveal = '1';
       if (element.getBoundingClientRect().top < fold) return;
       const index = element.parentElement ? [...element.parentElement.children].indexOf(element) % 4 : 0;
@@ -530,6 +532,46 @@
     });
   }
 
+  // ---------- Meta Pixel shop events (only when a Pixel ID is set in Admin → SEO → Settings) ----------
+  // src/middleware.ts adds Meta's base code; these calls tell Meta what shoppers do.
+  const pixel = (...args) => { try { if (typeof window.fbq === 'function') window.fbq(...args); } catch {} };
+  const whenOpened = (fn) => { if (document.prerendering) document.addEventListener('prerenderingchange', fn, { once: true }); else fn(); };
+  const cartSnapshot = () => new Map(readCart().map((item) => [`${item.productId}|${item.variantId || ''}`, item]));
+  const setupPixelEvents = () => {
+    if (typeof window.fbq !== 'function') return;
+    // Product page: ViewContent (data from the page, see src/pages/product/[slug].astro).
+    let product = null;
+    try { product = JSON.parse(document.getElementById('pixel-product')?.textContent || 'null'); } catch {}
+    if (product?.id) pixel('track', 'ViewContent', { content_ids: [product.id], content_name: product.name, content_type: 'product', value: Number(product.price) || 0, currency: 'USD' });
+    // Checkout page: InitiateCheckout with what is in the cart.
+    if (/^\/checkout\/?$/.test(location.pathname)) {
+      const cart = readCart();
+      if (cart.length) pixel('track', 'InitiateCheckout', { content_ids: cart.map((i) => i.productId), num_items: cart.reduce((n, i) => n + Number(i.quantity || 0), 0), value: Math.round(cart.reduce((n, i) => n + Number(i.price || 0) * Number(i.quantity || 0), 0) * 100) / 100, currency: 'USD' });
+    }
+    // Order confirmation: Purchase, sent once per order (the checkout page saves the order just before coming here).
+    if (/^\/order-success\/?$/.test(location.pathname)) {
+      try {
+        const saved = JSON.parse(sessionStorage.getItem('ctPixelPurchase') || 'null');
+        if (saved?.order_number) {
+          sessionStorage.removeItem('ctPixelPurchase');
+          pixel('track', 'Purchase', { content_ids: saved.content_ids || [], num_items: saved.num_items || 0, value: Math.round((Number(saved.value) || 0) * 100) / 100, currency: 'USD' }, { eventID: saved.order_number });
+        }
+      } catch {}
+    }
+    // AddToCart: whenever the cart grows (product page, quick view, cards, cart page).
+    let before = cartSnapshot();
+    const onCartChange = () => {
+      const after = cartSnapshot();
+      after.forEach((item, key) => {
+        const added = Number(item.quantity || 0) - Number(before.get(key)?.quantity || 0);
+        if (added > 0) pixel('track', 'AddToCart', { content_ids: [item.productId], content_name: item.name, content_type: 'product', contents: [{ id: item.productId, quantity: added }], value: Number(item.price || 0) * added, currency: 'USD' });
+      });
+      before = after;
+    };
+    window.addEventListener('clever-cart-updated', onCartChange);
+    window.addEventListener('cart-updated', onCartChange);
+  };
+
   // ---------- Scroll lock for pop-ups (quick view, cart and menu drawers, filters, photo viewer) ----------
   // The page itself is set to overflow:hidden while one is open (global.css), which stops scrolling on
   // computers and Android. iPhones still scroll the page with a finger, so finger swipes are also
@@ -566,6 +608,7 @@
   initReveal();
   document.querySelectorAll(DRAG_ROWS).forEach(bindDragRow);
   bindAccordions();
+  whenOpened(setupPixelEvents);
   // Analytics waits until the page has finished loading so it never competes with the page itself.
   // A page the browser loaded ahead of time (speculation rules in src/middleware.ts) is only counted
   // once the shopper actually opens it.

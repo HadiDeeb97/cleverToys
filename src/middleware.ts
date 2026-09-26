@@ -135,13 +135,18 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
     codDeliveryPrice,
     freeDeliveryThreshold: Math.max(0, Number(storeSettings.free_delivery_threshold || 0))
   };
+  // Meta Pixel (Admin → SEO → Settings): Meta's standard base code, on storefront pages only.
+  // public/store-ui.js sends the shop events (ViewContent, AddToCart, InitiateCheckout, Purchase).
+  // A page loaded ahead of time (speculation rules) is only counted once the shopper opens it.
+  const pixelId = isAdmin ? '' : parseSeoSettings(storeSettings.seo).meta_pixel_id;
+  const pixelScript = pixelId ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixelId}');var go=function(){fbq('track','PageView')};document.prerendering?document.addEventListener('prerenderingchange',go,{once:true}):go();</script>` : '';
   const storeConfig = `<script>window.__CLEVER_BRANDING__=${JSON.stringify(branding).replace(/</g, '\\u003c')};</script>`;
   const earlyTheme = published.mode === 'theme' && published.theme ? `<style id="clever-theme">:root{${themeVariables(published.theme)}}</style>` : '';
   // Fonts: the pair chosen in Admin → Storefront (the admin panel always uses the clean "modern" pair).
   const fontHref = FONT_PRESETS[isAdmin ? 'modern' : design.font].href;
   const fontLinks = `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="${fontHref}" media="print" onload="this.media='all'" /><noscript><link rel="stylesheet" href="${fontHref}" /></noscript>`;
   // Bump the ?v= number whenever these files change, so browsers fetch the new version.
-  const storeScript = '<script src="/store-ui.js?v=20260929-7" defer></script><script src="/branding-ui.js?v=20260929-2" defer></script>';
+  const storeScript = '<script src="/store-ui.js?v=20260929-8" defer></script><script src="/branding-ui.js?v=20260929-3" defer></script>';
   // Instant page changes: when a shopper hovers over (computer) or touches (phone) a store link, the
   // browser starts loading that page right away, so it is usually ready by the time the tap finishes.
   // Supported by Chrome, Edge and Samsung Internet; other browsers ignore it. Cart, checkout, account
@@ -258,7 +263,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   output = output.replace(/<link\s+rel=["'](?:shortcut )?icon["'][^>]*>|<link\s+rel=["']apple-touch-icon["'][^>]*>/gi, '');
   // Look for the real <script> tag, not just the text: page scripts may mention store-ui.js in a comment.
-  if (!/<script[^>]+src="\/store-ui\.js/.test(output)) output = output.replace('</head>', `${preconnect}${iconTags}${fontLinks}${earlyTheme}${storeConfig}${storeScript}${speculationRules}</head>`);
+  if (!/<script[^>]+src="\/store-ui\.js/.test(output)) output = output.replace('</head>', `${preconnect}${iconTags}${fontLinks}${earlyTheme}${storeConfig}${pixelScript}${storeScript}${speculationRules}</head>`);
 
   if (isAdmin) {
     // One admin layout for every admin page: sidebar navigation on desktop, compact top bar on phones.
