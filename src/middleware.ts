@@ -318,11 +318,11 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       ]]
     ];
     const adminNav = adminGroups.map(([group, links]) => `<p class="admin-nav-group">${group}</p>${links.map(([href, label, icon, perm]) => `<a href="${href}" data-perm="${perm}"${path === href || (href !== '/admin' && path.startsWith(href + '/')) ? ' aria-current="page"' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icon}</svg><span>${label}</span></a>`).join('')}`).join('');
-    const adminSidebar = `<aside class="admin-sidebar" aria-label="Admin"><a href="/admin/dashboard" class="admin-brand"><span class="admin-brand-mark" aria-hidden="true">🧸</span><span>Clever Toys<small>Admin</small></span></a><nav class="admin-nav" aria-label="Admin navigation">${adminNav}</nav><div class="admin-sidebar-footer"><a href="/" target="_blank" rel="noopener">View store ↗</a><button type="button" id="admin-signout">Sign out</button></div></aside>`;
+    const adminSidebar = `<aside class="admin-sidebar" aria-label="Admin"><a href="/admin/dashboard" class="admin-brand"><span class="admin-brand-mark" aria-hidden="true">🧸</span><span>Clever Toys<small>Admin</small></span></a><button type="button" class="admin-search-open" id="admin-search-open" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Search…</span><kbd>Ctrl K</kbd></button><nav class="admin-nav" aria-label="Admin navigation">${adminNav}</nav><div class="admin-sidebar-footer"><a href="/" target="_blank" rel="noopener">View store ↗</a><button type="button" id="admin-signout">Sign out</button></div></aside>`;
     const adminHeaderPattern = /<header([^>]*class=["'][^"']*site-header[^"']*["'][^>]*)>[\s\S]*?<\/header>/i;
     if (adminHeaderPattern.test(output)) output = output.replace(adminHeaderPattern, () => adminSidebar);
     else output = output.replace('</head>', () => `</head>${adminSidebar}`);
-    output = output.replace('</head>', '<script src="/admin-ui.js?v=20260929-1" defer></script></head>');
+    output = output.replace('</head>', '<script src="/admin-ui.js?v=20260929-2" defer></script></head>');
   }
 
   if (!isAdmin) {

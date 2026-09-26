@@ -923,6 +923,36 @@ html[data-area=admin] .admin-head #logout,html[data-area=admin] .admin-head>.but
 .admin-brand small{display:block;font-family:var(--font-body);font-size:.7rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:color-mix(in srgb,#fff 60%,transparent)}
 .admin-brand-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:var(--brand-gradient);font-size:22px;box-shadow:0 8px 20px rgba(0,0,0,.25)}
 .admin-nav{display:grid;gap:2px}
+/* Admin search (public/admin-ui.js) */
+.admin-search-open{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.78);font:inherit;font-weight:600;text-align:left;cursor:pointer}
+.admin-search-open svg{flex:0 0 18px;width:18px;height:18px}
+.admin-search-open span{flex:1}
+.admin-search-open kbd{padding:2px 6px;border-radius:6px;background:rgba(255,255,255,.12);font:600 .72rem/1.4 var(--font-body);color:rgba(255,255,255,.7)}
+@media (hover:hover){.admin-search-open:hover{background:rgba(255,255,255,.12);color:#fff}}
+.admin-search{width:min(640px,calc(100vw - 24px));max-height:min(620px,calc(100dvh - 40px));margin:min(12vh,110px) auto auto;padding:0;border:0;border-radius:20px;background:var(--surface);color:var(--ink);box-shadow:0 30px 80px rgba(20,16,40,.35)}
+.admin-search::backdrop{background:rgba(20,16,28,.45);backdrop-filter:blur(3px)}
+.admin-search[open]{animation:as-in .18s var(--ease)}
+@keyframes as-in{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
+.as-box{display:flex;flex-direction:column;max-height:inherit}
+.as-field{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--line)}
+.as-field svg{flex:0 0 22px;width:22px;height:22px;color:var(--muted)}
+.as-field input{flex:1;min-width:0;border:0;outline:0;background:none;font:inherit;font-size:1.08rem;color:var(--ink)}
+.as-field input::-webkit-search-cancel-button{display:none}
+.admin-search kbd{padding:2px 7px;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;background:var(--surface-2);font:600 .72rem/1.5 var(--font-body);color:var(--muted)}
+.as-list{flex:1;margin:0;padding:8px;overflow-y:auto;list-style:none}
+.as-list li[data-i]{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;cursor:pointer}
+.as-list li[aria-selected=true]{background:color-mix(in srgb,var(--brand-primary) 10%,var(--surface))}
+.as-icon{display:grid;place-items:center;flex:0 0 36px;width:36px;height:36px;border-radius:10px;background:var(--surface-2)}
+.as-text{display:grid;flex:1;min-width:0}
+.as-text strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.as-text small{color:var(--muted);font-weight:600}
+.as-go{color:var(--muted);opacity:0}
+.as-list li[aria-selected=true] .as-go{opacity:1}
+.as-empty{padding:18px 12px;color:var(--muted);text-align:center}
+.as-hint{margin:0;padding:10px 18px;border-top:1px solid var(--line);color:var(--muted);font-size:.8rem}
+.admin-jump-flash{animation:admin-flash 2.2s ease}
+html[data-area=admin] :is(.admin-panel,.form-card,section,fieldset){scroll-margin-top:20px}
+@keyframes admin-flash{0%,35%{box-shadow:0 0 0 4px color-mix(in srgb,var(--brand-primary) 45%,transparent)}100%{box-shadow:0 0 0 4px transparent}}
 .admin-nav-group{margin:14px 0 4px;padding:0 12px;color:color-mix(in srgb,#fff 42%,transparent);font-size:.66rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
 .admin-nav-group:first-child{margin-top:0}
 .admin-nav a[hidden],.admin-nav-group[hidden]{display:none}
@@ -996,6 +1026,8 @@ html[data-area=admin] .form-card,html[data-area=admin] .admin-panel{border-radiu
   .admin-sidebar{position:sticky;z-index:1000;height:auto;flex-direction:row;align-items:center;gap:10px;padding:10px 12px;overflow-x:auto;scrollbar-width:none}
   .admin-sidebar::-webkit-scrollbar{display:none}
   .admin-brand{flex:0 0 auto;padding:0}
+  .admin-search-open{flex:0 0 auto;width:auto;padding:9px 11px}.admin-search-open span,.admin-search-open kbd{display:none}
+  .admin-search{margin-top:12px}
   .admin-brand>span:last-child{display:none}
   .admin-brand-mark{width:38px;height:38px}
   .admin-nav{display:flex;gap:4px}

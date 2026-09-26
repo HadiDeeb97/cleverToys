@@ -137,6 +137,8 @@ let productFilter = 'all';
 let lowStockAt = 5;
 const params = new URLSearchParams(location.search);
 if (['active', 'hidden', 'featured', 'low', 'out'].includes(params.get('filter') || '')) productFilter = String(params.get('filter'));
+// ?q= (from the admin search) starts with that text in the search box.
+if (params.get('q')) (document.getElementById('search') as HTMLInputElement).value = params.get('q') || '';
 
 const form = $<HTMLFormElement>('#product-form');
 const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
