@@ -37,6 +37,7 @@ Run the SQL files in `supabase/` from the Supabase SQL Editor. They can safely b
 - `branding_assets.sql`: small, cached logo and the uploadable website icon (Admin → Branding)
 - `storefront_design.sql`: Admin → Storefront (fonts, homepage sections, texts, footer)
 - `cms.sql`: staff roles (owner / manager / orders / content), activity log, editable pages, home banners, discount codes, delivery fee per governorate, stock history and low-stock alerts, product reviews, customer list; order placing with discount codes and per-governorate fees. Safe to re-run; the site keeps working before it is run.
+- `cleanup.sql`: every night deletes visits, page views, the admin activity log and stock history older than 15 days (pg_cron), so the database stays small. Orders, customers and products are never touched. Already applied to the live project.
 
 ## Project structure
 

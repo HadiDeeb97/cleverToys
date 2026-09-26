@@ -17,7 +17,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
       <div>
         <p class="eyebrow">Insights</p>
         <h1>Activity log</h1>
-        <p>Who changed what in the admin panel, and when.</p>
+        <p>Who changed what in the admin panel, and when. Changes are kept for 15 days.</p>
       </div>
     </div>
     <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
@@ -80,7 +80,7 @@ async function load(append = false) {
   entries = append ? [...entries, ...page] : page;
   $('#more').hidden = page.length < PAGE;
   $('#count').textContent = `${entries.length}${page.length === PAGE ? '+' : ''} changes`;
-  $('#log').innerHTML = entries.length ? entries.map(describe).join('') : '<p class="cms-empty">No changes recorded yet. Everything done in the admin panel from now on appears here.</p>';
+  $('#log').innerHTML = entries.length ? entries.map(describe).join('') : '<p class="cms-empty">No changes in the last 15 days.</p>';
 }
 
 (async () => {

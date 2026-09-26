@@ -72,7 +72,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
             <label>SEO description <span>(max 170)</span><textarea name="seo_description" rows="3" maxlength="170"></textarea></label>
           </details>
           <details class="more-fields" id="stock-history-box" hidden>
-            <summary>Stock history</summary>
+            <summary>Stock history <small class="muted">(last 15 days)</small></summary>
             <div id="stock-history"><small class="muted">Loading…</small></div>
           </details>
           <div class="switch-line"><label><input class="toggle" name="is_active" type="checkbox" checked /> Visible in store</label><label><input class="toggle" name="is_featured" type="checkbox" /> Featured on home page</label></div>
@@ -257,7 +257,7 @@ async function loadStockHistory(productId: string) {
   box.hidden = false;
   const rows = (r.data ?? []) as Row[];
   const variantName = new Map(variants.map((v) => [v.id, v.name]));
-  $('#stock-history').innerHTML = rows.length ? `<table class="stock-history"><thead><tr><th>When</th><th>Change</th><th>Left</th><th>Why</th></tr></thead><tbody>${rows.map((m) => `<tr><td>${new Date(m.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</td><td class="${m.change < 0 ? 'neg' : 'pos'}">${m.change > 0 ? '+' : ''}${m.change}</td><td>${m.stock_after}</td><td>${esc(STOCK_REASONS[m.reason] || m.reason)}${m.variant_id ? ` · ${esc(variantName.get(m.variant_id) || 'option')}` : ''}${m.orders?.order_number ? ` · <a class="text-link" href="/admin/orders?q=${encodeURIComponent(m.orders.order_number)}">${esc(m.orders.order_number)}</a>` : ''}</td></tr>`).join('')}</tbody></table>` : '<small class="muted">No stock changes recorded yet. Changes are recorded from now on.</small>';
+  $('#stock-history').innerHTML = rows.length ? `<table class="stock-history"><thead><tr><th>When</th><th>Change</th><th>Left</th><th>Why</th></tr></thead><tbody>${rows.map((m) => `<tr><td>${new Date(m.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</td><td class="${m.change < 0 ? 'neg' : 'pos'}">${m.change > 0 ? '+' : ''}${m.change}</td><td>${m.stock_after}</td><td>${esc(STOCK_REASONS[m.reason] || m.reason)}${m.variant_id ? ` · ${esc(variantName.get(m.variant_id) || 'option')}` : ''}${m.orders?.order_number ? ` · <a class="text-link" href="/admin/orders?q=${encodeURIComponent(m.orders.order_number)}">${esc(m.orders.order_number)}</a>` : ''}</td></tr>`).join('')}</tbody></table>` : '<small class="muted">No stock changes in the last 15 days.</small>';
 }
 
 function clearForm(focus = true) {

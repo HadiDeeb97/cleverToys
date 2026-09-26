@@ -23,8 +23,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <div class="chip-row" id="range-chips" role="radiogroup" aria-label="Date range">
           <button type="button" class="chip" data-range="1" role="radio">Today</button>
           <button type="button" class="chip" data-range="7" role="radio">7 days</button>
-          <button type="button" class="chip" data-range="30" role="radio">30 days</button>
-          <button type="button" class="chip" data-range="90" role="radio">90 days</button>
+          <button type="button" class="chip" data-range="14" role="radio">14 days</button>
         </div>
         <label class="auto-refresh"><input class="toggle" type="checkbox" id="auto-refresh" /> Live</label>
         <button id="refresh" class="button secondary-button" type="button">Refresh</button>
@@ -126,8 +125,10 @@ const ago = (iso: string) => { const s = Math.max(0, (Date.now() - new Date(iso)
 
 // No generated database types in this project, so table rows are typed loosely.
 let supabase: SupabaseClient<any, 'public', any>;
-let range = Number(new URLSearchParams(location.search).get('range')) || 30;
-if (![1, 7, 30, 90].includes(range)) range = 30;
+// Visits are kept for 15 days (supabase/cleanup.sql), so the longest view is 14 days.
+const KEEP_DAYS = 15;
+let range = Number(new URLSearchParams(location.search).get('range')) || 7;
+if (![1, 7, 14].includes(range)) range = 7;
 let sessions: Session[] = [];
 let sortKey: keyof Session = 'last_seen_at';
 let sortDir = -1;
@@ -234,12 +235,14 @@ async function load() {
   const prevSessions = (prevS.data ?? []) as any[];
   const visitors = new Set(sessions.map((x) => x.visitor_id)).size;
   $('#k-active').textContent = fmt(active.count ?? 0);
+  // The period before a 14-day view is older than the 15 days we keep, so there is nothing to compare with.
+  const compare = range * 2 <= KEEP_DAYS ? delta : () => '<span>Visits are kept 15 days</span>';
   $('#k-visitors').textContent = fmt(visitors);
-  $('#d-visitors').innerHTML = delta(visitors, new Set(prevSessions.map((x) => x.visitor_id)).size);
+  $('#d-visitors').innerHTML = compare(visitors, new Set(prevSessions.map((x) => x.visitor_id)).size);
   $('#k-sessions').textContent = fmt(sessions.length);
-  $('#d-sessions').innerHTML = delta(sessions.length, prevSessions.length);
+  $('#d-sessions').innerHTML = compare(sessions.length, prevSessions.length);
   $('#k-views').textContent = fmt(events.length);
-  $('#d-views').innerHTML = delta(events.length, prevE.count ?? 0);
+  $('#d-views').innerHTML = compare(events.length, prevE.count ?? 0);
   $('#k-depth').textContent = sessions.length ? (events.length / sessions.length).toFixed(1) : '0';
   $('#k-duration').textContent = duration(sessions.length ? sessions.reduce((sum, x) => sum + x.duration, 0) / sessions.length : 0);
 
