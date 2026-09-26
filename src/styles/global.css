@@ -105,7 +105,7 @@ html[data-bg=tint]{--bg:color-mix(in srgb,var(--brand-soft) 45%,#fff);--surface-
 *,*::before,*::after{box-sizing:border-box}
 [hidden]{display:none!important}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%;scroll-padding-top:calc(var(--header-h) + 16px)}
-body{margin:0;min-width:320px;min-height:100vh;background:var(--bg);color:var(--ink);font-size:16px;line-height:1.6;overflow-x:hidden}
+body{margin:0;min-width:320px;min-height:100vh;background:var(--bg);color:var(--ink);font-size:16px;line-height:1.6;overflow-x:hidden;overflow-x:clip}
 h1,h2,h3,h4{margin:0;font-family:var(--font-display);font-weight:var(--display-weight);line-height:1.08;letter-spacing:var(--display-tracking);color:var(--ink);text-wrap:balance}
 p{text-wrap:pretty}
 a{color:inherit;text-decoration:none}
@@ -245,7 +245,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 .drawer-contact{display:grid;gap:10px}
 .drawer-contact .button{width:100%}
 /* While a menu, cart or filter panel is open, only that panel scrolls (html too, for iPhone Safari). */
-body.has-drawer,html:has(body.has-drawer){overflow:hidden}
+/* Lock scrolling on the page itself (not <body>), so the sticky header stays on screen. */
+html:has(body.has-drawer){overflow:hidden}
 .drawer-panel,.filter-panel{overscroll-behavior:contain}
 .filter-scrim,.drawer-backdrop{touch-action:none}
 
@@ -434,7 +435,7 @@ html[data-font=modern] .hero-highlight,html[data-font=playful] .hero-highlight{f
 .quick-view-stock{margin:0;font-weight:700;color:var(--success)}
 .quick-view-stock.out{color:var(--danger)}
 /* Quick view details (filled in from /api/quick-view) */
-body.has-quick-view,html:has(body.has-quick-view){overflow:hidden}
+html:has(body.has-quick-view){overflow:hidden}
 .quick-view-dialog{overscroll-behavior:contain}
 .quick-view-gallery{display:flex;flex-direction:column;min-width:0;background:#fff;border-right:1px solid var(--line)}
 .quick-view-thumbs{display:flex;gap:8px;padding:10px;overflow-x:auto;scrollbar-width:none;border-top:1px solid var(--line)}
@@ -483,6 +484,13 @@ body.has-quick-view,html:has(body.has-quick-view){overflow:hidden}
 .filter-button{display:none}
 .category-pills{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;margin-bottom:20px;scrollbar-width:none}
 .category-pills::-webkit-scrollbar{display:none}
+.pill-scroller{position:relative;margin-bottom:20px}
+.pill-scroller .category-pills{margin-bottom:0}
+.pill-arrow{position:absolute;top:calc(50% - 3px);z-index:2;display:none;place-items:center;width:40px;height:40px;padding:0;border:1.5px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);box-shadow:0 6px 16px rgba(20,20,40,.14);cursor:pointer;transform:translateY(-50%);transition:transform .18s var(--ease),border-color .18s}
+.pill-arrow svg{width:18px;height:18px}
+.pill-arrow.prev{left:-6px}.pill-arrow.next{right:-6px}
+.pill-arrow:hover{border-color:var(--ink);transform:translateY(-50%) scale(1.06)}
+@media (hover:hover) and (pointer:fine){.pill-scroller.more-left .pill-arrow.prev,.pill-scroller.more-right .pill-arrow.next{display:grid}}
 /* Sideways rows can be dragged with a mouse (public/store-ui.js); faded edges show there is more. */
 @media (hover:hover) and (pointer:fine){.category-pills,.quick-view-thumbs,.gallery-thumbnails{cursor:grab}}
 .category-pills.is-dragging,.quick-view-thumbs.is-dragging,.gallery-thumbnails.is-dragging{cursor:grabbing;user-select:none;scroll-behavior:auto;scroll-snap-type:none}
@@ -588,12 +596,21 @@ body.has-quick-view,html:has(body.has-quick-view){overflow:hidden}
 .review-message:empty{display:none}
 /* Star picker: 5 radios shown right-to-left so hovering a star lights it and the ones before it. */
 .rating-input{display:flex;flex-direction:row-reverse;justify-content:flex-end;gap:2px;margin:0;padding:0;border:0}
-.rating-input legend{width:100%;margin-bottom:4px;font-weight:700;font-size:.9rem}
+.rating-input legend{width:100%;margin-bottom:4px;padding:0;font-weight:700;font-size:.9rem}
 .rating-input input{position:absolute;opacity:0;width:1px;height:1px}
 .rating-input label{font-size:1.9rem;line-height:1;color:var(--line-strong);cursor:pointer;transition:color .15s}
 .rating-input input:checked~label,.rating-input label:hover,.rating-input label:hover~label{color:#f5a623}
 .rating-input input:focus-visible+label{outline:2px solid var(--ink);outline-offset:2px;border-radius:4px}
-@media (max-width:860px){.reviews-layout{grid-template-columns:1fr}}
+.review-form.content-card{padding:clamp(20px,3vw,28px);gap:14px}
+.review-form h3{font-size:1.25rem}
+.review-form label:has(> span){grid-template-columns:auto 1fr;column-gap:6px;align-items:baseline}
+.review-form label:has(> span) > :is(input,textarea){grid-column:1/-1}
+.review-form textarea{min-height:110px;resize:vertical}
+.review-form .button{width:100%}
+@media (min-width:861px){.review-form{position:sticky;top:calc(var(--header-h) + 16px)}}
+.reviews-layout:not(:has(.review-card)){grid-template-columns:minmax(0,560px)}
+.reviews-layout:not(:has(.review-card)) .review-list{display:none}
+@media (max-width:860px){.reviews-layout{grid-template-columns:minmax(0,1fr)}}
 .product-perks{display:grid;gap:0;margin:0 0 26px;padding:6px 18px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--line)}
 .product-perks li{display:flex;align-items:center;gap:14px;padding:12px 0;list-style:none;font-size:.92rem;font-weight:600}
 .product-perks li+li{border-top:1px solid var(--line)}
@@ -604,7 +621,8 @@ body.has-quick-view,html:has(body.has-quick-view){overflow:hidden}
 .product-accordion summary::-webkit-details-marker{display:none}
 .product-accordion summary::after{content:"+";font-size:1.5rem;font-weight:400;transition:transform .25s var(--ease)}
 .product-accordion details[open] summary::after{transform:rotate(45deg)}
-.product-accordion .accordion-body{padding:0 0 22px;color:var(--ink-2);line-height:1.8}
+.product-accordion details.is-closing summary::after{transform:none}
+.product-accordion .accordion-body{overflow:hidden;padding:0 0 22px;color:var(--ink-2);line-height:1.8}
 .description-text{white-space:pre-line}
 .spec-list{display:grid;gap:0;margin:0}
 .spec-list div{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px dashed var(--line)}
@@ -767,11 +785,20 @@ input[type=checkbox],input[type=radio]{accent-color:var(--ink)}
 .prose h3{margin:28px 0 10px;font-size:1.25rem;color:var(--ink)}
 .prose p,.prose ul,.prose ol{margin:0 0 16px}
 .prose a{color:var(--primary-strong);font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.prose a.button{color:var(--btn-fg);text-decoration:none}
 .content-card{padding:clamp(24px,4vw,48px);border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
 .contact-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
-.contact-card{display:grid;gap:8px;padding:24px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
+.contact-card{display:grid;align-content:start;gap:8px;padding:24px;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
 .contact-card b{display:grid;place-items:center;width:48px;height:48px;margin-bottom:6px;border-radius:50%;background:var(--surface-2);font-size:1.3rem}
 .contact-card strong{font-size:1.05rem}
+/* Real WhatsApp / Instagram logos on the Contact page. */
+.contact-card b.brand-icon{color:#fff}
+.contact-card b.brand-icon svg{width:26px;height:26px}
+.contact-card b.whatsapp-icon{background:var(--whatsapp)}
+.contact-card b.instagram-icon{background:radial-gradient(circle at 30% 107%,#fdf497 0%,#fdf497 5%,#fd5949 45%,#d6249f 60%,#285aeb 90%)}
+.contact-card .button{justify-self:start;margin-top:4px}
+.contact-card .button svg{width:20px;height:20px}
+.button.instagram-button{--btn-bg:linear-gradient(45deg,#f58529,#dd2a7b 55%,#8134af);--btn-fg:#fff}
 .contact-card span,.contact-card a:not(.button){color:var(--muted);font-weight:600;overflow-wrap:anywhere}
 .contact-card a:not(.button){color:var(--ink);text-decoration:underline;text-underline-offset:3px}
 .contact-card span{font-weight:500}

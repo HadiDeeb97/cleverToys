@@ -175,8 +175,8 @@
     viewer.images = (fromThumbs.length ? fromThumbs : [{ src, alt: alt || STORE_NAME }]).filter((item) => item.src && !seen.has(item.src) && seen.add(item.src));
     if (!viewer.images.length) viewer.images = [{ src, alt: alt || STORE_NAME }];
     viewer.index = Math.max(0, viewer.images.findIndex((item) => item.src === src));
-    viewer.previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    viewer.previousOverflow = document.documentElement.style.overflow;
+    document.documentElement.style.overflow = 'hidden';
     el.classList.add('is-open');
     el.setAttribute('aria-hidden', 'false');
     renderViewer();
@@ -186,7 +186,7 @@
     if (!el) return;
     el.classList.remove('is-open');
     el.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = viewer.previousOverflow;
+    document.documentElement.style.overflow = viewer.previousOverflow;
   }
 
   /** Makes product photos open the viewer (the product page gallery, or any image marked data-zoomable). */
@@ -448,11 +448,79 @@
       e.preventDefault();
       row.scrollLeft += e.deltaY;
     }, { passive: false });
+    // The category row also gets arrow buttons on computers (shown only while there is more to see).
+    const wrap = row.matches('.category-pills') ? addArrows(row) : null;
+    const syncWrap = () => { if (wrap) { wrap.classList.toggle('more-left', row.classList.contains('more-left')); wrap.classList.toggle('more-right', row.classList.contains('more-right')); } };
+    row.addEventListener('scroll', syncWrap, { passive: true });
+    if ('ResizeObserver' in window) new ResizeObserver(syncWrap).observe(row);
     row.addEventListener('scroll', edges, { passive: true });
     if ('ResizeObserver' in window) new ResizeObserver(edges).observe(row);
     // Photo thumbnails are filled in later (quick view): re-check the edges when they change.
     new MutationObserver(edges).observe(row, { childList: true });
     edges();
+    syncWrap();
+    if (wrap) peek(row);
+  }
+
+  const ARROW = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+  function addArrows(row) {
+    const wrap = document.createElement('div');
+    wrap.className = 'pill-scroller';
+    row.parentNode.insertBefore(wrap, row);
+    wrap.appendChild(row);
+    [['prev', 'Scroll categories left', 'M15 18l-6-6 6-6', -1], ['next', 'Scroll categories right', 'M9 18l6-6-6-6', 1]].forEach(([cls, label, d, dir]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = `pill-arrow ${cls}`;
+      button.setAttribute('aria-label', label);
+      button.innerHTML = ARROW(d);
+      button.addEventListener('click', () => row.scrollBy({ left: dir * Math.max(160, row.clientWidth * 0.7), behavior: 'smooth' }));
+      wrap.appendChild(button);
+    });
+    return wrap;
+  }
+  // Once per visit on computers: slide the row a little and back, so shoppers see it moves.
+  function peek(row) {
+    if (!matchMedia('(hover:hover) and (pointer:fine)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    try { if (sessionStorage.getItem('ctPillPeek')) return; sessionStorage.setItem('ctPillPeek', '1'); } catch {}
+    setTimeout(() => {
+      if (row.scrollLeft > 0 || row.scrollWidth <= row.clientWidth + 1) return;
+      row.scrollTo({ left: 90, behavior: 'smooth' });
+      setTimeout(() => { if (row.scrollLeft <= 95) row.scrollTo({ left: 0, behavior: 'smooth' }); }, 650);
+    }, 900);
+  }
+
+  // ---------- Product page dropdowns ("About this toy", "Details"): slide open and closed ----------
+  function bindAccordions() {
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.querySelectorAll('.product-accordion details').forEach((details) => {
+      const summary = details.querySelector('summary');
+      const body = details.querySelector('.accordion-body');
+      if (!summary || !body || reduce || !body.animate) return;
+      let running = null;
+      summary.addEventListener('click', (event) => {
+        event.preventDefault();
+        running?.cancel();
+        const style = getComputedStyle(body);
+        if (!details.open || details.classList.contains('is-closing')) {
+          details.classList.remove('is-closing');
+          details.open = true;
+          const height = body.offsetHeight;
+          running = body.animate([
+            { height: '0px', paddingBottom: '0px', opacity: 0, transform: 'translateY(-6px)' },
+            { height: `${height}px`, paddingBottom: style.paddingBottom, opacity: 1, transform: 'none' }
+          ], { duration: 300, easing: 'cubic-bezier(.2,.8,.2,1)' });
+          running.onfinish = () => { running = null; };
+        } else {
+          details.classList.add('is-closing');
+          running = body.animate([
+            { height: `${body.offsetHeight}px`, paddingBottom: style.paddingBottom, opacity: 1 },
+            { height: '0px', paddingBottom: '0px', opacity: 0 }
+          ], { duration: 220, easing: 'ease-in' });
+          running.onfinish = () => { details.open = false; details.classList.remove('is-closing'); running = null; };
+        }
+      });
+    });
   }
 
   // ---------- Start ----------
@@ -464,6 +532,7 @@
   bindImageViewer();
   initReveal();
   document.querySelectorAll(DRAG_ROWS).forEach(bindDragRow);
+  bindAccordions();
   // Analytics waits until the page has finished loading so it never competes with the page itself.
   // A page the browser loaded ahead of time (speculation rules in src/middleware.ts) is only counted
   // once the shopper actually opens it.
