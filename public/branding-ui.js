@@ -35,8 +35,30 @@
   };
 
   /** Delivery fee: free above the threshold (if one is set), otherwise the cash-on-delivery fee. */
-  const getDeliveryFee = (subtotal, branding) =>
-    branding.freeDeliveryThreshold > 0 && subtotal >= branding.freeDeliveryThreshold ? 0 : branding.codDeliveryPrice;
+  // Governorates and delivery fee per governorate (Admin → Discounts & delivery), sent by the product
+  // page in #wa-delivery-data. Same list and fees as the checkout page.
+  const DEFAULT_GOVERNORATES = ['Beirut', 'Mount Lebanon', 'Keserwan-Jbeil', 'North Lebanon', 'Akkar', 'Bekaa', 'Baalbek-Hermel', 'South Lebanon', 'Nabatieh'];
+  const readDeliveryData = () => {
+    let data = {};
+    try { data = JSON.parse(document.getElementById('wa-delivery-data')?.textContent || '{}'); } catch {}
+    return {
+      governorates: Array.isArray(data.governorates) && data.governorates.length ? data.governorates : DEFAULT_GOVERNORATES,
+      zones: Array.isArray(data.zones) ? data.zones : []
+    };
+  };
+  const zoneFor = (governorate) => readDeliveryData().zones.find((z) => String(z.governorate).toLowerCase() === String(governorate || '').toLowerCase());
+  /** A governorate saved from older free-text entries ("beirut", "Mount lebanon") matched to the list, or ''. */
+  const matchGovernorate = (value) => {
+    const v = String(value || '').trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+    return v ? readDeliveryData().governorates.find((g) => g.toLowerCase().replace(/-/g, ' ') === v) || '' : '';
+  };
+  /** Delivery fee for a governorate, or null when the store does not deliver there yet. */
+  const getDeliveryFee = (subtotal, branding, governorate) => {
+    const zone = governorate ? zoneFor(governorate) : null;
+    if (zone && !zone.is_active) return null;
+    if (branding.freeDeliveryThreshold > 0 && subtotal >= branding.freeDeliveryThreshold) return 0;
+    return zone ? Math.max(0, Number(zone.fee) || 0) : branding.codDeliveryPrice;
+  };
 
   /**
    * Adds a message to the WhatsApp link from Branding (keeps the phone number, replaces the text).
@@ -143,7 +165,7 @@
         <div class="wa-dialog-fields">
           <label>Full name<input name="full_name" required autocomplete="name" maxlength="120"></label>
           <label>Phone number<input name="phone" required type="tel" autocomplete="tel" maxlength="40" placeholder="+961 …"></label>
-          <label>Governorate<input name="governorate" required autocomplete="address-level1" maxlength="80"></label>
+          <label>Governorate<select name="governorate" required autocomplete="address-level1"><option value="">Choose your governorate</option>${readDeliveryData().governorates.map((g) => { const zone = zoneFor(g); const off = zone && !zone.is_active; return `<option value="${escapeHtml(g)}"${off ? ' disabled' : ''}>${escapeHtml(g)}${off ? ' (no delivery yet)' : ''}</option>`; }).join('')}</select></label>
           <label>City<input name="city" required autocomplete="address-level2" maxlength="80"></label>
           <label>Area <span>(optional)</span><input name="area" autocomplete="address-level3" maxlength="120"></label>
           <label class="wide">Full address<textarea name="address" required rows="2" autocomplete="street-address" maxlength="500" placeholder="Street, building, floor"></textarea></label>
@@ -170,13 +192,24 @@
     const prefill = {
       full_name: stored.full_name || stored.customer_name || '',
       phone: stored.phone || stored.customer_phone || '',
-      governorate: stored.governorate || '', city: stored.city || '', area: stored.area || '', address: stored.address || ''
+      governorate: matchGovernorate(stored.governorate), city: stored.city || '', area: stored.area || '', address: stored.address || ''
     };
     for (const [name, value] of Object.entries(prefill)) {
       const field = form.elements.namedItem(name);
       if (field && !field.value) field.value = value;
     }
-    dialog.querySelector('.wa-dialog-summary').textContent = `${order.productName}${order.optionName ? ` · ${order.optionName}` : ''} × ${order.qty} — Total ${money(order.total)} (cash on delivery)`;
+    // The delivery fee (and total) follow the chosen governorate, like at checkout.
+    const withDelivery = () => {
+      const governorate = form.elements.namedItem('governorate').value;
+      const delivery = getDeliveryFee(order.subtotal, getBranding(), governorate);
+      return { ...order, governorate, delivery: delivery ?? 0, total: order.subtotal + (delivery ?? 0) };
+    };
+    const showSummary = () => {
+      const current = withDelivery();
+      dialog.querySelector('.wa-dialog-summary').textContent = `${order.productName}${order.optionName ? ` · ${order.optionName}` : ''} × ${order.qty} — ${current.governorate ? `Delivery ${current.delivery === 0 ? 'free' : money(current.delivery)} · ` : ''}Total ${money(current.total)} (cash on delivery)`;
+    };
+    form.elements.namedItem('governorate').onchange = showSummary;
+    showSummary();
     const error = dialog.querySelector('.wa-dialog-error');
     error.hidden = true;
 
@@ -194,7 +227,7 @@
       }
       if (form.elements.namedItem('remember').checked) saveCustomer(data);
       dialog.close();
-      onSend(order, data);
+      onSend(withDelivery(), data);
     };
 
     dialog.showModal();
@@ -247,7 +280,7 @@
       '',
       '*Order summary*',
       `Subtotal: ${money(order.subtotal)}`,
-      `Delivery: ${order.delivery === 0 ? 'Free' : money(order.delivery)}`,
+      `Delivery${order.governorate ? ` (${order.governorate})` : ''}: ${order.delivery === 0 ? 'Free' : money(order.delivery)}`,
       `*Total: ${money(order.total)}* (cash on delivery)`,
       '',
       '*Delivery details*',

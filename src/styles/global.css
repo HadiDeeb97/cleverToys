@@ -850,11 +850,11 @@ body.has-buy-bar .clever-floating-controls a{transform:translateY(-72px)}
 .wa-dialog-close{display:grid;place-items:center;width:40px;height:40px;flex:0 0 auto;border:1.5px solid var(--line);border-radius:50%;background:var(--surface);font-size:1.3rem;cursor:pointer}
 .wa-dialog-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .wa-dialog-fields label{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;font-size:.86rem;font-weight:700}
-.wa-dialog-fields label>input:not([type=checkbox]),.wa-dialog-fields label>textarea{flex:1 1 100%}
+.wa-dialog-fields label>input:not([type=checkbox]),.wa-dialog-fields label>select,.wa-dialog-fields label>textarea{flex:1 1 100%}
 .wa-dialog-fields label span{color:var(--subtle);font-weight:600}
 .wa-dialog-fields .wide{grid-column:1/-1}
-.wa-dialog-fields input:not([type=checkbox]),.wa-dialog-fields textarea{width:100%;min-height:48px;padding:10px 14px;border:1.5px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--surface);font-size:16px;font-weight:500;resize:vertical}
-.wa-dialog-fields input:focus,.wa-dialog-fields textarea:focus{outline:none;border-color:var(--whatsapp);box-shadow:0 0 0 4px rgba(37,211,102,.18)}
+.wa-dialog-fields input:not([type=checkbox]),.wa-dialog-fields select,.wa-dialog-fields textarea{width:100%;min-height:48px;padding:10px 14px;border:1.5px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--surface);font-size:16px;font-weight:500;resize:vertical}
+.wa-dialog-fields input:focus,.wa-dialog-fields select:focus,.wa-dialog-fields textarea:focus{outline:none;border-color:var(--whatsapp);box-shadow:0 0 0 4px rgba(37,211,102,.18)}
 .wa-dialog-fields [aria-invalid=true]{border-color:var(--danger);background:var(--danger-soft)}
 .wa-dialog .wa-remember{display:flex!important;flex-wrap:nowrap;align-items:center;gap:8px;font-weight:600;color:var(--muted)}
 .wa-dialog-error{margin:0;color:var(--danger);font-weight:700}
