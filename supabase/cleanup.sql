@@ -10,7 +10,8 @@
 --
 -- Orders, customers, products, reviews, expenses and settings are never touched.
 -- Tables that do not exist yet are skipped, so this file can run at any time.
--- Safe to run more than once. Run it in the Supabase SQL Editor.
+-- Safe to run more than once. In the Supabase SQL Editor, paste the WHOLE file
+-- (nothing highlighted) and press Run.
 -- ============================================================================
 
 -- pg_cron runs jobs on a schedule inside the database (Supabase → Database → Extensions).
@@ -21,7 +22,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public, pg_temp
-AS $$
+AS $purge$
 DECLARE
   cutoff timestamptz := now() - make_interval(days => GREATEST(keep_days, 1));
   result jsonb := '{}'::jsonb;
@@ -51,13 +52,13 @@ BEGIN
   END IF;
   RETURN result;
 END;
-$$;
+$purge$;
 
 -- Only the nightly job (and the SQL Editor) may run it, never the website's visitors.
 REVOKE EXECUTE ON FUNCTION public.purge_old_records(integer) FROM PUBLIC, anon, authenticated;
 
 -- Indexes so the nightly delete stays quick as the tables grow.
-DO $$
+DO $idx$
 BEGIN
   IF to_regclass('public.visitor_events') IS NOT NULL THEN
     CREATE INDEX IF NOT EXISTS visitor_events_created_idx ON public.visitor_events (created_at);
@@ -68,7 +69,7 @@ BEGIN
   IF to_regclass('public.stock_movements') IS NOT NULL THEN
     CREATE INDEX IF NOT EXISTS stock_movements_created_idx ON public.stock_movements (created_at);
   END IF;
-END $$;
+END $idx$;
 
 -- The nightly job (replaced if it already exists).
 SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'purge-old-records';
