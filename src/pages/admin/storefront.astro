@@ -46,6 +46,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <button class="tab" data-tab="home" role="tab" aria-selected="false" type="button">Home page</button>
         <button class="tab" data-tab="product" role="tab" aria-selected="false" type="button">Product page</button>
         <button class="tab" data-tab="footer" role="tab" aria-selected="false" type="button">Footer &amp; contact</button>
+        <button class="tab" data-tab="contact" role="tab" aria-selected="false" type="button">Contact page</button>
         <button class="tab" data-tab="menus" role="tab" aria-selected="false" type="button">Menus</button>
       </div>
 
@@ -216,6 +217,42 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
           </div>
         </section>
 
+        {/* ============ Contact page ============ */}
+        <section class="sf-tab" id="tab-contact" hidden>
+          <div class="sf-two">
+            <div class="admin-panel sf-panel">
+              <h2>Top of the page</h2>
+              <div class="sf-grid one">
+                <label class="sf-field">Heading<input class="admin-input" data-path="contact.title" maxlength="80" /></label>
+                <label class="sf-field">Intro text<textarea class="admin-input" data-path="contact.text" rows="3" maxlength="240"></textarea></label>
+              </div>
+              <h2 class="sf-gap">Contact cards</h2>
+              <p class="muted">Turn cards on or off and change their short text. A card only shows when its detail is filled in (phone and email in <a class="text-link" href="#footer" data-goto-tab="footer">Footer &amp; contact</a>).</p>
+              <div class="sf-grid one">
+                <label class="sf-field">💬 WhatsApp card text <small class="muted">(always shown)</small><input class="admin-input" data-path="contact.whatsapp_text" maxlength="140" /></label>
+                <label class="sf-check"><input type="checkbox" class="toggle" data-path="contact.show_phone" /> 📞 Phone card</label>
+                <label class="sf-check"><input type="checkbox" class="toggle" data-path="contact.show_email" /> ✉️ Email card</label>
+                <label class="sf-check"><input type="checkbox" class="toggle" data-path="contact.show_place" /> 📍 Address &amp; opening hours card</label>
+                <label class="sf-check"><input type="checkbox" class="toggle" data-path="contact.show_instagram" /> 📸 Instagram card</label>
+                <label class="sf-field">Instagram card text<input class="admin-input" data-path="contact.instagram_text" maxlength="140" /></label>
+                <label class="sf-check"><input type="checkbox" class="toggle" data-path="contact.show_order" /> 📦 Track your order card</label>
+                <label class="sf-field">Order card text<input class="admin-input" data-path="contact.order_text" maxlength="140" /></label>
+              </div>
+            </div>
+            <div class="admin-panel sf-panel">
+              <h2>Instagram profile</h2>
+              <p class="muted">A section under the cards with your Instagram profile and latest posts, from the Instagram link in <a class="text-link" href="/admin/branding">Branding</a>.</p>
+              <p id="ig-status" class="sf-ig-status"></p>
+              <label class="sf-check"><input type="checkbox" class="toggle" data-path="contact.show_feed" /> Show the Instagram profile on the Contact page</label>
+              <div class="sf-grid one">
+                <label class="sf-field">Heading<input class="admin-input" data-path="contact.feed_title" maxlength="80" /></label>
+                <label class="sf-field">Text<textarea class="admin-input" data-path="contact.feed_text" rows="2" maxlength="200"></textarea></label>
+              </div>
+              <p class="muted small"><a class="text-link" href="/contact" target="_blank" rel="noopener">Open the Contact page ↗</a> (save first to see your changes)</p>
+            </div>
+          </div>
+        </section>
+
         <section class="sf-tab" id="tab-menus" hidden>
           <div class="sf-grid">
             <div class="admin-panel sf-panel">
@@ -251,7 +288,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage, toWebp } from '../../scripts/admin-access';
-import { DEFAULT_DESIGN, FONT_PRESETS, HOME_SECTIONS, parseDesign, safeLink, type StoreDesign } from '../../lib/design';
+import { DEFAULT_DESIGN, FONT_PRESETS, HOME_SECTIONS, instagramUsername, parseDesign, safeLink, type StoreDesign } from '../../lib/design';
 
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
@@ -479,6 +516,8 @@ function showTab(name: string) {
   history.replaceState(null, '', `#${name}`);
 }
 document.querySelectorAll<HTMLButtonElement>('.tab[data-tab]').forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab!)));
+// In-page links to another tab (e.g. Contact page → Footer & contact).
+document.querySelectorAll<HTMLElement>('[data-goto-tab]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); showTab(a.dataset.gotoTab!); }));
 
 // ---------- Save ----------
 $('#design-form').addEventListener('submit', async (event) => {
@@ -538,6 +577,12 @@ async function init() {
     const row: Record<string, any> = settings.data || {};
     columnReady = 'design' in row || !settings.data;
     design = parseDesign(row.design);
+    // Contact tab: which Instagram profile the section will show.
+    const igUser = instagramUsername(row.instagram_url);
+    $('#ig-status').innerHTML = igUser
+      ? `Showing <strong>@${igUser}</strong>`
+      : row.instagram_url ? 'Your Instagram link in Branding is not a profile link (it should look like https://instagram.com/yourname), so the section is hidden.' : 'Add your Instagram link in Branding to show this section.';
+    $('#ig-status').classList.toggle('warn', !igUser);
     seoColumnReady = 'seo' in row;
     seoSettings = row.seo && typeof row.seo === 'object' ? { ...row.seo } : {};
     $('#setup-notice').hidden = columnReady;
@@ -546,7 +591,7 @@ async function init() {
     guard.hidden = true;
     $('#app').hidden = false;
     const start = location.hash.slice(1);
-    if (['style', 'home', 'product', 'footer', 'menus'].includes(start)) showTab(start);
+    if (['style', 'home', 'product', 'footer', 'contact', 'menus'].includes(start)) showTab(start);
   } catch (error) {
     guard.hidden = false;
     guard.innerHTML = `<h2>Storefront settings could not load</h2><p>${esc(error instanceof Error ? error.message : 'Unknown error')}</p>`;
@@ -560,6 +605,9 @@ init();
 .sf-notice code{padding:1px 6px;border-radius:6px;background:rgba(0,0,0,.06)}
 .sf-tab{display:grid;gap:16px}
 .sf-panel h2{margin:0 0 4px;font-size:1.15rem}
+.sf-panel h2.sf-gap{margin-top:22px}
+.sf-ig-status{margin:10px 0 4px;padding:10px 12px;border-radius:12px;background:var(--surface-2);font-size:.9rem}
+.sf-ig-status.warn{background:#fff9e8;color:#6b4a00}
 .sf-panel>.muted,.sf-details .muted{margin:0 0 14px}
 .sf-panel .small{font-size:.85rem;margin:10px 0 0}
 .sf-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}

@@ -32,6 +32,13 @@ export type StoreDesign = {
   help: { title: string; text: string; button_label: string };
   product: { delivery: string; payment: string; returns: string };
   footer: { about: string; address: string; hours: string; note: string };
+  /** Contact page (Admin → Storefront & menus → Contact page). */
+  contact: {
+    title: string; text: string;
+    whatsapp_text: string; instagram_text: string; order_text: string;
+    show_phone: boolean; show_email: boolean; show_place: boolean; show_instagram: boolean; show_order: boolean;
+    show_feed: boolean; feed_title: string; feed_text: string;
+  };
   /** Editable menus (Admin → Storefront & menus → Menus). */
   menus: { header: MenuLink[]; help: MenuLink[]; company: MenuLink[] };
 };
@@ -116,6 +123,17 @@ export const DEFAULT_DESIGN: StoreDesign = {
     address: '',
     hours: '',
     note: 'Made for curious minds 🧸'
+  },
+  contact: {
+    title: "We're here to help",
+    text: 'Questions about a toy, a gift idea or your order? Message us and a real person will answer.',
+    whatsapp_text: 'The fastest way to reach us, for questions and orders.',
+    instagram_text: 'New arrivals and ideas every week.',
+    order_text: 'Check the status with your order number and phone.',
+    show_phone: true, show_email: true, show_place: true, show_instagram: true, show_order: true,
+    show_feed: true,
+    feed_title: 'Follow us on Instagram',
+    feed_text: 'See our newest toys, unboxings and gift ideas first.'
   },
   menus: {
     header: [{ label: 'Categories', href: '/categories' }, { label: 'About', href: '/about' }, { label: 'Contact', href: '/contact' }, { label: 'Track order', href: '/track-order' }],
@@ -232,12 +250,36 @@ export function parseDesign(value: unknown): StoreDesign {
       hours: text(footer.hours, D.footer.hours, 120),
       note: text(footer.note, D.footer.note, 80)
     },
+    contact: (() => {
+      const c = d.contact || {}, C = D.contact;
+      return {
+        title: text(c.title, C.title, 80),
+        text: text(c.text, C.text, 240),
+        whatsapp_text: text(c.whatsapp_text, C.whatsapp_text, 140),
+        instagram_text: text(c.instagram_text, C.instagram_text, 140),
+        order_text: text(c.order_text, C.order_text, 140),
+        show_phone: bool(c.show_phone, C.show_phone),
+        show_email: bool(c.show_email, C.show_email),
+        show_place: bool(c.show_place, C.show_place),
+        show_instagram: bool(c.show_instagram, C.show_instagram),
+        show_order: bool(c.show_order, C.show_order),
+        show_feed: bool(c.show_feed, C.show_feed),
+        feed_title: text(c.feed_title, C.feed_title, 80),
+        feed_text: text(c.feed_text, C.feed_text, 200)
+      };
+    })(),
     menus: {
       header: menu(d.menus?.header, D.menus.header, 7),
       help: menu(d.menus?.help, D.menus.help, 8),
       company: menu(d.menus?.company, D.menus.company, 8)
     }
   };
+}
+
+/** The Instagram username in a profile link such as https://instagram.com/clevertoys (or '' if it is not one). */
+export function instagramUsername(link: unknown): string {
+  const m = String(link ?? '').trim().match(/^https?:\/\/(?:www\.)?instagram\.com\/([A-Za-z0-9._]{1,30})\/?(?:[?#].*)?$/i);
+  return m && !['p', 'reel', 'reels', 'explore', 'stories', 'accounts', 'tv'].includes(m[1].toLowerCase()) ? m[1] : '';
 }
 
 /** Age shortcuts for the "Shop by age" section; they link to the shop's age filter. */

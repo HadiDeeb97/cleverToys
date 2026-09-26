@@ -800,6 +800,21 @@ input[type=checkbox],input[type=radio]{accent-color:var(--ink)}
 .contact-card .button{justify-self:start;margin-top:4px}
 .contact-card .button svg{width:20px;height:20px}
 .button.instagram-button{--btn-bg:linear-gradient(45deg,#f58529,#dd2a7b 55%,#8134af);--btn-fg:#fff}
+/* Contact page: Instagram profile section (Admin → Storefront & menus → Contact page). */
+.ig-card{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:clamp(20px,4vw,48px);align-items:center;padding:clamp(20px,4vw,40px);border:1px solid var(--line);border-radius:var(--radius-lg);background:linear-gradient(135deg,color-mix(in srgb,#fdf497 12%,var(--surface)),color-mix(in srgb,#d6249f 8%,var(--surface)) 60%,color-mix(in srgb,#285aeb 8%,var(--surface)))}
+.ig-intro{display:grid;justify-items:start;gap:10px}
+.ig-intro h2{margin:0;font-size:clamp(1.6rem,3vw,2.3rem)}
+.ig-intro .eyebrow{margin:0}
+.ig-text{margin:0;color:var(--muted);max-width:42ch}
+.ig-avatar{display:grid;place-items:center;width:64px;height:64px;padding:3px;border-radius:50%;background:radial-gradient(circle at 30% 107%,#fdf497 0%,#fdf497 5%,#fd5949 45%,#d6249f 60%,#285aeb 90%)}
+.ig-avatar>span{display:grid;place-items:center;width:100%;height:100%;border-radius:50%;background:var(--surface);color:#d6249f}
+.ig-avatar svg{width:28px;height:28px}
+.ig-handle{font-weight:800;color:var(--ink)}
+.ig-intro .button{margin-top:6px}
+.ig-intro .button svg{width:20px;height:20px}
+.ig-frame{width:100%;max-width:540px;justify-self:center;overflow:hidden;border:1px solid var(--line);border-radius:var(--radius-lg);background:#fff;box-shadow:var(--shadow-sm)}
+.ig-frame iframe{display:block;width:100%;height:560px;border:0}
+@media (max-width:860px){.ig-card{grid-template-columns:minmax(0,1fr)}.ig-frame iframe{height:520px}}
 .contact-card span,.contact-card a:not(.button){color:var(--muted);font-weight:600;overflow-wrap:anywhere}
 .contact-card a:not(.button){color:var(--ink);text-decoration:underline;text-underline-offset:3px}
 .contact-card span{font-weight:500}
