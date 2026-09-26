@@ -223,11 +223,11 @@ const similarCards = similarProducts as unknown as CardProduct[];
                 <span class="option-label" id="variant-label">Choose an option</span>
                 {/* Buttons for shoppers; the hidden select keeps the value for the scripts. */}
                 <div class="variant-options" role="group" aria-labelledby="variant-label">
-                  {variants.map((variant) => <button type="button" class="variant-option" data-variant={variant.id} aria-pressed="false" disabled={variant.stock_quantity <= 0}>{variant.name}</button>)}
+                  {variants.map((variant) => <button type="button" class="variant-option" data-variant={variant.id} aria-pressed="false" disabled={variant.stock_quantity <= 0}>{variant.name}{variant.stock_quantity <= 0 && <small>Sold out</small>}</button>)}
                 </div>
                 <select id="variant-select" aria-labelledby="variant-label" tabindex="-1" aria-hidden="true">
                   <option value="">Select an option</option>
-                  {variants.map((variant) => <option value={variant.id}>{variant.name}{variant.sku ? ` · ${variant.sku}` : ''}</option>)}
+                  {variants.map((variant) => <option value={variant.id} disabled={variant.stock_quantity <= 0}>{variant.name}{variant.sku ? ` · ${variant.sku}` : ''}</option>)}
                 </select>
               </div>
             )}

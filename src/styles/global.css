@@ -545,6 +545,7 @@ body.has-quick-view,html:has(body.has-quick-view){overflow:hidden}
 .variant-picker select{width:100%;min-height:50px;padding:0 40px 0 16px;border:1.5px solid var(--line-strong);border-radius:var(--radius-sm);background:var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23333' stroke-width='1.8'%3E%3Cpath d='m1 1 5 5 5-5'/%3E%3C/svg%3E") no-repeat right 16px center;appearance:none;font-weight:600;font-size:16px}
 .variant-options{display:flex;flex-wrap:wrap;gap:8px}
 .variant-option{min-height:46px;padding:0 18px;border:1.5px solid var(--line-strong);border-radius:var(--btn-radius);background:var(--surface);font-weight:700;cursor:pointer;transition:border-color .18s,background .18s,color .18s}
+.variant-option small{margin-left:6px;font-weight:600;opacity:.75}
 @media (hover:hover){.variant-option:hover{border-color:var(--ink)}}
 .variant-option[aria-pressed=true]{border-color:var(--ink);background:var(--ink);color:#fff}
 .variant-option:disabled{opacity:.4;text-decoration:line-through;cursor:not-allowed}
@@ -672,7 +673,7 @@ body.has-quick-view,html:has(body.has-quick-view){overflow:hidden}
 .delivery-note.warn{background:var(--danger-soft);color:var(--danger)}
 .summary-discount strong{color:var(--success)}
 /* Checkout: discount code */
-.coupon-box{display:grid;gap:8px;margin:6px 0 22px}
+.coupon-box{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;margin:6px 0 22px}
 .coupon-box label{font-weight:700;font-size:.92rem}
 .coupon-box label span{color:var(--muted);font-weight:500}
 .coupon-row{display:flex;gap:10px}
@@ -724,7 +725,7 @@ body.has-quick-view,html:has(body.has-quick-view){overflow:hidden}
 .cart-drawer-note{margin:8px 0 0;color:var(--muted);font-size:.8rem;text-align:center}
 
 /* 13. Forms, account and content pages -------------------------------------------------- */
-.form-card{display:grid;gap:18px;padding:clamp(22px,4vw,36px);border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-sm)}
+.form-card{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;padding:clamp(22px,4vw,36px);border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-sm)}
 .form-card h2{margin:4px 0 0;font-size:1.4rem}
 .form-card>p{margin:0;color:var(--muted);line-height:1.65}
 .form-card label{display:grid;gap:8px;font-weight:700;font-size:.9rem;color:var(--ink)}
@@ -991,7 +992,7 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .filter-panel .filter-actions{bottom:-20px;margin:0 -20px -20px;padding:12px 20px calc(20px + env(safe-area-inset-bottom))}
   .filter-close{display:inline-grid}
   .filter-scrim{position:fixed;inset:0;z-index:14999;background:rgba(20,16,28,.45)}
-  .cart-layout,#cart-root:has(.cart-list),.checkout-layout{grid-template-columns:1fr}
+  .cart-layout,#cart-root:has(.cart-list),.checkout-layout{grid-template-columns:minmax(0,1fr)}
   #cart-root .cart-summary,.checkout-summary{position:static}
   .footer-grid{grid-template-columns:repeat(3,1fr)}
   .footer-brand{grid-column:1/-1}
