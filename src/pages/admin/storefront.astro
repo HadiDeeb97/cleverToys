@@ -334,19 +334,24 @@ function fillForm() {
 }
 
 // ---------- Typography cards ----------
-const FONT_FAMILIES: Record<string, [string, string]> = {
-  premium: ['"Fraunces", Georgia, serif', '"Plus Jakarta Sans", system-ui, sans-serif'],
-  modern: ['"Plus Jakarta Sans", system-ui, sans-serif', '"Plus Jakarta Sans", system-ui, sans-serif'],
-  playful: ['"Fredoka", system-ui, sans-serif', '"Nunito", system-ui, sans-serif'],
-  classic: ['"Playfair Display", Georgia, serif', '"DM Sans", system-ui, sans-serif']
+// Same fonts, heading weight and letter spacing as the storefront (html[data-font=…] in global.css).
+// Single quotes inside the names: the value goes into a style="…" attribute.
+const FONT_PREVIEW: Record<string, { display: string; body: string; weight: number; tracking: string }> = {
+  premium: { display: "'Fraunces', Georgia, serif", body: "'Plus Jakarta Sans', system-ui, sans-serif", weight: 600, tracking: '-.025em' },
+  modern: { display: "'Plus Jakarta Sans', system-ui, sans-serif", body: "'Plus Jakarta Sans', system-ui, sans-serif", weight: 800, tracking: '-.035em' },
+  playful: { display: "'Fredoka', 'Nunito', system-ui, sans-serif", body: "'Nunito', system-ui, sans-serif", weight: 600, tracking: '-.01em' },
+  classic: { display: "'Playfair Display', Georgia, serif", body: "'DM Sans', system-ui, sans-serif", weight: 600, tracking: '-.015em' }
 };
-$('#font-choices').innerHTML = Object.entries(FONT_PRESETS).map(([id, preset]) => `
+$('#font-choices').innerHTML = Object.entries(FONT_PRESETS).map(([id, preset]) => {
+  const f = FONT_PREVIEW[id];
+  return `
   <label class="sf-choice sf-font">
     <input type="radio" name="font" value="${id}" />
-    <span class="sf-font-sample" style="font-family:${FONT_FAMILIES[id][0]}">Toys that make childhood brighter</span>
-    <span class="sf-font-body" style="font-family:${FONT_FAMILIES[id][1]}">Thoughtfully chosen toys, delivered across Lebanon.</span>
+    <span class="sf-font-sample" style="font-family:${f.display};font-weight:${f.weight};letter-spacing:${f.tracking}">Toys that make childhood brighter</span>
+    <span class="sf-font-body" style="font-family:${f.body}">Thoughtfully chosen toys, delivered across Lebanon.</span>
     <b>${esc(preset.label)}</b><small>${esc(preset.description)}</small>
-  </label>`).join('');
+  </label>`;
+}).join('');
 
 // ---------- Home page sections: order and visibility ----------
 function renderSections() {
@@ -623,7 +628,7 @@ init();
 .sf-button{padding:8px 14px;background:#1b1822;color:#fff;font-size:.8rem;font-weight:700}
 .sf-fonts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
 .sf-font{justify-items:start;text-align:left;padding:18px}
-.sf-font-sample{font-size:1.2rem;font-weight:600;line-height:1.1;color:var(--ink)}
+.sf-font-sample{font-size:1.35rem;line-height:1.1;color:var(--ink)}
 .sf-font-body{color:var(--muted);font-size:.86rem}
 .sf-check{display:flex;align-items:center;gap:10px;margin-top:10px;font-weight:700;cursor:pointer}
 .sf-check small{color:var(--muted);font-weight:500}
