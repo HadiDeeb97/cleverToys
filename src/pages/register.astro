@@ -18,7 +18,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart">Cart</a><a href="/login">Sign in</a></nav></div></header>
 <main class="auth-shell">
   <div class="auth-art" aria-hidden="true"><p class="eyebrow">Clever Toys</p><h2>Join the Clever Toys family</h2><p>Create an account to follow your orders and check out in seconds next time.</p></div>
-  <div class="auth-main"><div><div class="section-header"><h1>Create your account</h1><p>Save your details and track your Clever Toys orders.</p></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><form id="register-form" class="form-card"><label>Full name<input name="full_name" required autocomplete="name"></label><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label>Confirm password<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label><button class="button" type="submit">Create Account</button><p id="message" role="status"></p><button id="resend" class="button secondary-button" type="button" hidden>Resend confirmation email</button><p>Already have an account? <a href="/login"><strong>Sign in</strong></a></p></form></div></div>
+  <div class="auth-main"><div><div class="section-header"><h1>Create your account</h1><p>Save your details and track your Clever Toys orders.</p></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><form id="register-form" class="form-card"><label>Full name<input name="full_name" required autocomplete="name"></label><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label>Confirm password<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label><button class="button" type="submit">Create Account</button><p id="message" role="status"></p><p>Already have an account? <a href="/login"><strong>Sign in</strong></a></p></form><div id="check-email" class="form-card auth-sent" hidden tabindex="-1"><span class="auth-sent-icon" aria-hidden="true">✉️</span><h2>Check your email</h2><p>We sent a link to <strong id="sent-to"></strong>. Open it to verify your email and activate your account.</p><p class="auth-sent-note">Can't find it? Check your spam or promotions folder. The email can take a minute to arrive.</p><button id="resend" class="button secondary-button" type="button">Resend the link</button><p id="resend-message" role="status"></p><p><button id="change-email" class="link-button" type="button">Use a different email</button> · <a href="/login"><strong>Go to sign in</strong></a></p></div></div></div>
 </main>
 <script>
 import { createClient } from '@supabase/supabase-js';
@@ -29,6 +29,14 @@ const key = config?.dataset.key;
 const form = document.querySelector<HTMLFormElement>('#register-form');
 const msg = document.querySelector<HTMLElement>('#message')!;
 const resend = document.querySelector<HTMLButtonElement>('#resend')!;
+const sent = document.querySelector<HTMLElement>('#check-email')!;
+const resendMsg = document.querySelector<HTMLElement>('#resend-message')!;
+const password = form?.querySelector<HTMLInputElement>('input[name=password]');
+const confirm = form?.querySelector<HTMLInputElement>('input[name=confirm_password]');
+// Only the confirm box is marked when the two passwords differ.
+const checkMatch = () => confirm?.setCustomValidity(confirm.value && password && confirm.value !== password.value ? 'Passwords do not match.' : '');
+password?.addEventListener('input', checkMatch);
+confirm?.addEventListener('input', checkMatch);
 // After clicking the link in the confirmation email, customers land on the sign-in page, which signs them in.
 const emailRedirectTo = `${location.origin}/login?confirmed=1`;
 let supabase: ReturnType<typeof createClient> | undefined;
@@ -48,7 +56,6 @@ form?.addEventListener('submit', async (e) => {
   if (password !== String(data.confirm_password || '')) { msg.textContent = 'Passwords do not match.'; return; }
   const submit = form.querySelector<HTMLButtonElement>('button[type=submit]');
   if (submit) submit.disabled = true;
-  resend.hidden = true;
   msg.textContent = 'Creating your account…';
   const { data: result, error } = await supabase.auth.signUp({
     email, password,
@@ -62,16 +69,41 @@ form?.addEventListener('submit', async (e) => {
     msg.innerHTML = 'An account with this email already exists. <a href="/login"><strong>Sign in</strong></a> or <a href="/forgot-password">reset your password</a>.';
     return;
   }
+  // Done: swap the form for a clear "check your email" message. Resetting the form (rather than
+  // emptying the password boxes) keeps the browser from marking the now-empty fields in red.
   pendingEmail = email;
-  form.querySelectorAll('input').forEach((input) => { if (input.type === 'password') input.value = ''; });
-  msg.textContent = `Almost done! We sent a confirmation link to ${email}. Open it to activate your account (check your spam folder too).`;
-  resend.hidden = false;
+  form.reset();
+  msg.textContent = '';
+  document.querySelector('#sent-to')!.textContent = email;
+  form.hidden = true;
+  (document.querySelector('.auth-main .section-header') as HTMLElement | null)?.setAttribute('hidden', '');
+  sent.hidden = false;
+  sent.focus();
+  sent.scrollIntoView({ block: 'center', behavior: 'smooth' });
+});
+document.querySelector('#change-email')?.addEventListener('click', () => {
+  sent.hidden = true;
+  resendMsg.textContent = '';
+  document.querySelector('.auth-main .section-header')?.removeAttribute('hidden');
+  if (form) { form.hidden = false; form.querySelector<HTMLInputElement>('input[name=email]')?.focus(); }
 });
 resend.addEventListener('click', async () => {
   if (!supabase || !pendingEmail) return;
   resend.disabled = true;
   const { error } = await supabase.auth.resend({ type: 'signup', email: pendingEmail, options: { emailRedirectTo } });
-  msg.textContent = error ? authMessage(error, 'Could not resend the email.') : `We sent a new confirmation link to ${pendingEmail}.`;
+  resendMsg.textContent = error ? authMessage(error, 'Could not resend the email.') : `Sent again. Check ${pendingEmail}.`;
   setTimeout(() => { resend.disabled = false; }, 30000);
 });
 </script>
+
+<style>
+.auth-sent{text-align:center;justify-items:center}
+.auth-sent:focus{outline:none}
+.auth-sent h2{margin:0}
+.auth-sent p{margin:0;color:var(--muted)}
+.auth-sent p strong{color:var(--ink);overflow-wrap:anywhere}
+.auth-sent-icon{display:grid;place-items:center;width:64px;height:64px;border-radius:50%;background:var(--surface-2);font-size:1.8rem}
+.auth-sent-note{font-size:.88rem}
+.auth-sent #resend-message:empty{display:none}
+.link-button{padding:0;border:0;background:none;color:var(--ink);font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
+</style>
