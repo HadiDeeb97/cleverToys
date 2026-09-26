@@ -619,7 +619,7 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .list-toolbar{display:grid;grid-template-columns:1fr 200px;gap:10px;margin-bottom:12px}
 #product-filters{margin-bottom:12px}
 .product-rows,.category-rows{display:grid;gap:8px}
-.product-row,.category-row{display:grid;grid-template-columns:52px 84px 48px minmax(0,1fr);grid-template-areas:"thumb main main main" "thumb stock toggle actions";gap:6px 12px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);transition:border-color .15s}
+.product-row,.category-row{display:grid;grid-template-columns:52px auto auto minmax(0,1fr);grid-template-areas:"thumb main main main" "thumb stock toggle actions";gap:6px 12px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);transition:border-color .15s}
 .category-row{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:none}
 .product-row>.stock-history{width:100%;min-width:0;border-collapse:collapse;font-size:.82rem}
 .stock-history th,.stock-history td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
@@ -634,8 +634,8 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .product-name{display:block;max-width:100%;padding:0;border:0;background:none;color:var(--ink);font-weight:800;text-align:left;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media (hover:hover){.product-name:hover{color:var(--primary-strong);text-decoration:underline}}
 .product-main small{display:block;color:var(--muted);font-size:.8rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.stock-edit{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:.66rem;font-weight:900;text-transform:uppercase}
-.stock-edit input{width:62px;min-height:34px;padding:4px 8px;border:1.5px solid var(--line-strong);border-radius:10px;font-weight:800}
+.stock-edit{display:flex;align-items:center;gap:6px;white-space:nowrap;color:var(--muted);font-size:.66rem;font-weight:900;text-transform:uppercase}
+.stock-edit input{flex:0 0 auto;width:72px;min-height:34px;padding:4px 8px;border:1.5px solid var(--line-strong);border-radius:10px;font-weight:800}
 .stock-edit.low input{border-color:#f0b429;background:#fff9e8}
 .stock-edit.out input{border-color:var(--danger);background:var(--danger-soft)}
 .row-toggle{display:grid;place-items:center}
