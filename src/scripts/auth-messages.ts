@@ -10,7 +10,9 @@ export function authMessage(error: AuthErrorLike, fallback = 'Something went wro
   if (code === 'user_already_exists' || code === 'email_exists' || /already registered/i.test(text)) return 'An account with this email already exists. Sign in, or reset your password if you forgot it.';
   if (code === 'weak_password' || /password should/i.test(text)) return `Please choose a stronger password.${text ? ` ${text}` : ''}`;
   if (code === 'email_address_invalid' || /email address .* is invalid/i.test(text)) return 'Please enter a valid email address.';
-  if (code === 'over_email_send_rate_limit' || code === 'over_request_rate_limit' || error.status === 429 || /rate limit/i.test(text)) return 'Too many attempts right now. Please wait a few minutes and try again.';
+  // Supabase's built-in email sender only sends a few emails per hour for the whole store.
+  if (code === 'over_email_send_rate_limit' || /email rate limit/i.test(text)) return 'We could not send the email right now because our email service is busy. Please try again in about an hour, or contact us on WhatsApp and we will help you.';
+  if (code === 'over_request_rate_limit' || error.status === 429 || /rate limit/i.test(text)) return 'Too many attempts right now. Please wait a few minutes and try again.';
   if (code === 'signup_disabled' || /signups not allowed/i.test(text)) return 'New accounts are not open right now. Please contact us on WhatsApp.';
   if (/error sending (confirmation|recovery|magic link)? ?email/i.test(text)) return 'We could not send the confirmation email. Please try again later or contact us on WhatsApp.';
   if (/failed to fetch|network/i.test(text)) return 'Could not reach the server. Check your connection and try again.';
