@@ -225,7 +225,14 @@
       element.addEventListener('transitionend', done);
     }), { rootMargin: '0px 0px -6% 0px', threshold: 0.06 });
     const fold = window.innerHeight;
-    document.querySelectorAll('.product-card, .category-tile, .category-page-card, .age-tile, .section-header, .promo-banner, .story-block, .help-card').forEach((element) => {
+    // Everything below the first screen fades up as it scrolls into view, including every block of
+    // the product page (details, dropdowns, reviews and the review form).
+    const REVEAL = [
+      '.product-card', '.category-tile', '.category-page-card', '.age-tile', '.section-header', '.promo-banner', '.story-block', '.help-card',
+      '.product-layout > .gallery', '.product-details > :not(script)', '.product-accordion > details', '.section-heading-row', '.review-card', '.review-form',
+      '.contact-card', '.content-card', '.cart-item', '.checkout-summary'
+    ].join(', ');
+    document.querySelectorAll(REVEAL).forEach((element) => {
       if (element.dataset.reveal) return;
       element.dataset.reveal = '1';
       if (element.getBoundingClientRect().top < fold) return;
@@ -522,6 +529,32 @@
       });
     });
   }
+
+  // ---------- Scroll lock for pop-ups (quick view, cart and menu drawers, filters, photo viewer) ----------
+  // The page itself is set to overflow:hidden while one is open (global.css), which stops scrolling on
+  // computers and Android. iPhones still scroll the page with a finger, so finger swipes are also
+  // blocked unless they scroll something inside the pop-up (its content, or a photo strip sideways).
+  const popupOpen = () => document.body.classList.contains('has-quick-view') || document.body.classList.contains('has-drawer') ||
+    Boolean(document.getElementById('clever-image-viewer')?.classList.contains('is-open'));
+  const scrollsInside = (target, dx, dy) => {
+    for (let el = target instanceof Element ? target : null; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+      const style = getComputedStyle(el);
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (/(auto|scroll)/.test(style.overflowX) && el.scrollWidth > el.clientWidth + 1) return true;
+      } else if (/(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1) {
+        if (dy > 0 ? el.scrollTop + el.clientHeight < el.scrollHeight - 1 : el.scrollTop > 0) return true;
+      }
+    }
+    return false;
+  };
+  let touchStart = null;
+  document.addEventListener('touchstart', (event) => { const t = event.touches[0]; touchStart = t ? { x: t.clientX, y: t.clientY } : null; }, { passive: true });
+  document.addEventListener('touchmove', (event) => {
+    if (!popupOpen() || !touchStart || event.touches.length > 1) return; // two fingers = zoom, always allowed
+    const t = event.touches[0];
+    const dx = touchStart.x - t.clientX, dy = touchStart.y - t.clientY; // positive dy = scrolling down
+    if (event.cancelable && !scrollsInside(event.target, dx, dy)) event.preventDefault();
+  }, { passive: false });
 
   // ---------- Start ----------
   // This file loads with "defer", so the page is fully parsed when it runs.

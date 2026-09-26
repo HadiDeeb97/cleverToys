@@ -436,6 +436,7 @@ html[data-font=modern] .hero-highlight,html[data-font=playful] .hero-highlight{f
 .quick-view-stock.out{color:var(--danger)}
 /* Quick view details (filled in from /api/quick-view) */
 html:has(body.has-quick-view){overflow:hidden}
+html:has(body.has-quick-view),html:has(body.has-drawer){overscroll-behavior:none}
 .quick-view-dialog{overscroll-behavior:contain}
 .quick-view-gallery{display:flex;flex-direction:column;min-width:0;background:#fff;border-right:1px solid var(--line)}
 .quick-view-thumbs{display:flex;gap:8px;padding:10px;overflow-x:auto;scrollbar-width:none;border-top:1px solid var(--line)}
@@ -1043,7 +1044,7 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .cart-link{padding:0 12px!important;min-height:42px}
   .cart-label{display:none}
   .home-hero-inner,.promo-banner,.story-block,.product-layout,.category-heading{grid-template-columns:1fr}
-  .hero-visual{aspect-ratio:16/11;width:100%;min-width:0;max-height:300px;justify-self:stretch}
+  .hero-visual{width:min(100%,420px);min-width:0;justify-self:center}
   .hero-art .art-main{inset:4% 22% 4% 4%}
   .hero-art .art-a{width:26%;top:0}
   .hero-art .art-b{width:20%}
@@ -1057,7 +1058,7 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .trust-item:nth-child(n+3){border-top:1px solid var(--line)}
   .section-header-row{align-items:flex-start;flex-direction:column;gap:12px}
   .category-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .category-tile .tile-media{aspect-ratio:1/1}
+  /* (category tiles keep their 4:5 shape on phones too) */
   .category-tile strong{font-size:1.02rem}
   .category-tile small{display:none}
   .product-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -1071,12 +1072,12 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .sale-badge,.new-badge{left:8px}
   .stock-badge{right:8px}
   .sale-badge+.new-badge{top:36px}
-  .promo-visual{aspect-ratio:16/9}
+  /* (the promotion picture keeps its 4:3 shape on phones too) */
   .age-grid-home{grid-template-columns:repeat(2,minmax(0,1fr))}
   /* Home page rows show 4 toys on phones to keep the page short; the "View all" link has the rest. */
   .home-rail .product-card:nth-child(n+5){display:none}
   .age-grid-home .age-tile:last-child{grid-column:1/-1}
-  .story-visual{aspect-ratio:16/10}
+  /* (the story picture keeps its 5:4 shape on phones too) */
   .help-card{flex-direction:column;align-items:stretch}
   .help-card .button{width:100%}
   .button{min-height:50px;padding:0 22px;font-size:.96rem}
@@ -1089,9 +1090,9 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
   .sort-form label{display:none}
   .sort-form select{width:100%}
   .product-details h1{font-size:clamp(1.6rem,7vw,2.1rem)}
-  /* Phones: a shorter photo so the name and price show on the first screen; the whole picture stays visible. */
+  /* Phones: the product photo keeps the same square shape as on computers; the whole picture stays visible. */
   .gallery{width:100%}
-  .gallery-main img,.gallery-main .product-placeholder{aspect-ratio:auto;height:min(90vw,46svh)}
+  .gallery-main img,.gallery-main .product-placeholder{aspect-ratio:1/1;height:auto}
   .thumbnail{flex-basis:58px;width:58px;height:58px}
   .buy-bar{display:flex}
   .cart-item{grid-template-columns:80px minmax(0,1fr);gap:12px;padding:16px 0}
