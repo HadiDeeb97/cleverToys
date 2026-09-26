@@ -459,7 +459,8 @@
     }, { passive: false });
     // The category row also gets arrow buttons on computers (shown only while there is more to see).
     const wrap = row.matches('.category-pills') ? addArrows(row) : null;
-    const syncWrap = () => { if (wrap) { wrap.classList.toggle('more-left', row.classList.contains('more-left')); wrap.classList.toggle('more-right', row.classList.contains('more-right')); } };
+    // (edges() first, so the arrows always match the row's current position)
+    const syncWrap = () => { edges(); if (wrap) { wrap.classList.toggle('more-left', row.classList.contains('more-left')); wrap.classList.toggle('more-right', row.classList.contains('more-right')); } };
     row.addEventListener('scroll', syncWrap, { passive: true });
     if ('ResizeObserver' in window) new ResizeObserver(syncWrap).observe(row);
     row.addEventListener('scroll', edges, { passive: true });
@@ -483,11 +484,33 @@
       button.className = `pill-arrow ${cls}`;
       button.setAttribute('aria-label', label);
       button.innerHTML = ARROW(d);
-      button.addEventListener('click', () => row.scrollBy({ left: dir * Math.max(160, row.clientWidth * 0.7), behavior: 'smooth' }));
+      button.addEventListener('click', () => row.scrollTo({ left: pillStop(row, dir), behavior: 'smooth' }));
       wrap.appendChild(button);
     });
     return wrap;
   }
+  // Where an arrow scrolls to: about a row's width along, stopping so a category name starts (or ends)
+  // cleanly just inside the clear strip next to the arrow, never cut off under it.
+  const PILL_EDGE = 120;
+  function pillStop(row, dir) {
+    const pills = [...row.children];
+    const max = row.scrollWidth - row.clientWidth;
+    const target = row.scrollLeft + dir * Math.max(160, row.clientWidth - PILL_EDGE * 2);
+    let best = dir > 0 ? max : 0;
+    if (dir > 0) {
+      // First name that is not fully visible at the target: put its start just after the left strip.
+      const pill = pills.find((p) => p.offsetLeft + p.offsetWidth > target + row.clientWidth - PILL_EDGE);
+      if (pill) best = Math.min(max, Math.max(0, pill.offsetLeft - PILL_EDGE));
+    } else {
+      const pill = [...pills].reverse().find((p) => p.offsetLeft < target + PILL_EDGE);
+      if (pill) best = Math.max(0, Math.min(max, pill.offsetLeft + pill.offsetWidth - row.clientWidth + PILL_EDGE));
+    }
+    // Close to either end: go all the way.
+    if (best < PILL_EDGE) best = 0;
+    if (max - best < PILL_EDGE) best = max;
+    return best;
+  }
+
   // Once per visit on computers: slide the row a little and back, so shoppers see it moves.
   function peek(row) {
     if (!matchMedia('(hover:hover) and (pointer:fine)').matches || matchMedia('(prefers-reduced-motion: reduce)').matches) return;

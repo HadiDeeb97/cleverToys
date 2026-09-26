@@ -483,13 +483,13 @@ html:has(body.has-quick-view),html:has(body.has-drawer){overscroll-behavior:none
 .sort-form{display:flex;align-items:center;gap:8px}
 .sort-form label{color:var(--muted);font-size:.88rem;font-weight:600}
 .filter-button{display:none}
-.category-pills{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;margin-bottom:20px;scrollbar-width:none}
+.category-pills{position:relative;display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;margin-bottom:20px;scrollbar-width:none}
 .category-pills::-webkit-scrollbar{display:none}
 .pill-scroller{position:relative;margin-bottom:20px}
 .pill-scroller .category-pills{margin-bottom:0}
 .pill-arrow{position:absolute;top:calc(50% - 3px);z-index:2;display:none;place-items:center;width:40px;height:40px;padding:0;border:1.5px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);box-shadow:0 6px 16px rgba(20,20,40,.14);cursor:pointer;transform:translateY(-50%);transition:transform .18s var(--ease),border-color .18s}
 .pill-arrow svg{width:18px;height:18px}
-.pill-arrow.prev{left:-6px}.pill-arrow.next{right:-6px}
+.pill-arrow.prev{left:0}.pill-arrow.next{right:0}
 .pill-arrow:hover{border-color:var(--ink);transform:translateY(-50%) scale(1.06)}
 @media (hover:hover) and (pointer:fine){.pill-scroller.more-left .pill-arrow.prev,.pill-scroller.more-right .pill-arrow.next{display:grid}}
 /* Sideways rows can be dragged with a mouse (public/store-ui.js); faded edges show there is more. */
@@ -499,6 +499,13 @@ html:has(body.has-quick-view),html:has(body.has-drawer){overscroll-behavior:none
 .category-pills.more-right{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 48px),transparent)}
 .category-pills.more-left{-webkit-mask-image:linear-gradient(90deg,transparent,#000 48px);mask-image:linear-gradient(90deg,transparent,#000 48px)}
 .category-pills.more-left.more-right{-webkit-mask-image:linear-gradient(90deg,transparent,#000 48px,#000 calc(100% - 48px),transparent);mask-image:linear-gradient(90deg,transparent,#000 48px,#000 calc(100% - 48px),transparent)}
+/* Computers: the arrows sit on a clear strip at each end (the names fully fade out beneath them),
+   so an arrow never covers readable text. */
+@media (hover:hover) and (pointer:fine){
+  .category-pills.more-right{-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 118px),transparent calc(100% - 50px));mask-image:linear-gradient(90deg,#000 calc(100% - 118px),transparent calc(100% - 50px))}
+  .category-pills.more-left{-webkit-mask-image:linear-gradient(90deg,transparent 50px,#000 118px);mask-image:linear-gradient(90deg,transparent 50px,#000 118px)}
+  .category-pills.more-left.more-right{-webkit-mask-image:linear-gradient(90deg,transparent 50px,#000 118px,#000 calc(100% - 118px),transparent calc(100% - 50px));mask-image:linear-gradient(90deg,transparent 50px,#000 118px,#000 calc(100% - 118px),transparent calc(100% - 50px))}
+}
 .category-pills a{flex:0 0 auto;padding:9px 16px;border:1.5px solid var(--line);border-radius:var(--radius-pill);background:var(--surface);font-weight:700;font-size:.88rem;white-space:nowrap;transition:border-color .18s,background .18s,color .18s}
 @media (hover:hover){.category-pills a:hover{border-color:var(--ink)}}
 .category-pills a.active{border-color:var(--ink);background:var(--ink);color:#fff}
