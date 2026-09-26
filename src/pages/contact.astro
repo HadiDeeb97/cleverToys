@@ -8,14 +8,14 @@
  *  - Street address and opening hours: Admin → Storefront → Footer
  */
 import '../styles/global.css';
-import { getPageData, DEFAULT_WHATSAPP_URL } from '../lib/page-data';
+import { getPageData, DEFAULT_WHATSAPP_URL, whatsappSendUrl } from '../lib/page-data';
 import { parseSeoSettings } from '../lib/seo';
 import { ICONS } from '../lib/storefront-chrome';
 
 const { storeSettings, design } = await getPageData(Astro);
 const seo = parseSeoSettings(storeSettings.seo);
 const https = (value: unknown) => /^https:\/\/[^\s"<>]+$/i.test(String(value ?? '').trim()) ? String(value).trim() : '';
-const whatsappUrl = https(storeSettings.whatsapp_url) || DEFAULT_WHATSAPP_URL;
+const whatsappUrl = whatsappSendUrl(https(storeSettings.whatsapp_url) || DEFAULT_WHATSAPP_URL);
 const instagramUrl = storeSettings.show_instagram ? https(storeSettings.instagram_url) : '';
 const title = 'Contact Clever Toys | Clever Toys';
 const description = 'Contact Clever Toys for product questions, order help and delivery assistance.';

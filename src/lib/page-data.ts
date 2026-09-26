@@ -12,6 +12,23 @@ import { parseDesign, type StoreDesign } from './design';
 
 export const DEFAULT_WHATSAPP_URL = 'https://wa.me/96171220251?text=Hello%20Clever%20Toys%21%20I%20have%20a%20question%20about%20your%20toys.';
 
+/**
+ * WhatsApp's short wa.me links garble emoji in the message (they arrive as "�"), so links are
+ * rewritten to WhatsApp's own send address, which keeps them. Other links are returned unchanged.
+ */
+export function whatsappSendUrl(link: string, message?: string) {
+  let url: URL;
+  try { url = new URL(link); } catch { return link; }
+  const host = url.hostname.replace(/^www\./, '');
+  const phone = host === 'wa.me' ? url.pathname.replace(/\D/g, '') : /whatsapp\.com$/.test(host) ? (url.searchParams.get('phone') || '').replace(/\D/g, '') : null;
+  if (phone === null) {
+    if (message !== undefined) url.searchParams.set('text', message);
+    return url.toString();
+  }
+  const text = message ?? url.searchParams.get('text') ?? '';
+  return `https://api.whatsapp.com/send?phone=${phone}${text ? `&text=${encodeURIComponent(text)}` : ''}`;
+}
+
 export const defaultStoreSettings: Record<string, any> = {
   whatsapp_url: DEFAULT_WHATSAPP_URL,
   instagram_url: '',

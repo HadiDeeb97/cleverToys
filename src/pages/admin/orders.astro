@@ -112,7 +112,7 @@ function detailsHtml(o: any) {
     <table class="items-table"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody>
     <tfoot><tr><td colspan="3">Subtotal</td><td>${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr>${Number(o.discount) ? `<tr><td colspan="3">Discount${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</td><td>−${money(o.discount)}</td></tr>` : ''}<tr class="grand"><td colspan="3">Total (cash on delivery)</td><td>${money(o.total)}</td></tr></tfoot></table>
     <div class="order-actions">
-      <a class="button whatsapp-action" target="_blank" rel="noopener" href="https://wa.me/${whatsappNumber(o.customer_phone)}?text=${encodeURIComponent(whatsappMessage(o))}">💬 Message on WhatsApp</a>
+      <a class="button whatsapp-action" target="_blank" rel="noopener" href="https://api.whatsapp.com/send?phone=${whatsappNumber(o.customer_phone)}&text=${encodeURIComponent(whatsappMessage(o))}">💬 Message on WhatsApp</a>
       <button class="button secondary-button" type="button" data-print="${o.id}">🧾 Print invoice</button>
       <button class="button secondary-button" type="button" data-copy-link="${o.id}">🔗 Copy tracking link</button>
     </div>

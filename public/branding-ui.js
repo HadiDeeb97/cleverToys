@@ -38,12 +38,17 @@
   const getDeliveryFee = (subtotal, branding) =>
     branding.freeDeliveryThreshold > 0 && subtotal >= branding.freeDeliveryThreshold ? 0 : branding.codDeliveryPrice;
 
-  /** Adds a message to the WhatsApp link from Branding (keeps the phone number, replaces the text). */
+  /**
+   * Adds a message to the WhatsApp link from Branding (keeps the phone number, replaces the text).
+   * Uses WhatsApp's send address: short wa.me links turn emoji into "�".
+   */
   const buildWhatsappUrl = (target, message) => {
     let url;
     try { url = new URL(target || FALLBACK_WHATSAPP_URL); } catch { url = new URL(FALLBACK_WHATSAPP_URL); }
-    url.searchParams.set('text', message);
-    return url.toString();
+    const host = url.hostname.replace(/^www\./, '');
+    const phone = host === 'wa.me' ? url.pathname.replace(/\D/g, '') : /whatsapp\.com$/.test(host) ? (url.searchParams.get('phone') || '').replace(/\D/g, '') : null;
+    if (phone === null) { url.searchParams.set('text', message); return url.toString(); }
+    return `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}`;
   };
 
   const readStoredCustomer = () => {
