@@ -1,10 +1,11 @@
 ---
 /**
  * All categories: /categories
- * One card per active category (Admin → Products → Categories), linking to /category/<slug>.
+ * One tile per active category (Admin → Products → Categories), linking to /category/<slug>.
+ * Same tiles as the home page "Shop by category" section (src/components/CategoryTile.astro).
  */
 import { supabase } from '../lib/supabase';
-import { placeholderFor } from '../lib/design';
+import CategoryTile from '../components/CategoryTile.astro';
 import '../styles/global.css';
 
 const { data: categories, error } = await supabase
@@ -40,22 +41,8 @@ const canonicalUrl = new URL('/categories', Astro.site ?? Astro.url.origin).href
       {error ? (
         <div class="category-empty"><h2>We couldn't load the categories</h2><p>Please try again in a moment.</p></div>
       ) : categories?.length ? (
-        <div class="category-page-grid">
-          {categories.map((category) => {
-            const ph = placeholderFor(category.name);
-            return (
-              <a class="category-page-card" href={`/category/${category.slug}`}>
-                <span class="tile-media" style={`--ph-h:${ph.hue}`}>
-                  {category.image_url ? <img src={category.image_url} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">{ph.emoji}</span>}
-                </span>
-                <span>
-                  <h2>{category.name}</h2>
-                  {category.description && <p>{category.description}</p>}
-                  <span class="text-link">Shop {category.name} →</span>
-                </span>
-              </a>
-            );
-          })}
+        <div class="category-tiles">
+          {categories.map((category) => <CategoryTile category={category} />)}
         </div>
       ) : (
         <div class="category-empty"><h2>No categories yet</h2><p>New collections are coming soon.</p><a class="button" href="/products">Shop all toys</a></div>
