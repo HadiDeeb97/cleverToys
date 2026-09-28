@@ -164,7 +164,7 @@
         <div class="wa-dialog-head"><div><h2 id="wa-dialog-title">Your delivery details</h2><p class="wa-dialog-summary"></p></div><button type="button" class="wa-dialog-close" aria-label="Close">×</button></div>
         <div class="wa-dialog-fields">
           <label>Full name<input name="full_name" required autocomplete="name" maxlength="120"></label>
-          <label>Phone number<input name="phone" required type="tel" autocomplete="tel" maxlength="40" placeholder="+961 …"></label>
+          <label>Phone number<input name="phone" required type="tel" autocomplete="tel" maxlength="40"></label>
           <label>Governorate<select name="governorate" required autocomplete="address-level1"><option value="">Choose your governorate</option>${readDeliveryData().governorates.map((g) => { const zone = zoneFor(g); const off = zone && !zone.is_active; return `<option value="${escapeHtml(g)}"${off ? ' disabled' : ''}>${escapeHtml(g)}${off ? ' (no delivery yet)' : ''}</option>`; }).join('')}</select></label>
           <label>City<input name="city" required autocomplete="address-level2" maxlength="80"></label>
           <label>Area <span>(optional)</span><input name="area" autocomplete="address-level3" maxlength="120"></label>
@@ -216,11 +216,14 @@
     form.onsubmit = (event) => {
       event.preventDefault();
       const data = Object.fromEntries([...new FormData(form).entries()].map(([k, v]) => [k, String(v).trim()]));
-      // Required fields must be filled; the phone needs at least 7 digits.
-      const missing = [...form.querySelectorAll('[required]')].filter((field) => !String(field.value).trim() || (field.name === 'phone' && String(field.value).replace(/\D/g, '').length < 7));
+      // Required fields must be filled; the phone must be a valid number for its country (public/phone-ui.js).
+      const missing = [...form.querySelectorAll('[required]')].filter((field) => !String(field.value).trim() || (field.name === 'phone' && (!field.checkValidity() || String(field.value).replace(/\D/g, '').length < 7)));
       form.querySelectorAll('[aria-invalid]').forEach((field) => field.removeAttribute('aria-invalid'));
       if (missing.length) {
         missing.forEach((field) => field.setAttribute('aria-invalid', 'true'));
+        // A wrong phone number gets its own message ("Enter a valid Lebanon phone number, e.g. 71 123 456").
+        const phoneField = missing.find((field) => field.name === 'phone' && String(field.value).trim());
+        error.textContent = missing.length === 1 && phoneField ? (phoneField.validationMessage || 'Please enter a valid phone number.') : 'Please fill in the highlighted fields.';
         error.hidden = false;
         missing[0].focus();
         return;
