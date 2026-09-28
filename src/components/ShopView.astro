@@ -1,0 +1,129 @@
+---
+/**
+ * The shop listing used by /products and /category/<slug>: category shortcuts, the filter panel,
+ * result count, sorting, active filter chips, the product grid and paging.
+ * Data comes from loadShop() in src/lib/shop.ts. Everything works with plain links and forms,
+ * so filters work even before any JavaScript has loaded.
+ * On computers the filters sit in a sidebar; on phones and tablets they slide in from the left.
+ */
+import ProductCard from './ProductCard.astro';
+import type { ShopData } from '../lib/shop';
+
+interface Props {
+  shop: ShopData;
+  /** Show the "Sale" shortcut (some toys are on sale). */
+  hasSale: boolean;
+}
+
+const { shop, hasSale } = Astro.props;
+const { basePath, fixedCategory, search, selectedCategorySlugs, selectedVariantFilters, ageMinParam, ageMaxParam, sort, saleOnly, categories, variantOptions, error, cards, totalProducts, totalPages, currentPage, activeChips, filterCount, pageUrl } = shop;
+const hasFilters = Boolean(saleOnly || selectedCategorySlugs.length || selectedVariantFilters.length || ageMinParam || ageMaxParam);
+// On a category page the shortcuts open the other category pages; on /products they filter the list.
+const categoryHref = (slug: string) => fixedCategory ? `/category/${encodeURIComponent(slug)}` : `/products?category=${encodeURIComponent(slug)}`;
+const isActiveCategory = (slug: string) => fixedCategory ? fixedCategory.slug === slug : selectedCategorySlugs.includes(slug);
+---
+<section class="section tight shop-section">
+  <div class="container">
+    {/* Category shortcuts */}
+    <div class="category-pills" aria-label="Shop categories">
+      <a class:list={{ active: !fixedCategory && !selectedCategorySlugs.length && !saleOnly }} href="/products">All toys</a>
+      {(saleOnly || hasSale) && <a class:list={['sale-pill', { active: !fixedCategory && saleOnly }]} href="/products?sale=1">Sale</a>}
+      {categories.map((item) => <a class:list={{ active: isActiveCategory(item.slug) }} href={categoryHref(item.slug)} aria-current={fixedCategory?.slug === item.slug ? 'page' : undefined}>{item.name}</a>)}
+    </div>
+
+    <div class="shop-layout">
+      {/* Filters: sidebar on computers, slide-in panel on phones (opened by the Filters button). */}
+      <form class="filter-panel" id="filter-panel" method="get" action={basePath} aria-label="Filter toys">
+        {sort !== 'newest' && <input type="hidden" name="sort" value={sort} />}
+        <div class="filter-panel-head"><strong>Filters</strong><button type="button" class="icon-button filter-close" id="filter-close" aria-label="Close filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+        <div class="search-form">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+          <label class="sr-only" for="product-search">Search toys</label>
+          <input id="product-search" name="q" value={search} placeholder={fixedCategory ? `Search ${fixedCategory.name}…` : 'Search toys…'} type="search" enterkeyhint="search" />
+        </div>
+        <div class="filter-groups">
+          <fieldset class="filter-group"><legend>Price</legend><div class="filter-check-grid"><label class="filter-check"><input type="checkbox" name="sale" value="1" checked={saleOnly} /><span>On sale</span></label></div></fieldset>
+          {!fixedCategory && <fieldset class="filter-group"><legend>Category</legend><div class="filter-check-grid">{categories.map((item) => <label class="filter-check"><input type="checkbox" name="category" value={item.slug} checked={selectedCategorySlugs.includes(item.slug)} /><span>{item.name}</span></label>)}</div></fieldset>}
+          {variantOptions.length > 0 && <fieldset class="filter-group"><legend>Options</legend><div class="filter-check-grid">{variantOptions.map((item) => <label class="filter-check"><input type="checkbox" name="variant" value={item} checked={selectedVariantFilters.includes(item)} /><span>{item}</span></label>)}</div></fieldset>}
+          <fieldset class="filter-group"><legend>Age</legend><div class="age-grid"><label>From<input name="age_min" type="number" inputmode="numeric" min="0" step="1" value={ageMinParam} placeholder="Any" /></label><label>To<input name="age_max" type="number" inputmode="numeric" min="0" step="1" value={ageMaxParam} placeholder="Any" /></label></div></fieldset>
+        </div>
+        <div class="filter-actions"><a class="button secondary-button" href={basePath}>Clear</a><button class="button" type="submit">Apply</button></div>
+      </form>
+
+      <div class="shop-results">
+        <div class="shop-toolbar">
+          <div class="shop-result-row"><p>{totalProducts === 0 ? 'No toys found' : `${totalProducts} ${totalProducts === 1 ? 'toy' : 'toys'}`}</p></div>
+          <div class="shop-controls">
+            <button class="button secondary-button small filter-button" type="button" id="filter-toggle" aria-expanded="false" aria-controls="filter-panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filters{filterCount ? ` (${filterCount})` : ''}</button>
+            <form method="get" action={basePath} class="sort-form">
+              {search && <input type="hidden" name="q" value={search} />}
+              {selectedCategorySlugs.map((slug) => <input type="hidden" name="category" value={slug} />)}
+              {selectedVariantFilters.map((variant) => <input type="hidden" name="variant" value={variant} />)}
+              {ageMinParam && <input type="hidden" name="age_min" value={ageMinParam} />}
+              {ageMaxParam && <input type="hidden" name="age_max" value={ageMaxParam} />}
+              {saleOnly && <input type="hidden" name="sale" value="1" />}
+              <label for="sort">Sort by</label>
+              <select id="sort" name="sort" onchange="this.form.submit()">
+                <option value="newest" selected={sort === 'newest'}>Newest</option>
+                <option value="price-asc" selected={sort === 'price-asc'}>Price: low to high</option>
+                <option value="price-desc" selected={sort === 'price-desc'}>Price: high to low</option>
+                <option value="name" selected={sort === 'name'}>Name: A–Z</option>
+              </select>
+              <noscript><button class="small-button" type="submit">Sort</button></noscript>
+            </form>
+          </div>
+        </div>
+
+        {activeChips.length > 0 && (
+          <div class="active-filters" aria-label="Active filters">
+            {activeChips.map((chip) => <a href={chip.href} aria-label={`Remove filter ${chip.label}`}>{chip.label} <span aria-hidden="true">×</span></a>)}
+            {hasFilters && <a href={search ? `${basePath}?q=${encodeURIComponent(search)}` : basePath}>Clear all</a>}
+          </div>
+        )}
+
+        {error ? (
+          <div class="empty-state"><h2>We couldn't load the toys</h2><p>Please try again in a moment.</p></div>
+        ) : cards.length ? (
+          <div class="product-grid shop-grid">{cards.map((product, index) => <ProductCard product={product} heading="h2" eager={index < 4} />)}</div>
+        ) : fixedCategory && !search && !hasFilters ? (
+          <div class="empty-state"><h2>No toys in this category yet</h2><p>Check back soon or explore our other categories.</p><a class="button" href="/categories">Browse categories</a></div>
+        ) : (
+          <div class="empty-state"><h2>No toys found</h2><p>Try another search or remove a filter.</p><a class="button" href={basePath}>{fixedCategory ? `View all ${fixedCategory.name}` : 'View all toys'}</a></div>
+        )}
+
+        {totalPages > 1 && (
+          <nav class="pagination" aria-label="Product pages">
+            {currentPage > 1 && <a href={pageUrl(currentPage - 1)} rel="prev">← Previous</a>}
+            <span>Page {currentPage} of {totalPages}</span>
+            {currentPage < totalPages && <a href={pageUrl(currentPage + 1)} rel="next">Next →</a>}
+          </nav>
+        )}
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+// Filters panel on phones and tablets: slides in from the left, closes with ×, Esc or a tap outside.
+const panel = document.querySelector<HTMLFormElement>('#filter-panel')!;
+const toggle = document.querySelector<HTMLButtonElement>('#filter-toggle')!;
+let scrim: HTMLDivElement | null = null;
+function setOpen(open: boolean) {
+  panel.classList.toggle('is-open', open);
+  toggle.setAttribute('aria-expanded', String(open));
+  document.body.classList.toggle('has-drawer', open);
+  if (open) {
+    scrim = document.createElement('div');
+    scrim.className = 'filter-scrim';
+    scrim.addEventListener('click', () => setOpen(false));
+    document.body.appendChild(scrim);
+    panel.querySelector<HTMLElement>('.filter-close')?.focus({ preventScroll: true });
+  } else {
+    scrim?.remove();
+    scrim = null;
+  }
+}
+toggle.addEventListener('click', () => setOpen(!panel.classList.contains('is-open')));
+document.querySelector('#filter-close')?.addEventListener('click', () => { setOpen(false); toggle.focus(); });
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && panel.classList.contains('is-open')) setOpen(false); });
+</script>

@@ -33,6 +33,13 @@ export const tileMedia = (name: string, image: string | null | undefined, classN
   return `<span class="${className}" style="--ph-h:${ph.hue}"><span aria-hidden="true">${ph.emoji}</span></span>`;
 };
 
+/** Category tile with the hover arrow, the same markup as src/components/CategoryTile.astro (home page, /categories). */
+const categoryTileHtml = (c: MenuCategory, extraClass = '') => {
+  const ph = placeholderFor(c.name);
+  const media = c.image_url && /^https?:\/\//.test(c.image_url) ? `<img src="${esc(c.image_url)}" alt="" loading="lazy" decoding="async" />` : `<span aria-hidden="true">${ph.emoji}</span>`;
+  return `<a class="category-tile${extraClass ? ` ${extraClass}` : ''}" href="/category/${encodeURIComponent(c.slug)}"><span class="tile-media" style="--ph-h:${ph.hue}">${media}<span class="tile-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></span><span><strong>${esc(c.name)}</strong></span></a>`;
+};
+
 export type ChromeOptions = {
   path: string;
   searchValue: string;
@@ -67,7 +74,7 @@ export function renderHeader(o: ChromeOptions) {
     : '';
 
   // Mega menu under "Shop": quick links, up to 8 categories with pictures, and age shortcuts.
-  const megaCategories = o.categories.slice(0, 8).map((c) => `<a class="mega-category" href="/category/${encodeURIComponent(c.slug)}">${tileMedia(c.name, c.image_url)}<span>${esc(c.name)}</span></a>`).join('');
+  const megaCategories = o.categories.slice(0, 8).map((c) => categoryTileHtml(c, 'mega-category')).join('');
   const ages = AGE_RANGES.map((a) => `<a href="/products?age_min=${a.min}${a.max != null ? `&amp;age_max=${a.max}` : ''}"><span>Ages ${a.label}</span><small>${a.icon}</small></a>`).join('');
   const mega = `<div class="mega-menu" role="region" aria-label="Shop menu"><div class="container"><div class="mega-inner">
     <div><p class="mega-title">Shop</p><div class="mega-links"><a href="/products">All toys ${ICONS.arrow.replace('<svg', '<svg width="16" height="16"')}</a><a href="/products?sort=newest">New arrivals</a>${o.hasSale ? '<a href="/products?sale=1" class="sale-link">Sale</a>' : ''}<a href="/products?sort=price-asc">Best prices</a><a href="/categories">All categories</a></div></div>
