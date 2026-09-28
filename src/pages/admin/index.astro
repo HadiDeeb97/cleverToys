@@ -53,6 +53,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
           <fieldset class="category-picker"><legend>Categories</legend><div id="category-checks" class="check-grid"></div></fieldset>
           <div class="variant-box">
             <div class="panel-title"><h3>Variants</h3><button id="add-variant" class="small-button" type="button">+ Add variant</button></div>
+            <p id="stock-from-options" class="muted stock-note" hidden>This toy’s stock is the total of its options’ stock (shown in the Stock field above).</p>
                         <div id="variant-list"></div>
             <small class="field-help">Sizes, colors or packs. Leave price empty to use the product price.</small>
           </div>
@@ -147,6 +148,8 @@ let links: Row[] = [];
 let variants: Row[] = [];
 let images: Row[] = [];
 let productFilter = 'all';
+// Products with visible options: their stock is the options' total (kept by supabase/variant_stock.sql).
+let withOptions = new Set<string>();
 // "Low stock" limit from Admin → Branding & settings (supabase/cms.sql); 5 before that.
 let lowStockAt = 5;
 const params = new URLSearchParams(location.search);
@@ -158,12 +161,14 @@ const form = $<HTMLFormElement>('#product-form');
 const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
 
 async function load() {
-  const [c, p, l, st] = await Promise.all([
+  const [c, p, l, st, vo] = await Promise.all([
     supabase.from('categories').select('*').order('sort_order').order('name'),
     supabase.from('products').select('*').order('created_at', { ascending: false }),
     supabase.from('product_categories').select('product_id,category_id'),
-    supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle()
+    supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle(),
+    supabase.from('product_variants').select('product_id').eq('is_active', true)
   ]);
+  withOptions = new Set(((vo.data ?? []) as Row[]).map((v) => String(v.product_id)));
   lowStockAt = Math.max(0, Number((st.data as Row | null)?.low_stock_threshold ?? 5));
   const error = c.error || p.error;
   if (error) throw new Error(error.message);
@@ -209,7 +214,9 @@ function renderProducts() {
     return `<div class="product-row${editingId === p.id ? ' editing' : ''}${p.is_active ? '' : ' is-hidden'}">
       <div class="product-thumb">${p.primary_image_url ? `<img src="${esc(p.primary_image_url)}" alt="" loading="lazy" />` : '🧸'}</div>
       <div class="product-main"><button type="button" class="product-name" data-edit="${p.id}">${esc(p.name)}</button><small>${esc(p.sku || 'No SKU')} · ${money(price)}${p.sale_price != null ? ` <s>${money(p.price)}</s>` : ''}${p.cost_price != null && p.cost_price !== '' ? ` · cost ${money(p.cost_price)}${price ? ` (${Math.round(((price - Number(p.cost_price)) / price) * 100)}% margin)` : ''}` : ' · <span class="no-cost">no cost set</span>'}${p.is_featured ? ' · ⭐ Featured' : ''}</small></div>
-      <label class="stock-edit ${stockClass}" title="Stock">Stock<input type="number" min="0" value="${Number(p.stock_quantity)}" data-stock="${p.id}" aria-label="Stock for ${esc(p.name)}" /></label>
+      ${withOptions.has(p.id)
+        ? `<label class="stock-edit ${stockClass} from-options" title="Total of this toy's options. Change the stock in its options.">Stock<input type="number" value="${Number(p.stock_quantity)}" readonly tabindex="-1" aria-label="Stock for ${esc(p.name)}: total of its options" /></label>`
+        : `<label class="stock-edit ${stockClass}" title="Stock">Stock<input type="number" min="0" value="${Number(p.stock_quantity)}" data-stock="${p.id}" aria-label="Stock for ${esc(p.name)}" /></label>`}
       <label class="row-toggle" title="Visible in store"><input class="toggle" type="checkbox" data-active="${p.id}"${p.is_active ? ' checked' : ''} aria-label="Visible: ${esc(p.name)}" /></label>
       <div class="item-actions"><button class="small-button" data-edit="${p.id}" type="button">Edit</button><button class="small-button" data-duplicate="${p.id}" type="button" title="Duplicate">Copy</button>${p.is_active === false ? '' : `<a class="small-button" href="/product/${encodeURIComponent(p.slug)}" target="_blank" rel="noopener" title="View on store" aria-label="View ${esc(p.name)} on the store">↗</a>`}<button class="small-button danger-button" data-del="${p.id}" type="button" aria-label="Delete ${esc(p.name)}">Delete</button></div>
     </div>`;
@@ -229,7 +236,20 @@ function renderCategories() {
 function renderVariants() {
   const field = (label: string, key: string, v: Row, attrs: string, cls = '') => `<label class="v-field ${cls}"><span>${label}</span><input data-v="${key}" value="${esc(v[key] ?? '')}" ${attrs}></label>`;
   $('#variant-list').innerHTML = variants.map((v, i) => `<div class="variant-row" data-i="${i}">${field('Name', 'name', v, 'placeholder="e.g. Large"', 'v-name')}${field('SKU', 'sku', v, 'placeholder="Optional"', 'v-sku')}<button class="small-button danger-button v-remove" type="button" data-rm="${i}" aria-label="Remove variant">×</button>${field('Price', 'price', v, 'type="number" step="0.01" min="0" placeholder="Product price"')}${field('Sale', 'sale_price', v, 'type="number" step="0.01" min="0"')}${field('Cost', 'cost_price', v, 'type="number" step="0.01" min="0"')}${field('Stock', 'stock_quantity', v, 'type="number" min="0" placeholder="0"')}</div>`).join('');
+  syncProductStockField();
 }
+// With options, the product's Stock field shows their total and can't be typed in.
+function syncProductStockField() {
+  const stock = field('stock_quantity');
+  const rows = [...document.querySelectorAll<HTMLElement>('.variant-row')].filter((row) => variants[Number(row.dataset.i)]?.is_active !== false);
+  const fromOptions = rows.length > 0;
+  stock.readOnly = fromOptions;
+  stock.classList.toggle('from-options', fromOptions);
+  $('#stock-from-options').hidden = !fromOptions;
+  stock.title = fromOptions ? 'Total of the options below. Change the stock in the options.' : '';
+  if (fromOptions) stock.value = String(rows.reduce((sum, row) => sum + Math.max(0, Number.parseInt(row.querySelector<HTMLInputElement>('[data-v="stock_quantity"]')?.value || '0', 10) || 0), 0));
+}
+$('#variant-list').addEventListener('input', (event) => { if ((event.target as HTMLElement).dataset.v === 'stock_quantity') syncProductStockField(); });
 const readVariants = () => document.querySelectorAll<HTMLElement>('.variant-row').forEach((row) => { const i = Number(row.dataset.i); row.querySelectorAll<HTMLInputElement>('[data-v]').forEach((el) => { variants[i][el.dataset.v!] = el.value; }); });
 
 function renderImages() {
@@ -728,6 +748,8 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .stock-edit input{flex:0 0 auto;width:72px;min-height:34px;padding:4px 8px;border:1.5px solid var(--line-strong);border-radius:10px;font-weight:800}
 .stock-edit.low input{border-color:#f0b429;background:#fff9e8}
 .stock-edit.out input{border-color:var(--danger);background:var(--danger-soft)}
+.stock-edit.from-options input,#product-form input.from-options{border-style:dashed;cursor:default}
+.stock-note{margin:-4px 0 10px;font-size:.84rem}
 .row-toggle{display:grid;place-items:center}
 .item-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .item-actions .small-button{min-height:34px;padding:0 11px}
