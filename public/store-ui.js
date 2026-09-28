@@ -470,7 +470,10 @@
     new MutationObserver(edges).observe(row, { childList: true });
     edges();
     syncWrap();
-    if (wrap) peek(row);
+    // Start with the chosen category in view (it may be far along the row).
+    const active = wrap && row.querySelector('a.active:not(:first-child)');
+    if (active && active.offsetLeft + active.offsetWidth > row.clientWidth - 60) { row.scrollLeft = Math.max(0, active.offsetLeft - 120); syncWrap(); }
+    else if (wrap) peek(row);
   }
 
   const ARROW = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;

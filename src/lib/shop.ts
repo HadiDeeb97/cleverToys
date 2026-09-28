@@ -82,7 +82,7 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
   const variantOptions = [...new Set((variantsResult.data || []).map(v => String(v.name || '').trim()).filter(Boolean))];
 
   /** Link to this listing with the current filters, optionally minus one filter (for the removable chips). */
-  function shopUrl({ page = 1, without = '', value = '' }: { page?: number; without?: 'q' | 'category' | 'variant' | 'age' | 'sale' | ''; value?: string } = {}) {
+  function shopUrl({ page = 1, without = '', value = '', base = basePath }: { page?: number; without?: 'q' | 'category' | 'variant' | 'age' | 'sale' | ''; value?: string; base?: string } = {}) {
     const next = new URLSearchParams();
     if (search && without !== 'q') next.set('q', search);
     selectedCategorySlugs.filter((slug) => !(without === 'category' && slug === value)).forEach((slug) => next.append('category', slug));
@@ -92,7 +92,7 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
     if (sort !== 'newest') next.set('sort', sort);
     if (page > 1) next.set('page', String(page));
     const qs = next.toString();
-    return `${basePath}${qs ? `?${qs}` : ''}`;
+    return `${base}${qs ? `?${qs}` : ''}`;
   }
 
   const { count, error } = productsResult;
@@ -111,6 +111,8 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
     ...(saleOnly ? [{ label: 'On sale', href: shopUrl({ without: 'sale' }) }] : []),
     ...(search ? [{ label: `“${search}”`, href: shopUrl({ without: 'q' }) }] : []),
     ...categories.filter((c) => selectedCategorySlugs.includes(c.slug)).map((c) => ({ label: c.name, href: shopUrl({ without: 'category', value: c.slug }) })),
+    // On a category page the category itself is a chip too: removing it opens the whole shop with the other filters.
+    ...(fixedCategory ? [{ label: fixedCategory.name, href: shopUrl({ base: '/products' }) }] : []),
     ...selectedVariantFilters.map((v) => ({ label: v, href: shopUrl({ without: 'variant', value: v }) })),
     ...(ageMinParam || ageMaxParam ? [{ label: `Ages ${ageMinParam || '0'}–${ageMaxParam || '∞'}`, href: shopUrl({ without: 'age' }) }] : [])
   ];
@@ -118,7 +120,7 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
   return {
     basePath, fixedCategory, search, selectedCategorySlugs, selectedVariantFilters, ageMinParam, ageMaxParam, sort, saleOnly,
     categories, variantOptions, error, cards: products ?? [], totalProducts, totalPages, currentPage, activeChips,
-    filterCount: (saleOnly ? 1 : 0) + selectedCategorySlugs.length + selectedVariantFilters.length + (ageMinParam || ageMaxParam ? 1 : 0),
+    filterCount: (saleOnly ? 1 : 0) + selectedCategorySlugs.length + (fixedCategory ? 1 : 0) + selectedVariantFilters.length + (ageMinParam || ageMaxParam ? 1 : 0),
     pageUrl: (page: number) => shopUrl({ page })
   };
 }

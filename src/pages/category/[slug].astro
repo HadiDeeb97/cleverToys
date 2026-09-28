@@ -22,6 +22,30 @@ if (categoryError || !category) Astro.response.status = 404;
 const title = category ? category.seo_title || `${category.name} Toys | Clever Toys` : 'Category Not Found | Clever Toys';
 const description = category ? category.seo_description || category.description || `Shop ${category.name.toLowerCase()} toys at Clever Toys.` : 'The requested toy category could not be found.';
 const canonicalUrl = new URL(`/category/${slug}`, Astro.site ?? Astro.url.origin).href;
+// The filter panel lists every category (like the shop page). Only this category ticked: stay here.
+// Any other choice (several categories, or a different one) opens the shop page with those filters.
+const chosenCategories = Astro.url.searchParams.getAll('category').filter(Boolean);
+/** The current filters without empty fields (keeps addresses short and tidy). */
+const cleanParams = () => {
+  const params = new URLSearchParams();
+  Astro.url.searchParams.forEach((value, key) => { if (value.trim() && key !== 'filters') params.append(key, value); });
+  return params;
+};
+if (category && chosenCategories.length) {
+  const params = cleanParams();
+  if (chosenCategories.length === 1 && chosenCategories[0] === category.slug) {
+    params.delete('category');
+    const qs = params.toString();
+    return Astro.redirect(`/category/${category.slug}${qs ? `?${qs}` : ''}`);
+  }
+  return Astro.redirect(`/products?${params.toString()}`);
+}
+if (category && Astro.url.searchParams.has('filters') && !chosenCategories.length) {
+  // Every category unticked: the whole shop with the other filters.
+  const params = cleanParams();
+  const qs = params.toString();
+  return Astro.redirect(`/products${qs ? `?${qs}` : ''}`);
+}
 const shop = category ? await loadShop(Astro, { basePath: `/category/${category.slug}`, fixedCategory: category }) : null;
 if (shop && 'redirect' in shop) return Astro.redirect(shop.redirect ?? Astro.url.pathname);
 // Started by the middleware for the header, so this is already loaded (no extra request).
@@ -58,7 +82,7 @@ const { hasSale } = await getPageData(Astro);
       <section class="page-hero shop-hero">
         <div class="container">
           <nav class="breadcrumbs" aria-label="Breadcrumb">
-            <a href="/">Home</a><span>/</span><a href="/categories">Categories</a><span>/</span><span aria-current="page">{category.name}</span>
+            <a href="/">Home</a><span>/</span><a href="/products">Shop</a><span>/</span><span aria-current="page">{category.name}</span>
           </nav>
           <h1>{category.name}</h1>
           <p>{category.description || 'Fun, educational and exciting toys for every child, with cash on delivery across Lebanon.'}</p>
