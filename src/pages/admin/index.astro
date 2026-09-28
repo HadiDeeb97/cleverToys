@@ -117,6 +117,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
       <section id="import-tab" class="admin-panel import-card" hidden>
         <h2>Excel import</h2>
         <p>Download the template, fill it in, then import. Products are matched by slug or SKU and updated; new ones are created. Put comma-separated category names in the <strong>categories</strong> column.</p>
+        <p><strong>Photos:</strong> put up to 5 pictures in the <strong>image_1</strong> … <strong>image_5</strong> columns: inside the cell (Excel: Insert → Pictures → Place in Cell) or over the cell, or type a web link. <strong>image_1</strong> becomes the main photo. A row with pictures replaces that product’s photos; a row without keeps them.</p>
         <div class="import-actions"><button id="template" class="button secondary-button" type="button">Download Excel template</button><input id="file" type="file" accept=".xlsx,.xls,.csv" /><button id="import" class="button" type="button">Import file</button></div>
         <p id="msg" role="status"></p>
         <div id="errors" class="import-errors" hidden></div>
@@ -129,6 +130,8 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
 import { smartFilter } from '../../scripts/smart-search';
+import { readSheetPictures, type SheetPicture } from '../../scripts/xlsx-images';
+import { downloadImportTemplate } from '../../scripts/import-template';
 
 type Row = Record<string, any>;
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -326,7 +329,7 @@ async function saveProductCategories(id: string, ids: string[]) {
 
 // Product photos are resized to at most 1400 px and saved as WebP before upload. That is sharp on
 // phones and big screens (the photo is shown at most ~700 px wide) while keeping pages light.
-async function toWebp(file: File) {
+async function toWebp(file: Blob) {
   const bmp = await createImageBitmap(file);
   const scale = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
   const canvas = document.createElement('canvas');
@@ -643,13 +646,88 @@ $<HTMLFormElement>('#category-form').addEventListener('submit', async (event) =>
 $('#template').addEventListener('click', () => {
   const XLSX = (window as any).XLSX;
   if (!XLSX) { toast('Excel tools are still loading. Try again in a moment.', 'error'); return; }
-  const h = ['name', 'slug', 'sku', 'categories', 'price', 'sale_price', 'cost_price', 'stock_quantity', 'age_min', 'age_max', 'brand', 'short_description', 'description', 'primary_image_url', 'seo_title', 'seo_description', 'is_active', 'is_featured'];
-  const ws = XLSX.utils.aoa_to_sheet([h, ['Example Toy', 'example-toy', 'CT-001', 'Educational Toys, Outdoor Toys', 9.99, '', 5.5, 10, 3, 8, 'Clever Toys', 'Short description', 'Description', '', 'Example Toy | Clever Toys', 'Shop toys in Lebanon.', true, false]]);
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Products'); XLSX.writeFile(wb, 'Clever_Toys_Product_Import_Template.xlsx');
+  downloadImportTemplate(XLSX);
 });
 
 // An empty or missing cost_price cell keeps the cost already saved, so older files never erase costs.
 const costFromRow = (row: Row) => { const cost = num(row.cost_price ?? row['cost price'] ?? row.cost); return cost === null ? {} : { cost_price: Math.max(0, cost) }; };
+
+// ---------- Photos in the Excel file (src/scripts/xlsx-images.ts) ----------
+type ImportPhoto = { slot: number; order: number; picture?: SheetPicture; url?: string };
+const BROWSER_IMAGE = /^(png|jpeg|gif|webp|bmp|avif)$/;
+
+/** image_1…image_5 (also "Image 2", "photo_3", "picture 4"; a plain "image" or "main image" is 1) → photo number. */
+function photoSlot(header: string) {
+  const h = header.trim().toLowerCase();
+  const m = /^(?:image|photo|picture|img)[\s_-]*([1-9])$/.exec(h);
+  if (m) return Number(m[1]);
+  return /^(?:main[\s_-]*)?(?:image|photo|picture)$/.test(h) ? 1 : 0;
+}
+
+/**
+ * Photos for each sheet row, in order: image_1 first (the main photo), then image_2… Pictures in other
+ * columns of the row come last. Web links typed in the image cells (or the older primary_image_url
+ * column) count too.
+ */
+function photosByRow(ws: any, XLSX: any, pictures: SheetPicture[], rows: Row[]) {
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  const headerRow = range.s.r;
+  const slotOfCol = new Map<number, number>();
+  const headerOfCol = new Map<number, string>();
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const text = String(ws[XLSX.utils.encode_cell({ r: headerRow, c })]?.v ?? '');
+    headerOfCol.set(c, text);
+    const slot = photoSlot(text);
+    if (slot) slotOfCol.set(c, slot);
+  }
+  const byRow = new Map<number, ImportPhoto[]>();
+  const add = (row: number, photo: ImportPhoto) => { if (!byRow.has(row)) byRow.set(row, []); byRow.get(row)!.push(photo); };
+  for (const picture of pictures) {
+    if (picture.row <= headerRow) continue;
+    // A floating picture that spills into the next column still belongs to its image column.
+    const col = slotOfCol.has(picture.col) ? picture.col : picture.cols.find((c) => slotOfCol.has(c));
+    const slot = col !== undefined ? slotOfCol.get(col)! : 100 + picture.col;
+    add(picture.row, { slot, order: picture.col, picture: picture.url ? undefined : picture, url: picture.url });
+  }
+  for (const row of rows) {
+    const sheetRow = Number(row.__rowNum__);
+    for (const [col, slot] of slotOfCol) {
+      const text = String(row[headerOfCol.get(col) || ''] ?? '').trim();
+      if (/^https?:\/\//i.test(text)) add(sheetRow, { slot, order: col, url: text });
+    }
+    const legacy = String(row.primary_image_url || '').trim();
+    if (/^https?:\/\//i.test(legacy) && !(byRow.get(sheetRow) || []).some((p) => p.slot === 1)) add(sheetRow, { slot: 1, order: -1, url: legacy });
+  }
+  for (const list of byRow.values()) list.sort((a, b) => a.slot - b.slot || a.order - b.order);
+  return byRow;
+}
+
+/** Uploads one photo (resized to WebP) and returns its address; web links are kept as they are. */
+async function uploadImportPhoto(productId: string, photo: ImportPhoto, n: number) {
+  if (photo.url) return photo.url;
+  const picture = photo.picture!;
+  if (!BROWSER_IMAGE.test(picture.type || '')) throw new Error(`picture ${n} is a .${picture.type} file, which can't be used on the website. Insert it as a PNG or JPG picture.`);
+  const blob = await toWebp(new Blob([picture.data as BlobPart], { type: `image/${picture.type}` }));
+  const path = `${productId}/${Date.now()}-${n}.webp`;
+  const up = await supabase.storage.from('product-images').upload(path, blob, { contentType: 'image/webp', upsert: false });
+  if (up.error) throw new Error(up.error.message);
+  return supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+}
+
+/** The product's photos become exactly these, the first one as the main photo. */
+async function replaceProductPhotos(productId: string, name: string, urls: string[]) {
+  const old = await supabase.from('product_images').select('image_url').eq('product_id', productId);
+  const del = await supabase.from('product_images').delete().eq('product_id', productId);
+  if (del.error) throw new Error(del.error.message);
+  const ins = await supabase.from('product_images').insert(urls.map((image_url, i) => ({ product_id: productId, image_url, alt_text: name, sort_order: i, is_primary: i === 0 })));
+  if (ins.error) throw new Error(ins.error.message);
+  const up = await supabase.from('products').update({ primary_image_url: urls[0] }).eq('id', productId);
+  if (up.error) throw new Error(up.error.message);
+  // Old uploaded files that are no longer used are removed from storage (best effort).
+  const marker = '/storage/v1/object/public/product-images/';
+  const unused = ((old.data ?? []) as Row[]).map((r) => String(r.image_url)).filter((u) => !urls.includes(u) && u.includes(marker)).map((u) => decodeURIComponent(u.slice(u.indexOf(marker) + marker.length)));
+  if (unused.length) supabase.storage.from('product-images').remove(unused).catch(() => {});
+}
 
 $('#import').addEventListener('click', async () => {
   const XLSX = (window as any).XLSX;
@@ -660,27 +738,44 @@ $('#import').addEventListener('click', async () => {
   msg.textContent = 'Importing…';
   const errors: string[] = [];
   try {
-    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' }) as Row[];
-    let created = 0, updated = 0;
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Row[];
+    const photos = photosByRow(ws, XLSX, readSheetPictures(buffer), rows);
+    let created = 0, updated = 0, photoCount = 0;
     for (let i = 0; i < rows.length; i++) {
+      const sheetRow = Number(rows[i].__rowNum__ ?? i + 1);
       try {
         const row = rows[i];
+        const rowPhotos = (photos.get(sheetRow) || []).slice(0, 10);
+        msg.textContent = `Importing ${i + 1} of ${rows.length}${rowPhotos.length ? ` · ${rowPhotos.length} photo${rowPhotos.length === 1 ? '' : 's'}` : ''}…`;
         const name = String(row.name || row.Name || '').trim();
         if (!name) throw new Error('Missing name');
         const slug = slugify(row.slug || name);
         const price = num(row.price, null);
         if (price === null || price < 0) throw new Error('Invalid price');
         const matched = String(row.categories || row.category || '').split(',').map((x) => x.trim()).filter(Boolean).map((n) => categories.find((c) => c.name.toLowerCase() === n.toLowerCase() || c.slug === slugify(n))).filter(Boolean) as Row[];
-        const payload = { name, slug, sku: String(row.sku || '').trim() || null, category_id: matched[0]?.id || null, price, sale_price: num(row.sale_price), stock_quantity: int(row.stock_quantity, 0), ...costFromRow(row), age_min: int(row.age_min), age_max: int(row.age_max), brand: String(row.brand || '').trim() || null, short_description: String(row.short_description || ''), description: String(row.description || ''), primary_image_url: String(row.primary_image_url || '').trim() || null, seo_title: String(row.seo_title || '').trim() || null, seo_description: String(row.seo_description || '').trim() || null, is_active: String(row.is_active).toLowerCase() !== 'false', is_featured: String(row.is_featured).toLowerCase() === 'true', updated_at: new Date().toISOString() };
+        const payload = { name, slug, sku: String(row.sku || '').trim() || null, category_id: matched[0]?.id || null, price, sale_price: num(row.sale_price), stock_quantity: int(row.stock_quantity, 0), ...costFromRow(row), age_min: int(row.age_min), age_max: int(row.age_max), brand: String(row.brand || '').trim() || null, short_description: String(row.short_description || ''), description: String(row.description || ''), seo_title: String(row.seo_title || '').trim() || null, seo_description: String(row.seo_description || '').trim() || null, is_active: String(row.is_active).toLowerCase() !== 'false', is_featured: String(row.is_featured).toLowerCase() === 'true', updated_at: new Date().toISOString() };
         const existing = products.find((p) => p.slug === slug) || (payload.sku ? products.find((p) => p.sku === payload.sku) : undefined);
         const r = existing ? await supabase.from('products').update(payload as Row).eq('id', existing.id).select().single() : await supabase.from('products').insert(payload as Row).select().single();
         if (r.error) throw new Error(friendly(r.error.message));
-        await saveProductCategories((r.data as Row).id, matched.map((c) => c.id));
+        const productId = String((r.data as Row).id);
+        await saveProductCategories(productId, matched.map((c) => c.id));
         if (existing) updated++; else created++;
-      } catch (error) { errors.push(`Row ${i + 2}: ${error instanceof Error ? error.message : 'Unknown error'}`); }
+        // Photos: uploaded first, then they replace the product's photos (image_1 = main photo).
+        if (rowPhotos.length) {
+          const urls: string[] = [];
+          for (let n = 0; n < rowPhotos.length; n++) {
+            try { urls.push(await uploadImportPhoto(productId, rowPhotos[n], n + 1)); }
+            catch (error) { errors.push(`Row ${sheetRow + 1} (${name}): ${error instanceof Error ? error.message : 'a picture could not be uploaded'}`); }
+          }
+          const unique = [...new Set(urls)];
+          if (unique.length) { await replaceProductPhotos(productId, name, unique); photoCount += unique.length; }
+        }
+      } catch (error) { errors.push(`Row ${sheetRow + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`); }
     }
-    msg.textContent = `Import complete: ${created} created, ${updated} updated, ${errors.length} failed.`;
+    msg.textContent = `Import complete: ${created} created, ${updated} updated${photoCount ? `, ${photoCount} photo${photoCount === 1 ? '' : 's'} added` : ''}, ${errors.length} problem${errors.length === 1 ? '' : 's'}.`;
     errBox.hidden = errors.length === 0;
     errBox.innerHTML = errors.length ? '<strong>Import errors</strong>' + errors.slice(0, 50).map((x) => `<p>${esc(x)}</p>`).join('') : '';
     await load();
