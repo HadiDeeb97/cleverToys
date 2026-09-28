@@ -192,7 +192,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 .mega-links{display:grid;gap:2px}
 .mega-links a{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;margin-inline:-12px;border-radius:var(--radius-sm);font-weight:600;color:var(--ink-2);transition:background .18s,color .18s}
 @media (hover:hover){.mega-links a:hover{background:var(--surface-2);color:var(--ink)}}
-.mega-categories{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.mega-categories{display:grid;grid-template-columns:repeat(var(--mega-cols,4),minmax(0,1fr));gap:14px}
+.mega-categories.mega-scroll{max-height:min(460px,calc(100vh - 220px));overflow-y:auto;padding-right:6px;overscroll-behavior:contain}
 /* Mega menu categories use the home page .category-tile (section 6), scaled down to fit. */
 .mega-category.category-tile{gap:8px}
 .mega-category.category-tile .tile-media{border-radius:var(--radius);font-size:2.6rem}
