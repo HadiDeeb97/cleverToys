@@ -9,9 +9,10 @@
  */
 import { supabase } from '../lib/supabase';
 import { getPageData, DEFAULT_WHATSAPP_URL } from '../lib/page-data';
-import { AGE_RANGES, placeholderFor, safeLink } from '../lib/design';
+import { AGE_RANGES, safeLink } from '../lib/design';
 import ProductCard, { type CardProduct } from '../components/ProductCard.astro';
 import QuickView from '../components/QuickView.astro';
+import CategoryTile from '../components/CategoryTile.astro';
 import '../styles/global.css';
 
 const cardFields = 'id,name,slug,price,sale_price,stock_quantity,primary_image_url,short_description,age_min,age_max,created_at,product_variants(id,is_active,price,sale_price)';
@@ -49,7 +50,6 @@ const webSiteSchema = {
   '@context': 'https://schema.org', '@type': 'WebSite', name: 'Clever Toys', url: siteUrl,
   potentialAction: { '@type': 'SearchAction', target: `${new URL('/products', Astro.site ?? Astro.url.origin).href}?q={search_term_string}`, 'query-input': 'required name=search_term_string' }
 };
-const tile = (name: string) => placeholderFor(name);
 ---
 <head>
   <title>{title}</title>
@@ -145,18 +145,7 @@ const tile = (name: string) => placeholderFor(name);
             <a href="/categories" class="text-link">All categories →</a>
           </div>
           <div class="category-tiles">
-            {categories.map((category) => {
-              const ph = tile(category.name);
-              return (
-                <a href={`/category/${category.slug}`} class="category-tile">
-                  <span class="tile-media" style={`--ph-h:${ph.hue}`}>
-                    {category.image_url ? <img src={category.image_url} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">{ph.emoji}</span>}
-                    <span class="tile-arrow" aria-hidden="true">→</span>
-                  </span>
-                  <span><strong>{category.name}</strong>{category.description && <small>{category.description}</small>}</span>
-                </a>
-              );
-            })}
+            {categories.map((category) => <CategoryTile category={category} />)}
           </div>
         </div>
       </section>

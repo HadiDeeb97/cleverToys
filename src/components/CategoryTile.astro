@@ -1,0 +1,23 @@
+---
+/**
+ * One category tile: tall picture (or emoji placeholder), name and short description,
+ * with the brand-colored arrow that appears on hover. Used on the home page and /categories.
+ * The "Shop" mega menu builds the same markup in src/lib/storefront-chrome.ts (categoryTileHtml).
+ * Styles: .category-tile in src/styles/global.css.
+ */
+import { placeholderFor } from '../lib/design';
+
+interface Props {
+  category: { name: string; slug: string; description?: string | null; image_url?: string | null };
+}
+
+const { category } = Astro.props;
+const ph = placeholderFor(category.name);
+---
+<a href={`/category/${category.slug}`} class="category-tile">
+  <span class="tile-media" style={`--ph-h:${ph.hue}`}>
+    {category.image_url ? <img src={category.image_url} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">{ph.emoji}</span>}
+    <span class="tile-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+  </span>
+  <span><strong>{category.name}</strong>{category.description && <small>{category.description}</small>}</span>
+</a>

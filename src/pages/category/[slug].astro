@@ -2,32 +2,19 @@
 /**
  * Category page: /category/<slug>
  *
- * Shows one category (from Admin → Products → Categories) and the active toys in it.
- * Two quick requests: the category with its product links, then those products.
+ * Shows one category (from Admin → Products → Categories) with the same shop listing as /products:
+ * search, sale / option / age filters, sorting and paging, limited to toys in this category.
+ * The listing is shared with /products: src/lib/shop.ts and src/components/ShopView.astro.
  */
 import { supabase } from '../../lib/supabase';
-import { placeholderFor } from '../../lib/design';
-import ProductCard, { type CardProduct } from '../../components/ProductCard.astro';
+import { loadShop } from '../../lib/shop';
+import { getPageData } from '../../lib/page-data';
+import ShopView from '../../components/ShopView.astro';
 import QuickView from '../../components/QuickView.astro';
 import '../../styles/global.css';
 
 const slug = Astro.params.slug;
-// The category and the ids of its products in one request (product_categories is embedded).
-const { data: category, error: categoryError } = await supabase.from('categories').select('id, name, slug, description, image_url, seo_title, seo_description, product_categories(product_id)').eq('slug', slug).eq('is_active', true).maybeSingle();
-
-type CategoryProduct = CardProduct;
-let products: CategoryProduct[] | null = null;
-let productsError: unknown = null;
-if (category) {
-  const ids = ((category.product_categories || []) as { product_id: string }[]).map((row) => row.product_id);
-  if (ids.length) {
-    const result = await supabase.from('products').select('id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, age_min, age_max, created_at, product_variants(id,is_active,price,sale_price)').in('id', ids).eq('is_active', true).order('created_at', { ascending: false });
-    products = result.data as CategoryProduct[] | null;
-    productsError = result.error;
-  } else {
-    products = [];
-  }
-}
+const { data: category, error: categoryError } = await supabase.from('categories').select('id, name, slug, description, image_url, seo_title, seo_description').eq('slug', slug).eq('is_active', true).maybeSingle();
 
 // No real "sale" category: /category/sale opens the automatic Sale page instead.
 if (!category && !categoryError && slug === 'sale') return Astro.redirect('/products?sale=1');
@@ -35,7 +22,10 @@ if (categoryError || !category) Astro.response.status = 404;
 const title = category ? category.seo_title || `${category.name} Toys | Clever Toys` : 'Category Not Found | Clever Toys';
 const description = category ? category.seo_description || category.description || `Shop ${category.name.toLowerCase()} toys at Clever Toys.` : 'The requested toy category could not be found.';
 const canonicalUrl = new URL(`/category/${slug}`, Astro.site ?? Astro.url.origin).href;
-const ph = placeholderFor(category?.name || 'toys');
+const shop = category ? await loadShop(Astro, { basePath: `/category/${category.slug}`, fixedCategory: category }) : null;
+if (shop && 'redirect' in shop) return Astro.redirect(shop.redirect ?? Astro.url.pathname);
+// Started by the middleware for the header, so this is already loaded (no extra request).
+const { hasSale } = await getPageData(Astro);
 ---
 <head>
   <title>{title}</title>
@@ -65,39 +55,16 @@ const ph = placeholderFor(category?.name || 'toys');
     </section>
   ) : (
     <>
-      <section class="page-hero">
+      <section class="page-hero shop-hero">
         <div class="container">
           <nav class="breadcrumbs" aria-label="Breadcrumb">
             <a href="/">Home</a><span>/</span><a href="/categories">Categories</a><span>/</span><span aria-current="page">{category.name}</span>
           </nav>
-          <div class="category-heading">
-            <div>
-              <p class="eyebrow">Toy category</p>
-              <h1>{category.name}</h1>
-              {category.description && <p>{category.description}</p>}
-              <a class="button" href={`/products?category=${encodeURIComponent(category.slug)}`}>Filter & sort {category.name}</a>
-            </div>
-            <span class="tile-media" style={`--ph-h:${ph.hue}`}>
-              {category.image_url ? <img src={category.image_url} alt="" fetchpriority="high" decoding="async" width="380" height="285" /> : <span aria-hidden="true">{ph.emoji}</span>}
-            </span>
-          </div>
+          <h1>{category.name}</h1>
+          <p>{category.description || 'Fun, educational and exciting toys for every child, with cash on delivery across Lebanon.'}</p>
         </div>
       </section>
-      <section class="section">
-        <div class="container">
-          <div class="section-header section-header-row">
-            <div><h2>{products?.length ?? 0} {products?.length === 1 ? 'toy' : 'toys'} in {category.name}</h2></div>
-            <a href="/products" class="text-link">View all toys →</a>
-          </div>
-          {productsError ? (
-            <div class="category-empty"><h2>We couldn't load the toys</h2><p>Please try again in a moment.</p></div>
-          ) : products?.length ? (
-            <div class="product-grid">{products.map((product, index) => <ProductCard product={product} eager={index < 4} />)}</div>
-          ) : (
-            <div class="category-empty"><h2>No toys in this category yet</h2><p>Check back soon or explore our other categories.</p><a class="button" href="/categories">Browse categories</a></div>
-          )}
-        </div>
-      </section>
+      {shop && <ShopView shop={shop} hasSale={hasSale} />}
     </>
   )}
 </main>

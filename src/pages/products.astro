@@ -5,128 +5,25 @@
  * Lists active toys, 24 per page, with search (?q=), category (?category=), option (?variant=),
  * age (?age_min= / ?age_max=) filters and sorting (?sort=). Everything is done on the server
  * with plain links and forms, so filters work even before any JavaScript has loaded.
- * On computers the filters sit in a sidebar; on phones and tablets they slide in from the left.
+ * The listing (loading and markup) is shared with the category pages: src/lib/shop.ts and
+ * src/components/ShopView.astro.
  */
-import { supabase } from '../lib/supabase';
-import ProductCard, { type CardProduct } from '../components/ProductCard.astro';
+import { loadShop } from '../lib/shop';
+import ShopView from '../components/ShopView.astro';
 import QuickView from '../components/QuickView.astro';
 import { getPageData } from '../lib/page-data';
 import '../styles/global.css';
 
-const pageSize = 24;
-const parsedPage = Number.parseInt(Astro.url.searchParams.get('page') || '1', 10);
-const requestedPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
-const search = Astro.url.searchParams.get('q')?.trim() || '';
-const selectedCategorySlugs = [...new Set(Astro.url.searchParams.getAll('category').map(v => v.trim()).filter(Boolean))];
-const selectedVariantFilters = [...new Set(Astro.url.searchParams.getAll('variant').map(v => v.trim()).filter(Boolean))];
-const ageMinParam = Astro.url.searchParams.get('age_min')?.trim() || '';
-const ageMaxParam = Astro.url.searchParams.get('age_max')?.trim() || '';
-const ageMin = ageMinParam !== '' && Number.isFinite(Number(ageMinParam)) ? Math.max(0, Number(ageMinParam)) : null;
-const ageMax = ageMaxParam !== '' && Number.isFinite(Number(ageMaxParam)) ? Math.max(0, Number(ageMaxParam)) : null;
-const sort = Astro.url.searchParams.get('sort') || 'newest';
-// Sale (?sale=1): every toy with a sale price, plus toys where only some options have one.
-const saleOnly = Astro.url.searchParams.get('sale') === '1';
-// Toys whose options are on sale. Only looked up on the Sale page (one extra request there).
-const saleVariantIds = saleOnly
-  ? [...new Set(((await supabase.from('product_variants').select('product_id').eq('is_active', true).not('sale_price', 'is', null)).data || []).map((r) => String(r.product_id)))]
-  : [];
-
-const from = (requestedPage - 1) * pageSize;
-const to = from + pageSize - 1;
-
-// The database is far away, so every sequential request adds a noticeable wait. The category and
-// option filters are applied inside the products query itself (joined tables with !inner), which
-// lets all three requests below run at the same time: one round trip for the whole page.
-const buildProductsQuery = (head = false) => {
-  // product_variants is embedded twice: all options (so cards know when a toy needs "Choose options"),
-  // and, only when filtering by option, an inner-joined copy named variant_filter that keeps just matching toys.
-  const joins = [
-    selectedCategorySlugs.length ? 'product_categories!inner(categories!inner(slug))' : '',
-    selectedVariantFilters.length ? 'variant_filter:product_variants!inner(name)' : ''
-  ].filter(Boolean);
-  const columns = ['id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, category_id, age_min, age_max, created_at, product_variants(id,is_active,price,sale_price)', ...joins].join(', ');
-  let query = supabase.from('products').select(columns, { count: 'exact', head }).eq('is_active', true);
-  if (search) query = query.ilike('name', `%${search}%`);
-  if (saleOnly) query = saleVariantIds.length ? query.or(`sale_price.not.is.null,id.in.(${saleVariantIds.join(',')})`) : query.not('sale_price', 'is', null);
-  if (selectedCategorySlugs.length) query = query.eq('product_categories.categories.is_active', true).in('product_categories.categories.slug', selectedCategorySlugs);
-  if (selectedVariantFilters.length) query = query.eq('variant_filter.is_active', true).in('variant_filter.name', selectedVariantFilters);
-  if (ageMin !== null) query = query.or(`age_max.gte.${ageMin},age_max.is.null`);
-  if (ageMax !== null) query = query.or(`age_min.lte.${ageMax},age_min.is.null`);
-  return query;
-};
-
-let query = buildProductsQuery();
-if (sort === 'price-asc') query = query.order('price', { ascending: true });
-else if (sort === 'price-desc') query = query.order('price', { ascending: false });
-else if (sort === 'name') query = query.order('name', { ascending: true });
-else query = query.order('created_at', { ascending: false });
-
-type ShopProduct = { id: string; name: string; slug: string; price: number; sale_price: number | null; stock_quantity: number; primary_image_url: string | null; short_description: string | null };
-const [categoriesResult, variantsResult, productsResult] = await Promise.all([
-  supabase.from('categories').select('id, name, slug').eq('is_active', true).order('sort_order', { ascending: true }),
-  supabase.from('product_variants').select('name').eq('is_active', true).order('name', { ascending: true }),
-  query.range(from, to)
-]);
-
-const categories = categoriesResult.data || [];
-const variantOptions = [...new Set((variantsResult.data || []).map(v => String(v.name || '').trim()).filter(Boolean))];
+const shop = await loadShop(Astro, { basePath: '/products' });
+if ('redirect' in shop) return Astro.redirect(shop.redirect ?? '/products');
+const { search, saleOnly, selectedCategorySlugs, categories } = shop;
 const selectedCategoryNames = categories.filter(c => selectedCategorySlugs.includes(c.slug)).map(c => c.name);
 const activeCategoryTitle = selectedCategoryNames.length === 1 ? selectedCategoryNames[0] : selectedCategoryNames.length > 1 ? 'Filtered toys' : '';
-
-const { count, error } = productsResult;
-const products = productsResult.data as unknown as ShopProduct[] | null;
-// Pages past the end (e.g. after products are removed) make the range query fail; send them to the last valid page.
-if (requestedPage > 1 && (error || !products?.length)) {
-  const { count: availableCount, error: countError } = await buildProductsQuery(true);
-  const lastPage = Math.max(1, Math.ceil((availableCount ?? 0) / pageSize));
-  if (!countError && requestedPage > lastPage) return Astro.redirect(pageUrl(lastPage));
-}
-const totalProducts = count ?? 0;
-const totalPages = Math.max(1, Math.ceil(totalProducts / pageSize));
-const currentPage = Math.min(requestedPage, totalPages);
-
-function pageUrl(page: number) {
-  const params = new URLSearchParams();
-  if (search) params.set('q', search);
-  selectedCategorySlugs.forEach(slug => params.append('category', slug));
-  selectedVariantFilters.forEach(variant => params.append('variant', variant));
-  if (ageMinParam) params.set('age_min', ageMinParam);
-  if (ageMaxParam) params.set('age_max', ageMaxParam);
-  if (saleOnly) params.set('sale', '1');
-  if (sort !== 'newest') params.set('sort', sort);
-  if (page > 1) params.set('page', String(page));
-  const queryString = params.toString();
-  return `/products${queryString ? `?${queryString}` : ''}`;
-}
-
-const hasFilters = Boolean(saleOnly || selectedCategorySlugs.length || selectedVariantFilters.length || ageMinParam || ageMaxParam);
 const title = saleOnly && !activeCategoryTitle && !search ? 'Toys on Sale | Clever Toys' : activeCategoryTitle ? `${activeCategoryTitle} Toys | Clever Toys` : search ? `Search results for ${search} | Clever Toys` : 'Shop Toys | Clever Toys';
 const description = saleOnly && !activeCategoryTitle ? 'Toys on sale at Clever Toys: discounted prices, cash on delivery across Lebanon.' : activeCategoryTitle ? `Shop ${activeCategoryTitle.toLowerCase()} toys at Clever Toys.` : 'Shop toys for children of all ages at Clever Toys. Discover fun, educational and exciting toys.';
 const canonicalUrl = new URL(saleOnly && !search && !selectedCategorySlugs.length ? '/products?sale=1' : '/products', Astro.site ?? Astro.url.origin).href;
 // Started by the middleware for the header, so this is already loaded (no extra request).
 const { hasSale } = await getPageData(Astro);
-const cards = (products ?? []) as unknown as CardProduct[];
-
-/** Link to this page with one filter removed (for the removable filter chips). */
-function withoutFilter(kind: 'q' | 'category' | 'variant' | 'age' | 'sale', value = '') {
-  const params = new URLSearchParams();
-  if (search && kind !== 'q') params.set('q', search);
-  selectedCategorySlugs.filter((slug) => !(kind === 'category' && slug === value)).forEach((slug) => params.append('category', slug));
-  selectedVariantFilters.filter((v) => !(kind === 'variant' && v === value)).forEach((v) => params.append('variant', v));
-  if (kind !== 'age') { if (ageMinParam) params.set('age_min', ageMinParam); if (ageMaxParam) params.set('age_max', ageMaxParam); }
-  if (saleOnly && kind !== 'sale') params.set('sale', '1');
-  if (sort !== 'newest') params.set('sort', sort);
-  const qs = params.toString();
-  return `/products${qs ? `?${qs}` : ''}`;
-}
-const activeChips = [
-  ...(saleOnly ? [{ label: 'On sale', href: withoutFilter('sale') }] : []),
-  ...(search ? [{ label: `“${search}”`, href: withoutFilter('q') }] : []),
-  ...categories.filter((c) => selectedCategorySlugs.includes(c.slug)).map((c) => ({ label: c.name, href: withoutFilter('category', c.slug) })),
-  ...selectedVariantFilters.map((v) => ({ label: v, href: withoutFilter('variant', v) })),
-  ...(ageMinParam || ageMaxParam ? [{ label: `Ages ${ageMinParam || '0'}–${ageMaxParam || '∞'}`, href: withoutFilter('age') }] : [])
-];
-const filterCount = (saleOnly ? 1 : 0) + selectedCategorySlugs.length + selectedVariantFilters.length + (ageMinParam || ageMaxParam ? 1 : 0);
 const heading = saleOnly && !activeCategoryTitle && !search ? 'Toys on sale' : activeCategoryTitle || (search ? `Results for “${search}”` : 'Shop all toys');
 ---
 <head>
@@ -148,108 +45,8 @@ const heading = saleOnly && !activeCategoryTitle && !search ? 'Toys on sale' : a
     </div>
   </section>
 
-  <section class="section tight shop-section">
-    <div class="container">
-      {/* Category shortcuts */}
-      <div class="category-pills" aria-label="Shop categories">
-        <a class:list={{ active: !selectedCategorySlugs.length && !saleOnly }} href="/products">All toys</a>
-        {(saleOnly || hasSale) && <a class:list={['sale-pill', { active: saleOnly }]} href="/products?sale=1">Sale</a>}
-        {categories.map((item) => <a class:list={{ active: selectedCategorySlugs.includes(item.slug) }} href={`/products?category=${encodeURIComponent(item.slug)}`}>{item.name}</a>)}
-      </div>
-
-      <div class="shop-layout">
-        {/* Filters: sidebar on computers, slide-in panel on phones (opened by the Filters button). */}
-        <form class="filter-panel" id="filter-panel" method="get" action="/products" aria-label="Filter toys">
-          {sort !== 'newest' && <input type="hidden" name="sort" value={sort} />}
-          <div class="filter-panel-head"><strong>Filters</strong><button type="button" class="icon-button filter-close" id="filter-close" aria-label="Close filters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
-          <div class="search-form">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-            <label class="sr-only" for="product-search">Search toys</label>
-            <input id="product-search" name="q" value={search} placeholder="Search toys…" type="search" enterkeyhint="search" />
-          </div>
-          <div class="filter-groups">
-            <fieldset class="filter-group"><legend>Price</legend><div class="filter-check-grid"><label class="filter-check"><input type="checkbox" name="sale" value="1" checked={saleOnly} /><span>On sale</span></label></div></fieldset>
-            <fieldset class="filter-group"><legend>Category</legend><div class="filter-check-grid">{categories.map((item) => <label class="filter-check"><input type="checkbox" name="category" value={item.slug} checked={selectedCategorySlugs.includes(item.slug)} /><span>{item.name}</span></label>)}</div></fieldset>
-            {variantOptions.length > 0 && <fieldset class="filter-group"><legend>Options</legend><div class="filter-check-grid">{variantOptions.map((item) => <label class="filter-check"><input type="checkbox" name="variant" value={item} checked={selectedVariantFilters.includes(item)} /><span>{item}</span></label>)}</div></fieldset>}
-            <fieldset class="filter-group"><legend>Age</legend><div class="age-grid"><label>From<input name="age_min" type="number" inputmode="numeric" min="0" step="1" value={ageMinParam} placeholder="Any" /></label><label>To<input name="age_max" type="number" inputmode="numeric" min="0" step="1" value={ageMaxParam} placeholder="Any" /></label></div></fieldset>
-          </div>
-          <div class="filter-actions"><a class="button secondary-button" href="/products">Clear</a><button class="button" type="submit">Apply</button></div>
-        </form>
-
-        <div class="shop-results">
-          <div class="shop-toolbar">
-            <div class="shop-result-row"><p>{totalProducts === 0 ? 'No toys found' : `${totalProducts} ${totalProducts === 1 ? 'toy' : 'toys'}`}</p></div>
-            <div class="shop-controls">
-              <button class="button secondary-button small filter-button" type="button" id="filter-toggle" aria-expanded="false" aria-controls="filter-panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Filters{filterCount ? ` (${filterCount})` : ''}</button>
-              <form method="get" action="/products" class="sort-form">
-                {search && <input type="hidden" name="q" value={search} />}
-                {selectedCategorySlugs.map((slug) => <input type="hidden" name="category" value={slug} />)}
-                {selectedVariantFilters.map((variant) => <input type="hidden" name="variant" value={variant} />)}
-                {ageMinParam && <input type="hidden" name="age_min" value={ageMinParam} />}
-                {ageMaxParam && <input type="hidden" name="age_max" value={ageMaxParam} />}
-                <label for="sort">Sort by</label>
-                <select id="sort" name="sort" onchange="this.form.submit()">
-                  <option value="newest" selected={sort === 'newest'}>Newest</option>
-                  <option value="price-asc" selected={sort === 'price-asc'}>Price: low to high</option>
-                  <option value="price-desc" selected={sort === 'price-desc'}>Price: high to low</option>
-                  <option value="name" selected={sort === 'name'}>Name: A–Z</option>
-                </select>
-                <noscript><button class="small-button" type="submit">Sort</button></noscript>
-              </form>
-            </div>
-          </div>
-
-          {activeChips.length > 0 && (
-            <div class="active-filters" aria-label="Active filters">
-              {activeChips.map((chip) => <a href={chip.href} aria-label={`Remove filter ${chip.label}`}>{chip.label} <span aria-hidden="true">×</span></a>)}
-              {hasFilters && <a href={search ? `/products?q=${encodeURIComponent(search)}` : '/products'}>Clear all</a>}
-            </div>
-          )}
-
-          {error ? (
-            <div class="empty-state"><h2>We couldn't load the toys</h2><p>Please try again in a moment.</p></div>
-          ) : cards.length ? (
-            <div class="product-grid shop-grid">{cards.map((product, index) => <ProductCard product={product} heading="h2" eager={index < 4} />)}</div>
-          ) : (
-            <div class="empty-state"><h2>No toys found</h2><p>Try another search or remove a filter.</p><a class="button" href="/products">View all toys</a></div>
-          )}
-
-          {totalPages > 1 && (
-            <nav class="pagination" aria-label="Product pages">
-              {currentPage > 1 && <a href={pageUrl(currentPage - 1)} rel="prev">← Previous</a>}
-              <span>Page {currentPage} of {totalPages}</span>
-              {currentPage < totalPages && <a href={pageUrl(currentPage + 1)} rel="next">Next →</a>}
-            </nav>
-          )}
-        </div>
-      </div>
-    </div>
-  </section>
+  <ShopView shop={shop} hasSale={hasSale} />
 </main>
 <QuickView />
 <footer class="site-footer"></footer>
 
-<script>
-// Filters panel on phones and tablets: slides in from the left, closes with ×, Esc or a tap outside.
-const panel = document.querySelector<HTMLFormElement>('#filter-panel')!;
-const toggle = document.querySelector<HTMLButtonElement>('#filter-toggle')!;
-let scrim: HTMLDivElement | null = null;
-function setOpen(open: boolean) {
-  panel.classList.toggle('is-open', open);
-  toggle.setAttribute('aria-expanded', String(open));
-  document.body.classList.toggle('has-drawer', open);
-  if (open) {
-    scrim = document.createElement('div');
-    scrim.className = 'filter-scrim';
-    scrim.addEventListener('click', () => setOpen(false));
-    document.body.appendChild(scrim);
-    panel.querySelector<HTMLElement>('.filter-close')?.focus({ preventScroll: true });
-  } else {
-    scrim?.remove();
-    scrim = null;
-  }
-}
-toggle.addEventListener('click', () => setOpen(!panel.classList.contains('is-open')));
-document.querySelector('#filter-close')?.addEventListener('click', () => { setOpen(false); toggle.focus(); });
-document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && panel.classList.contains('is-open')) setOpen(false); });
-</script>
