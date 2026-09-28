@@ -291,6 +291,17 @@ ZW;Zimbabwe;263;>9>## ### ####`;
     return out + digits.slice(i);
   }
 
+  /**
+   * Digits cut to the most a number in that country can have (Lebanon: 8 for 70/71/76/78/79/81…,
+   * 7 for 03, 01…). A typed local 0 is extra; a repeated dial code ("961 71…") is dropped first.
+   */
+  function limit(country, digits) {
+    const zero = !KEEP_ZERO.has(country.iso) && digits.startsWith('0') ? '0' : '';
+    let sig = digits.slice(zero.length);
+    if (sig.length > ruleFor(country, sig).max && sig.startsWith(country.dial)) sig = sig.slice(country.dial.length);
+    return zero + sig.slice(0, ruleFor(country, sig).max);
+  }
+
   const significant = (country, digits) => (KEEP_ZERO.has(country.iso) ? digits : digits.replace(/^0/, ''));
   /** What the visitor sees: the number in local format (a typed leading 0 stays until they leave the field). */
   const display = (country, digits) => {
@@ -430,6 +441,8 @@ span.phone-field span:not(.pf-dial){color:inherit}
         if (state.country !== HOME && d.length >= lb.min && d.length <= lb.max) state.country = HOME;
       }
       state.digits = intl ? intl.digits : value.replace(/\D/g, '');
+      // Typed or pasted numbers never go past the country's length (saved ones are shown as they are).
+      if (!fromCode) state.digits = limit(state.country, state.digits);
       renderButton();
     };
     /** Leaving the field: drop a typed local 0 or a repeated dial code ("961 71…"). */
@@ -478,7 +491,16 @@ span.phone-field span:not(.pf-dial){color:inherit}
         input.setSelectionRange(shown().length, shown().length);
         return;
       }
-      state.digits = text.replace(/\D/g, '').slice(0, 17);
+      const typed = text.replace(/\D/g, '');
+      const fitted = limit(state.country, typed);
+      if (fitted.length < typed.length && typed.startsWith(fitted) && event.inputType === 'insertText') {
+        // The number is already full: ignore the extra key and keep the caret where it was.
+        const back = Math.max(0, caret - (text.length - display(state.country, state.digits).length));
+        render();
+        input.setSelectionRange(back, back);
+        return;
+      }
+      state.digits = fitted;
       render();
       // Put the caret back after the same digit.
       const out = shown();
