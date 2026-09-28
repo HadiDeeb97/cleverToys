@@ -31,8 +31,9 @@
       <p id="quick-view-description" class="quick-view-description"></p>
 
       <div class="quick-view-options" id="quick-view-options" hidden>
-        <p class="quick-view-label">Option: <strong id="quick-view-option-name">choose one</strong></p>
+        <p class="quick-view-label">Option: <strong id="quick-view-option-name">choose one</strong> <em class="option-required">Required</em></p>
         <div class="variant-options" id="quick-view-variants" role="group" aria-label="Options"></div>
+        <p class="variant-hint" id="quick-view-hint" role="alert" hidden>👆 Please choose an option first</p>
       </div>
       <div class="quick-view-loading" id="quick-view-loading" aria-hidden="true" hidden><i></i><i></i><i></i></div>
 
@@ -130,8 +131,11 @@ function sync() {
   if (Number(qty.value) > stock && stock > 0) qty.value = String(stock);
   const add = $<HTMLButtonElement>('quick-view-add');
   const needsChoice = hasOptions && !chosen;
-  add.disabled = stock <= 0 || needsChoice;
-  add.textContent = stock <= 0 ? 'Out of stock' : needsChoice ? 'Choose an option' : 'Add to cart';
+  // Stays clickable before an option is chosen: clicking points the shopper to the options.
+  add.disabled = stock <= 0;
+  add.textContent = stock <= 0 ? 'Out of stock' : 'Add to cart';
+  $('quick-view-options').classList.toggle('needs-choice', needsChoice);
+  if (!needsChoice) { $('quick-view-hint').hidden = true; $('quick-view-options').classList.remove('is-missing'); }
   $('quick-view-option-name').textContent = chosen?.name || 'choose one';
   document.querySelectorAll<HTMLButtonElement>('#quick-view-variants .variant-option').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.variant === chosen?.id)));
 }
@@ -220,7 +224,13 @@ async function open(card: HTMLElement, trigger: HTMLElement) {
 function addToCart() {
   const d = current;
   if (!d) return;
-  if (d.variants.length && !chosen) { $('quick-view-message').textContent = 'Please choose an option first.'; return; }
+  if (d.variants.length && !chosen) {
+    const box = $('quick-view-options');
+    $('quick-view-hint').hidden = false;
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    box.classList.remove('is-missing'); void box.offsetWidth; box.classList.add('is-missing');
+    return;
+  }
   const maxStock = chosen ? chosen.stock : d.stock;
   const qty = Math.floor(Number($<HTMLInputElement>('quick-view-qty').value) || 1);
   if (qty < 1 || qty > maxStock) { $('quick-view-message').textContent = `Please choose a quantity from 1 to ${maxStock}.`; return; }

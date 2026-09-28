@@ -25,7 +25,7 @@ export const GET: APIRoute = async ({ url }) => {
 
   const { data, error } = await supabase
     .from('products')
-    .select('id,name,slug,sku,short_description,description,price,sale_price,stock_quantity,age_min,age_max,brand,primary_image_url,categories(name,slug),product_images(image_url,alt_text,sort_order),product_variants(id,name,sku,price,sale_price,stock_quantity,is_active)')
+    .select('id,name,slug,sku,short_description,description,price,sale_price,stock_quantity,age_min,age_max,brand,primary_image_url,categories:category_id(name,slug),product_images(image_url,alt_text,sort_order),product_variants(id,name,sku,price,sale_price,stock_quantity,is_active)')
     .eq('slug', slug)
     .eq('is_active', true)
     .maybeSingle();

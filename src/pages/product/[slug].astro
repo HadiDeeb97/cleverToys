@@ -65,7 +65,9 @@ const variants = (product?.product_variants ?? [])
   }));
 const baseDisplayPrice = product ? Number(product.sale_price ?? product.price) : 0;
 const baseOriginalPrice = product?.sale_price != null ? Number(product.price) : null;
-const inStock = Boolean(product && product.stock_quantity > 0);
+// A toy sold by option is in stock when any option is; otherwise its own stock counts.
+const availableStock = variants.length ? Math.max(0, ...variants.map((v) => Number(v.stock_quantity) || 0)) : Number(product?.stock_quantity || 0);
+const inStock = Boolean(product && availableStock > 0);
 
 // 2) "You may also like": active toys from the same categories (featured first), topped up with
 //    other featured/new toys. Both queries run at the same time to keep the page fast.
@@ -220,12 +222,12 @@ const similarCards = similarProducts as unknown as CardProduct[];
               <span id="original-price" class="original-price" hidden={baseOriginalPrice == null}>{baseOriginalPrice != null ? `$${baseOriginalPrice.toFixed(2)}` : ''}</span>
               {discount > 0 && <span class="save-badge">Save {discount}%</span>}
             </div>
-            <p id="stock-label" class:list={['stock', { 'out-of-stock': !inStock }]}>{stockText(product.stock_quantity)}</p>
+            <p id="stock-label" class:list={['stock', { 'out-of-stock': !inStock }]}>{variants.length && inStock ? 'Choose an option to see its stock' : stockText(product.stock_quantity)}</p>
             {product.short_description && <p class="lead">{product.short_description}</p>}
 
             {variants.length > 0 && (
-              <div class="variant-picker">
-                <span class="option-label" id="variant-label">Choose an option</span>
+              <div class="variant-picker needs-choice" id="variant-picker">
+                <span class="option-label" id="variant-label">Choose an option <em class="option-required">Required</em></span>
                 {/* Buttons for shoppers; the hidden select keeps the value for the scripts. */}
                 <div class="variant-options" role="group" aria-labelledby="variant-label">
                   {variants.map((variant) => <button type="button" class="variant-option" data-variant={variant.id} aria-pressed="false" disabled={variant.stock_quantity <= 0}>{variant.name}{variant.stock_quantity <= 0 && <small>Sold out</small>}</button>)}
@@ -234,6 +236,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
                   <option value="">Select an option</option>
                   {variants.map((variant) => <option value={variant.id} disabled={variant.stock_quantity <= 0}>{variant.name}{variant.sku ? ` · ${variant.sku}` : ''}</option>)}
                 </select>
+                <p class="variant-hint" id="variant-hint" role="alert" hidden>👆 Please choose an option first</p>
               </div>
             )}
 
@@ -245,7 +248,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
                   <input id="quantity" type="number" inputmode="numeric" min="1" max={Math.max(product.stock_quantity, 1)} value="1" disabled={!inStock} />
                   <button type="button" data-qty="1" aria-label="Increase quantity" disabled={!inStock}>+</button>
                 </div>
-                <button id="add-to-cart" class="button add-button" type="button" disabled={!inStock}>{inStock ? (variants.length ? 'Select an option' : 'Add to Cart') : 'Out of Stock'}</button>
+                <button id="add-to-cart" class="button add-button" type="button" disabled={!inStock}>{inStock ? 'Add to Cart' : 'Out of Stock'}</button>
               </div>
               <p id="cart-message" class="cart-message" aria-live="polite"></p>
               {/* Rendered on the server so it never pops in and moves the page; public/branding-ui.js makes it work. */}
@@ -356,7 +359,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
     productSlug: product.slug,
     basePrice: baseDisplayPrice,
     baseOriginalPrice,
-    baseStock: product.stock_quantity,
+    baseStock: variants.length ? availableStock : product.stock_quantity,
     productImage: images[0]?.image_url || '',
     variantData: variants.map((v) => ({ id: v.id, name: v.name, sku: v.sku || '', price: v.displayPrice, originalPrice: v.originalPrice, stock: v.stock_quantity }))
   }}>
@@ -386,6 +389,18 @@ const similarCards = similarProducts as unknown as CardProduct[];
   const selectedVariant = () => variantData.find((v) => v.id === select?.value);
 
   // Update price, stock, quantity limits and the Add to Cart button for the chosen option.
+  const picker = document.getElementById('variant-picker');
+  const hint = document.getElementById('variant-hint');
+  /** No option chosen yet: bring the options into view, shake them and say what to do. */
+  function needOption() {
+    if (!picker) return;
+    picker.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    hint.hidden = false;
+    picker.classList.remove('is-missing'); void picker.offsetWidth; picker.classList.add('is-missing');
+    setTimeout(() => picker.querySelector('.variant-option:not(:disabled)')?.focus({ preventScroll: true }), 450);
+  }
+  // Used by "Order on WhatsApp" (public/branding-ui.js) too.
+  window.cleverNeedOption = () => { if (variantData.length && !select?.value) { needOption(); return true; } return false; };
   function sync() {
     const v = selectedVariant();
     const activeStock = v?.stock ?? baseStock;
@@ -394,13 +409,16 @@ const similarCards = similarProducts as unknown as CardProduct[];
     price.textContent = money(v?.price ?? basePrice);
     original.hidden = activeOriginal == null;
     original.textContent = activeOriginal == null ? '' : money(activeOriginal);
-    stock.textContent = activeStock <= 0 ? 'Out of stock' : activeStock <= 5 ? `Only ${activeStock} left, order soon!` : `${activeStock} available`;
+    stock.textContent = activeStock <= 0 ? 'Out of stock' : !optionChosen ? 'Choose an option to see its stock' : activeStock <= 5 ? `Only ${activeStock} left, order soon!` : `${activeStock} available`;
     stock.classList.toggle('out-of-stock', activeStock <= 0);
     qty.max = String(Math.max(activeStock, 1));
     if (Number(qty.value) > activeStock && activeStock > 0) qty.value = String(activeStock);
     qty.disabled = activeStock <= 0;
-    add.disabled = activeStock <= 0 || !optionChosen;
-    add.textContent = activeStock <= 0 ? 'Out of Stock' : optionChosen ? 'Add to Cart' : 'Select an option';
+    // The button stays clickable before an option is chosen: clicking it points the shopper to the options.
+    add.disabled = activeStock <= 0;
+    add.textContent = activeStock <= 0 ? 'Out of Stock' : 'Add to Cart';
+    picker?.classList.toggle('needs-choice', !optionChosen);
+    if (optionChosen && hint) { hint.hidden = true; picker?.classList.remove('is-missing'); }
     if (buyBar) $('#buy-bar-price').textContent = money(v?.price ?? basePrice);
     document.querySelectorAll('.variant-option').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.variant === select?.value)));
   }
@@ -421,7 +439,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
   // Add to Cart: save to this browser's cart (localStorage), then open the cart drawer (public/store-ui.js).
   add.addEventListener('click', () => {
     const v = selectedVariant();
-    if (variantData.length && !v) { message.textContent = 'Please select an option first.'; return; }
+    if (variantData.length && !v) { needOption(); return; }
     const maxStock = v?.stock ?? baseStock;
     const quantity = Number(qty.value || 1);
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > maxStock) { message.textContent = `Please choose a quantity from 1 to ${maxStock}.`; return; }
@@ -448,7 +466,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
       document.body.classList.toggle('has-buy-bar', show);
     }).observe(add);
     $('#buy-bar-add').addEventListener('click', () => {
-      if (variantData.length && !select.value) { document.querySelector('.variant-picker').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      if (variantData.length && !select.value) { needOption(); return; }
       add.click();
     });
   }

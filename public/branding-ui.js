@@ -295,6 +295,8 @@
 
     button.addEventListener('click', () => {
       if (addButton.disabled) return;
+      // No option chosen yet: the product page points the shopper to the options instead.
+      if (typeof window.cleverNeedOption === 'function' && window.cleverNeedOption()) return;
       openDetailsDialog(collectOrder(), (order, details) => {
         // Meta Pixel (if set up): a WhatsApp order counts as a lead.
         try { if (typeof window.fbq === 'function') window.fbq('track', 'Lead', { content_name: order.productName, value: order.total, currency: 'USD' }); } catch {}
