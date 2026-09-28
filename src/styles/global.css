@@ -149,7 +149,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .icon-button{position:relative;display:inline-grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:50%;background:transparent;color:var(--ink);cursor:pointer;transition:background .18s,color .18s}
 .icon-button svg{width:22px;height:22px}
 @media (hover:hover){.icon-button:hover{background:var(--surface-2)}}
-.text-link{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-weight:700;border-bottom:1.5px solid currentColor;padding-bottom:1px;line-height:1.3}
+.text-link{display:inline-flex;align-items:center;gap:6px;color:var(--ink);font-weight:700;border-bottom:1.5px solid currentColor;padding-bottom:1px;line-height:1.3;transition:color .18s}
 @media (hover:hover){.text-link:hover{color:var(--primary-strong)}}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--ink-2);font-size:.82rem;font-weight:700}
 .sale-badge,.stock-badge,.new-badge{position:absolute;top:12px;z-index:2;display:inline-flex;align-items:center;padding:5px 10px;border-radius:var(--radius-pill);font-size:.72rem;font-weight:800;letter-spacing:.02em;line-height:1.2}
@@ -190,7 +190,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .nav-item:focus-within .mega-menu{opacity:1;visibility:visible;transform:none;transition-delay:0s}
 .mega-title{margin:0 0 12px;color:var(--subtle);font-size:.72rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
 .mega-links{display:grid;gap:2px}
-.mega-links a{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;margin-inline:-12px;border-radius:var(--radius-sm);font-weight:600;color:var(--ink-2)}
+.mega-links a{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;margin-inline:-12px;border-radius:var(--radius-sm);font-weight:600;color:var(--ink-2);transition:background .18s,color .18s}
 @media (hover:hover){.mega-links a:hover{background:var(--surface-2);color:var(--ink)}}
 .mega-categories{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 .mega-category{display:grid;gap:8px;font-weight:700;font-size:.9rem}
@@ -266,7 +266,7 @@ html:has(body.has-drawer){overflow:hidden}
 .page-hero h1{font-size:clamp(2rem,4vw,3.1rem);margin-bottom:10px}
 .page-hero p{max-width:640px;margin:0;color:var(--muted);font-size:1rem}
 .breadcrumbs{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px;color:var(--muted);font-size:.86rem;font-weight:600}
-.breadcrumbs a{color:var(--muted)}
+.breadcrumbs a{color:var(--muted);transition:color .18s}
 @media (hover:hover){.breadcrumbs a:hover{color:var(--ink)}}
 .breadcrumbs span[aria-current]{color:var(--ink)}
 .tile-media{position:relative;display:grid;place-items:center;overflow:hidden;background:hsl(var(--ph-h,40) 70% 92%);color:hsl(var(--ph-h,40) 45% 35%);font-size:clamp(2rem,5vw,3.4rem)}
@@ -677,7 +677,7 @@ html:has(body.has-quick-view),html:has(body.has-drawer){overscroll-behavior:none
 .quantity-control button{display:inline-grid;place-items:center;width:38px;height:38px;border:1.5px solid var(--line-strong);border-radius:50%;background:var(--surface);color:var(--ink);font-size:1.05rem;font-weight:700;cursor:pointer;transition:border-color .16s,background .16s}
 @media (hover:hover){.quantity-control button:hover{border-color:var(--ink)}}
 .quantity-control button:disabled{opacity:.35;cursor:not-allowed}
-.quantity-control .remove-link{width:auto;height:auto;margin-left:6px;padding:6px 4px;border:0;border-radius:0;background:none;color:var(--muted);font-size:.86rem;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+.quantity-control .remove-link{width:auto;height:auto;margin-left:6px;padding:6px 4px;border:0;border-radius:0;background:none;color:var(--muted);font-size:.86rem;font-weight:700;text-decoration:underline;text-underline-offset:3px;transition:color .18s}
 @media (hover:hover){.quantity-control .remove-link:hover{color:var(--danger)}}
 .line-total{font-size:1.05rem;font-weight:800;white-space:nowrap}
 .cart-summary,.checkout-summary{padding:clamp(20px,3vw,28px);border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow-sm)}
@@ -837,7 +837,7 @@ input[type=checkbox],input[type=radio]{accent-color:var(--ink)}
 .footer-contact{display:grid;gap:8px;margin:20px 0 0;padding:0;list-style:none;font-size:.92rem}
 .footer-contact li{display:flex;gap:10px}
 .footer-socials{display:flex;gap:8px;margin-top:20px}
-.footer-socials a{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.08);color:#fff}
+.footer-socials a{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.08);color:#fff;transition:background .18s}
 .footer-socials svg{width:20px;height:20px}
 @media (hover:hover){.footer-socials a:hover{background:rgba(255,255,255,.16)}}
 .footer-col h2{margin:0 0 16px;font-family:var(--font-body);font-size:.74rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#fff}
@@ -903,7 +903,7 @@ body.has-buy-bar .clever-floating-controls a{transform:translateY(-72px)}
 .item-actions{display:flex;gap:7px;flex-shrink:0}
 .table-wrap{overflow-x:auto;border:1.5px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
 table{width:100%;border-collapse:collapse;min-width:760px}
-th,td{text-align:left;padding:14px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+th,td{text-align:left;padding:14px 16px;border-bottom:1px solid var(--line);vertical-align:top;transition:background .15s}
 tbody tr:last-child td{border-bottom:0}
 @media (hover:hover){tbody tr:hover td{background:color-mix(in srgb,var(--surface-2) 50%,transparent)}}
 th{font-size:.76rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:var(--surface-2)}
@@ -924,7 +924,7 @@ html[data-area=admin] .admin-head #logout,html[data-area=admin] .admin-head>.but
 .admin-brand-mark{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;background:var(--brand-gradient);font-size:22px;box-shadow:0 8px 20px rgba(0,0,0,.25)}
 .admin-nav{display:grid;gap:2px}
 /* Admin search (public/admin-ui.js) */
-.admin-search-open{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.78);font:inherit;font-weight:600;text-align:left;cursor:pointer}
+.admin-search-open{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.78);font:inherit;font-weight:600;text-align:left;cursor:pointer;transition:background .15s,color .15s}
 .admin-search-open svg{flex:0 0 18px;width:18px;height:18px}
 .admin-search-open span{flex:1}
 .admin-search-open kbd{padding:2px 6px;border-radius:6px;background:rgba(255,255,255,.12);font:600 .72rem/1.4 var(--font-body);color:rgba(255,255,255,.7)}
@@ -962,7 +962,7 @@ html[data-area=admin] :is(.admin-panel,.form-card,section,fieldset){scroll-margi
 .admin-nav a[aria-current=page]{background:rgba(255,255,255,.12);color:#fff;box-shadow:inset 3px 0 0 var(--theme-accent)}
 .admin-nav svg{flex:0 0 20px;width:20px;height:20px}
 .admin-sidebar-footer{display:grid;gap:6px;margin-top:auto;padding-top:16px;border-top:1px solid rgba(255,255,255,.1)}
-.admin-sidebar-footer a,.admin-sidebar-footer button{padding:10px 12px;border:0;border-radius:12px;background:none;color:color-mix(in srgb,#fff 70%,transparent);font-weight:700;text-align:left;cursor:pointer}
+.admin-sidebar-footer a,.admin-sidebar-footer button{padding:10px 12px;border:0;border-radius:12px;background:none;color:color-mix(in srgb,#fff 70%,transparent);font-weight:700;text-align:left;cursor:pointer;transition:background .15s,color .15s}
 @media (hover:hover){.admin-sidebar-footer a:hover,.admin-sidebar-footer button:hover{background:rgba(255,255,255,.07);color:#fff}}
 html[data-area=admin] .admin-head{margin-bottom:22px}
 html[data-area=admin] .admin-head .eyebrow{margin-bottom:8px}
@@ -1053,6 +1053,15 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
 .hero-copy>:nth-child(3),.page-hero .container>:nth-child(3),.category-heading>div>:nth-child(3){animation-delay:.14s}
 .hero-copy>:nth-child(n+4),.category-heading>div>:nth-child(n+4){animation-delay:.21s}
 .hero-visual{animation:ct-rise .9s var(--ease) .1s both}
+/* Pages without a hero (checkout, track order, account, sign-in pages, 404, thank-you) rise in the same way. */
+.checkout-layout>section>.section-header,.container.narrow>.section-header,.container.narrow>.section-header+.form-card,
+.section>.container.narrow>.empty-state,.section>.container.narrow>.success-card,.auth-main>div>*,.auth-art>*{animation:ct-rise .7s var(--ease) both}
+.container.narrow>.section-header+.form-card,.auth-main>div>:nth-child(2),.auth-art>:nth-child(2){animation-delay:.07s}
+.auth-main>div>:nth-child(n+3),.auth-art>:nth-child(n+3){animation-delay:.14s}
+/* Account: only once the sign-in check has finished and the page is shown. */
+html.account-checking .account-page>.account-head{animation:none}
+/* Shown after a form is sent: the order tracking result and "check your email" after signing up. */
+.track-result:not([hidden]),.auth-sent:not([hidden]){animation:ct-rise .45s var(--ease) both}
 /* Product page: the photo and the first details rise in on computers, like every other page's heading.
    (On phones the details start below the photo, so they fade up on scroll instead.) */
 @media (min-width:761px){
@@ -1068,6 +1077,8 @@ html[data-area=admin]{--bg:#f6f6f9;--surface-2:#f1f1f6;--line:#e6e6ee;--line-str
 @keyframes ct-fade{from{opacity:0}to{opacity:1}}
 /* (on the box itself, so redrawing it later, e.g. a new delivery fee, does not flash again) */
 #cart-root:not(:empty),.checkout-summary:not(:empty){animation:ct-fade .35s ease both}
+/* Account orders arrive after the page loads: each new list fades in over "Loading your orders…". */
+#orders>*{animation:ct-fade .35s ease both}
 /* Set by store-ui.js only for elements that start below the fold, so nothing visible ever flashes. */
 .reveal-pending{opacity:0;transform:translateY(24px)}
 .reveal-in{transition:opacity .6s ease var(--reveal-delay,0ms),transform .6s var(--ease) var(--reveal-delay,0ms)}
