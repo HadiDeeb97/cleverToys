@@ -92,6 +92,19 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
           <label>Name<input name="name" required /></label>
           <label>Slug<input name="slug" required pattern="[a-z0-9\-]+" /></label>
           <label>Description<textarea name="description" rows="3"></textarea></label>
+          <!-- Category photo: shown on the home page "Shop by category" tiles, /categories and the Shop menu. -->
+          <div class="cat-photo">
+            <span class="cat-photo-title">Photo <span>(optional)</span></span>
+            <div class="cat-photo-box">
+              <div id="cat-photo-preview" class="cat-photo-preview" aria-hidden="true">🗂️</div>
+              <div class="cat-photo-actions">
+                <div class="form-actions"><button id="cat-photo-pick" class="small-button" type="button">Upload photo</button><button id="cat-photo-remove" class="small-button danger-button" type="button" hidden>Remove</button></div>
+                <small class="muted">JPG, PNG or WebP. Portrait or square photos look best; saved as a light WebP.</small>
+              </div>
+            </div>
+            <input id="cat-photo-file" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+            <input type="hidden" name="image_url" />
+          </div>
           <label>SEO title <span>(optional)</span><input name="seo_title" maxlength="70" /></label>
           <label>SEO description <span>(optional)</span><textarea name="seo_description" rows="2" maxlength="170"></textarea></label>
           <div class="switch-line"><label><input class="toggle" name="is_active" type="checkbox" checked /> Visible in store</label></div>
@@ -208,7 +221,7 @@ function renderCategories() {
   for (const l of links) counts.set(l.category_id, (counts.get(l.category_id) || 0) + 1);
   $('#categories').innerHTML = categories.length ? categories.map((c, i) => `<div class="category-row${c.is_active === false ? ' is-hidden' : ''}">
     <div class="order-buttons"><button type="button" class="small-button" data-move="${c.id}" data-dir="-1" aria-label="Move ${esc(c.name)} up"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" class="small-button" data-move="${c.id}" data-dir="1" aria-label="Move ${esc(c.name)} down"${i === categories.length - 1 ? ' disabled' : ''}>↓</button></div>
-    <div class="product-main"><button type="button" class="product-name" data-edit-cat="${c.id}">${esc(c.name)}</button><small>/${esc(c.slug)} · ${counts.get(c.id) || 0} products${c.is_active === false ? ' · hidden' : ''}</small></div>
+    <div class="product-main"><button type="button" class="product-name" data-edit-cat="${c.id}">${esc(c.name)}</button><small>/${esc(c.slug)} · ${counts.get(c.id) || 0} products${c.image_url ? '' : ' · no photo'}${c.is_active === false ? ' · hidden' : ''}</small></div>
     <div class="item-actions"><button class="small-button" data-edit-cat="${c.id}" type="button">Edit</button>${c.is_active === false ? '' : `<a class="small-button" href="/category/${encodeURIComponent(c.slug)}" target="_blank" rel="noopener" title="View on store" aria-label="View ${esc(c.name)} on the store">↗</a>`}<button class="small-button danger-button" data-cat="${c.id}" type="button">Delete</button></div>
   </div>`).join('') : '<div class="empty-state"><h2>No categories yet</h2><p>Add your first category on the right.</p></div>';
 }
@@ -378,6 +391,7 @@ function editCategory(id: string) {
   if (!c) return;
   const f = $<HTMLFormElement>('#category-form');
   for (const name of ['id', 'name', 'slug', 'description', 'seo_title', 'seo_description']) (f.elements.namedItem(name) as HTMLInputElement).value = c[name] ?? '';
+  setCategoryPhoto(c.image_url || '');
   (f.elements.namedItem('is_active') as HTMLInputElement).checked = c.is_active !== false;
   (f.elements.namedItem('slug') as HTMLInputElement).dataset.auto = '';
   $('#category-form-title').textContent = `Edit: ${c.name}`;
@@ -390,6 +404,7 @@ function clearCategoryForm() {
   (f.elements.namedItem('slug') as HTMLInputElement).dataset.auto = '1';
   $('#category-form-title').textContent = 'Add category';
   $('#category-msg').textContent = '';
+  setCategoryPhoto('');
 }
 
 function switchTab(tab: string) {
@@ -527,16 +542,79 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
+// ---------- Category photo ----------
+// A new photo waits in categoryPhotoFile until the category is saved; the hidden image_url field holds the current one.
+let categoryPhotoFile: File | null = null;
+let categoryPhotoPreviewUrl = '';
+function setCategoryPhoto(url: string, file: File | null = null) {
+  const f = $<HTMLFormElement>('#category-form');
+  categoryPhotoFile = file;
+  if (categoryPhotoPreviewUrl) URL.revokeObjectURL(categoryPhotoPreviewUrl);
+  categoryPhotoPreviewUrl = file ? URL.createObjectURL(file) : '';
+  (f.elements.namedItem('image_url') as HTMLInputElement).value = file ? '' : url;
+  const shown = categoryPhotoPreviewUrl || url;
+  $('#cat-photo-preview').innerHTML = shown ? `<img src="${esc(shown)}" alt="" />` : '🗂️';
+  $('#cat-photo-pick').textContent = shown ? 'Change photo' : 'Upload photo';
+  $('#cat-photo-remove').hidden = !shown;
+}
+async function uploadCategoryPhoto(id: string, file: File) {
+  const blob = await toWebp(file);
+  const path = `categories/${id}/${Date.now()}.webp`;
+  const up = await supabase.storage.from('product-images').upload(path, blob, { contentType: 'image/webp', upsert: false });
+  if (up.error) throw new Error(up.error.message);
+  return supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
+}
+function removeStoredCategoryPhoto(url: string) {
+  const marker = '/storage/v1/object/public/product-images/';
+  const at = url.indexOf(marker);
+  const path = at >= 0 ? decodeURIComponent(url.slice(at + marker.length)) : '';
+  if (path.startsWith('categories/')) supabase.storage.from('product-images').remove([path]).catch(() => {});
+}
+$('#cat-photo-pick').addEventListener('click', () => $<HTMLInputElement>('#cat-photo-file').click());
+$<HTMLInputElement>('#cat-photo-file').addEventListener('change', (event) => {
+  const input = event.currentTarget as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { $('#category-msg').textContent = 'Please choose a JPG, PNG or WebP photo.'; return; }
+  if (file.size > 15 * 1024 * 1024) { $('#category-msg').textContent = 'That photo is too large (15 MB max).'; return; }
+  $('#category-msg').textContent = '';
+  setCategoryPhoto('', file);
+});
+$('#cat-photo-remove').addEventListener('click', () => setCategoryPhoto(''));
+
 $<HTMLFormElement>('#category-form').addEventListener('submit', async (event) => {
   event.preventDefault();
   const f = event.currentTarget as HTMLFormElement;
   const fd = new FormData(f);
   const id = String(fd.get('id') || '');
   const name = String(fd.get('name') || '').trim();
-  const data: Row = { name, slug: slugify(fd.get('slug') || name), description: String(fd.get('description') || ''), seo_title: String(fd.get('seo_title') || '').trim() || null, seo_description: String(fd.get('seo_description') || '').trim() || null, is_active: fd.get('is_active') === 'on' };
+  const data: Row = { name, slug: slugify(fd.get('slug') || name), description: String(fd.get('description') || ''), image_url: String(fd.get('image_url') || '') || null, seo_title: String(fd.get('seo_title') || '').trim() || null, seo_description: String(fd.get('seo_description') || '').trim() || null, is_active: fd.get('is_active') === 'on' };
   if (!id) data.sort_order = categories.length;
-  const r = id ? await supabase.from('categories').update(data).eq('id', id) : await supabase.from('categories').insert(data);
-  if (r.error) { $('#category-msg').textContent = friendly(r.error.message); return; }
+  const oldPhoto = id ? categories.find((c) => c.id === id)?.image_url || '' : '';
+  const button = f.querySelector<HTMLButtonElement>('button[type=submit]')!;
+  button.disabled = true;
+  try {
+    const r = id ? await supabase.from('categories').update(data).eq('id', id).select('id').single() : await supabase.from('categories').insert(data).select('id').single();
+    if (r.error) { $('#category-msg').textContent = friendly(r.error.message); return; }
+    const savedId = String(r.data.id);
+    // Saved: a retry after a failed upload updates this category instead of adding it twice.
+    (f.elements.namedItem('id') as HTMLInputElement).value = savedId;
+    if (categoryPhotoFile) {
+      $('#category-msg').textContent = 'Uploading photo…';
+      const url = await uploadCategoryPhoto(savedId, categoryPhotoFile);
+      const up = await supabase.from('categories').update({ image_url: url }).eq('id', savedId);
+      if (up.error) throw new Error(up.error.message);
+      data.image_url = url;
+    }
+    // The old photo is no longer used: remove it from storage (best effort).
+    if (oldPhoto && oldPhoto !== data.image_url) removeStoredCategoryPhoto(oldPhoto);
+  } catch (error) {
+    $('#category-msg').textContent = friendly(error instanceof Error ? error.message : String(error));
+    return;
+  } finally {
+    button.disabled = false;
+  }
   clearCategoryForm();
   await load();
   toast(id ? 'Category updated.' : 'Category added.');
@@ -626,6 +704,13 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .product-rows,.category-rows{display:grid;gap:8px}
 .product-row,.category-row{display:grid;grid-template-columns:52px auto auto minmax(0,1fr);grid-template-areas:"thumb main main main" "thumb stock toggle actions";gap:6px 12px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);transition:border-color .15s}
 .category-row{grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:none}
+.cat-photo{display:grid;gap:8px}
+.cat-photo-title{font-weight:700;font-size:.9rem}
+.cat-photo-title span{color:var(--subtle);font-weight:600}
+.cat-photo-box{display:flex;align-items:center;gap:14px}
+.cat-photo-preview{display:grid;place-items:center;flex:0 0 auto;width:84px;height:104px;overflow:hidden;border:1.5px dashed var(--line-strong);border-radius:var(--radius-sm);background:var(--surface-2,#f6f3ee);font-size:1.8rem}
+.cat-photo-preview img{width:100%;height:100%;object-fit:cover}
+.cat-photo-actions{display:grid;gap:8px;min-width:0}
 .product-row>.stock-history{width:100%;min-width:0;border-collapse:collapse;font-size:.82rem}
 .stock-history th,.stock-history td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
 .stock-history .neg{color:var(--danger);font-weight:800}.stock-history .pos{color:var(--success);font-weight:800}

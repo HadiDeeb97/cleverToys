@@ -341,7 +341,7 @@ ZW;Zimbabwe;263;>9>## ### ####`;
   // ---------- Styles (injected once so the store and the admin share them) ----------
   const css = `
 .phone-field{position:relative;display:block;width:100%;grid-column:1/-1;flex:1 1 100%;min-width:0;font-weight:500}
-.phone-field>input.pf-input{width:100%}
+.phone-field>input.pf-input{width:100%;padding-left:108px}
 label span.phone-field{color:var(--ink,#222);font-weight:500}
 span.phone-field span:not(.pf-dial){color:inherit}
 .pf-cc{position:absolute;left:4px;top:4px;bottom:4px;display:inline-flex;align-items:center;gap:6px;padding:0 8px 0 10px;border:0;border-right:1.5px solid var(--line-strong,#ddd);border-radius:var(--radius-xs,8px) 0 0 var(--radius-xs,8px);background:transparent;color:inherit;font:inherit;font-size:.95rem;font-weight:600;cursor:pointer;z-index:1}
@@ -424,9 +424,12 @@ span.phone-field span:not(.pf-dial){color:inherit}
       button.dataset.country = state.country.iso;
       button.setAttribute('aria-label', `Country: ${state.country.name} +${state.country.dial}. Change country`);
       input.placeholder = example(state.country);
-      // Leave room for the flag button inside the text box.
-      requestAnimationFrame(() => { input.style.paddingLeft = `${button.offsetWidth + 14}px`; });
+      fitPadding();
     };
+    // Leave room for the flag button inside the text box. Measured again whenever the button changes
+    // size, so fields on tabs that start hidden (e.g. Admin → Storefront → Footer) show the number too.
+    const fitPadding = () => { if (button.offsetWidth) input.style.paddingLeft = `${button.offsetWidth + 14}px`; };
+    if ('ResizeObserver' in window) new ResizeObserver(fitPadding).observe(button);
     const render = () => { setShown(display(state.country, state.digits)); validate(); };
 
     /** Reads any saved or typed number: international ones pick their country. */
