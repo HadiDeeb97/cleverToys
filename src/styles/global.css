@@ -491,6 +491,22 @@ html:has(body.has-quick-view),html:has(body.has-drawer){overscroll-behavior:none
 .filter-button{display:none}
 .category-pills{position:relative;display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;margin-bottom:20px;scrollbar-width:none}
 .category-pills::-webkit-scrollbar{display:none}
+/* Search suggestions under the search boxes (public/store-ui.js, /api/search) */
+form.has-suggest{position:relative}
+.search-suggest{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:1200;min-width:min(360px,calc(100vw - 32px));max-height:min(460px,70vh);overflow-y:auto;overscroll-behavior:contain;padding:8px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);box-shadow:0 18px 48px rgba(20,16,40,.18);animation:ct-fade .16s ease;text-align:left}
+.ss-title{margin:8px 10px 4px;color:var(--muted);font-size:.72rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.ss-item{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:12px;color:var(--ink);text-decoration:none}
+.ss-item img,.ss-ph{flex:0 0 44px;width:44px;height:44px;border-radius:10px;object-fit:cover;background:var(--surface-2)}
+.ss-ph{display:grid;place-items:center;font-size:1.3rem;background:hsl(var(--ph) 85% 92%)}
+.ss-cat-icon{display:grid;place-items:center;flex:0 0 32px;height:32px;border-radius:9px;background:var(--surface-2)}
+.ss-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.ss-name mark,.ss-cat mark{background:none;color:var(--primary-strong,var(--brand-primary));font-weight:800}
+.ss-price{flex:0 0 auto;font-weight:800;font-size:.92rem}
+.ss-price s{color:var(--muted);font-weight:600;font-size:.8rem}
+.ss-empty{margin:10px;color:var(--muted)}
+.ss-all{display:block;margin-top:4px;padding:11px 10px;border-top:1px solid var(--line);color:var(--ink);font-weight:800;text-decoration:none}
+.search-suggest [aria-selected=true],.search-suggest a:focus-visible{background:color-mix(in srgb,var(--brand-primary) 9%,var(--surface));outline:none}
+@media (hover:hover){.ss-item:hover,.ss-all:hover{background:color-mix(in srgb,var(--brand-primary) 7%,var(--surface))}}
 .pill-scroller{position:relative;margin-bottom:20px}
 .pill-scroller .category-pills{margin-bottom:0}
 .pill-arrow{position:absolute;top:calc(50% - 3px);z-index:2;display:none;place-items:center;width:40px;height:40px;padding:0;border:1.5px solid var(--line);border-radius:50%;background:var(--surface);color:var(--ink);box-shadow:0 6px 16px rgba(20,20,40,.14);cursor:pointer;transform:translateY(-50%);transition:transform .18s var(--ease),border-color .18s}

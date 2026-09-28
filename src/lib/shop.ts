@@ -34,7 +34,9 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
   const ageMaxParam = params.get('age_max')?.trim() || '';
   const ageMin = ageMinParam !== '' && Number.isFinite(Number(ageMinParam)) ? Math.max(0, Number(ageMinParam)) : null;
   const ageMax = ageMaxParam !== '' && Number.isFinite(Number(ageMaxParam)) ? Math.max(0, Number(ageMaxParam)) : null;
-  const sort = params.get('sort') || 'newest';
+  // While searching, the default order is "Best match" (see search_products in supabase/search.sql).
+  const sortParam = params.get('sort') || '';
+  const sort = sortParam && !(sortParam === 'relevance' && !search) ? sortParam : search ? 'relevance' : 'newest';
   // Sale (?sale=1): every toy with a sale price, plus toys where only some options have one.
   const saleOnly = params.get('sale') === '1';
   // Toys whose options are on sale. Only looked up on the Sale page (one extra request there).
@@ -42,22 +44,33 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
     ? [...new Set(((await supabase.from('product_variants').select('product_id').eq('is_active', true).not('sale_price', 'is', null)).data || []).map((r) => String(r.product_id)))]
     : [];
 
+  // Smart search: the database ranks matching toys (every word, any order, typos and plurals, all
+  // fields). Before supabase/search.sql is run, a simpler search is used instead (every word must
+  // appear in the name, brand, code or short description).
+  let rankedIds: string[] | null = null;
+  if (search) {
+    const ranked = await supabase.rpc('search_products', { q: search, max_results: 300 });
+    if (!ranked.error) rankedIds = ((ranked.data ?? []) as Array<{ id: string }>).map((r) => r.id);
+  }
+  const searchWords = search.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).slice(0, 6);
+
   const from = (requestedPage - 1) * SHOP_PAGE_SIZE;
   const to = from + SHOP_PAGE_SIZE - 1;
 
   // The database is far away, so every sequential request adds a noticeable wait. The category and
   // option filters are applied inside the products query itself (joined tables with !inner), which
   // lets all three requests below run at the same time: one round trip for the whole page.
-  const buildProductsQuery = (head = false) => {
+  const buildProductsQuery = (head = false, idsOnly = false) => {
     // product_variants is embedded twice: all options (so cards know when a toy needs "Choose options"),
     // and, only when filtering by option, an inner-joined copy named variant_filter that keeps just matching toys.
     const joins = [
       filterCategorySlugs.length ? 'product_categories!inner(categories!inner(slug))' : '',
       selectedVariantFilters.length ? 'variant_filter:product_variants!inner(name)' : ''
     ].filter(Boolean);
-    const columns = ['id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, category_id, age_min, age_max, created_at, product_variants(id,is_active,price,sale_price)', ...joins].join(', ');
+    const columns = [idsOnly ? 'id' : 'id, name, slug, price, sale_price, stock_quantity, primary_image_url, short_description, category_id, age_min, age_max, created_at, product_variants(id,is_active,price,sale_price)', ...joins].join(', ');
     let query = supabase.from('products').select(columns, { count: 'exact', head }).eq('is_active', true);
-    if (search) query = query.ilike('name', `%${search}%`);
+    if (search && rankedIds) query = query.in('id', rankedIds.length ? rankedIds : ['00000000-0000-0000-0000-000000000000']);
+    else if (search) for (const w of searchWords) query = query.or(['name', 'brand', 'sku', 'short_description'].map((f) => `${f}.ilike.*${w.replace(/[,()*]/g, '')}*`).join(','));
     if (saleOnly) query = saleVariantIds.length ? query.or(`sale_price.not.is.null,id.in.(${saleVariantIds.join(',')})`) : query.not('sale_price', 'is', null);
     if (filterCategorySlugs.length) query = query.eq('product_categories.categories.is_active', true).in('product_categories.categories.slug', filterCategorySlugs);
     if (selectedVariantFilters.length) query = query.eq('variant_filter.is_active', true).in('variant_filter.name', selectedVariantFilters);
@@ -66,7 +79,19 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
     return query;
   };
 
+  const buildIdsQuery = () => buildProductsQuery(false, true).limit(1000);
   let query = buildProductsQuery();
+  // Best match: find which ranked toys pass the other filters, keep the ranking, then load just this page.
+  let relevancePage: string[] | null = null;
+  let relevanceCount = 0;
+  if (sort === 'relevance' && rankedIds?.length) {
+    const passing = await buildIdsQuery();
+    const allowed = new Set(((passing.data ?? []) as unknown as Array<{ id: string }>).map((r) => r.id));
+    const ordered = rankedIds.filter((id) => allowed.has(id));
+    relevanceCount = ordered.length;
+    relevancePage = ordered.slice(from, to + 1);
+    query = buildProductsQuery().in('id', relevancePage.length ? relevancePage : ['00000000-0000-0000-0000-000000000000']);
+  }
   if (sort === 'price-asc') query = query.order('price', { ascending: true });
   else if (sort === 'price-desc') query = query.order('price', { ascending: false });
   else if (sort === 'name') query = query.order('name', { ascending: true });
@@ -75,7 +100,7 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
   const [categoriesResult, variantsResult, productsResult] = await Promise.all([
     supabase.from('categories').select('id, name, slug').eq('is_active', true).order('sort_order', { ascending: true }),
     supabase.from('product_variants').select('name').eq('is_active', true).order('name', { ascending: true }),
-    query.range(from, to)
+    relevancePage ? query : query.range(from, to)
   ]);
 
   const categories = (categoriesResult.data || []) as ShopCategory[];
@@ -89,14 +114,20 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
     selectedVariantFilters.filter((v) => !(without === 'variant' && v === value)).forEach((v) => next.append('variant', v));
     if (without !== 'age') { if (ageMinParam) next.set('age_min', ageMinParam); if (ageMaxParam) next.set('age_max', ageMaxParam); }
     if (saleOnly && without !== 'sale') next.set('sale', '1');
-    if (sort !== 'newest') next.set('sort', sort);
+    if (sort !== 'newest' && !(sort === 'relevance' && search)) next.set('sort', sort);
     if (page > 1) next.set('page', String(page));
     const qs = next.toString();
     return `${base}${qs ? `?${qs}` : ''}`;
   }
 
-  const { count, error } = productsResult;
-  const products = productsResult.data as unknown as CardProduct[] | null;
+  const { error } = productsResult;
+  const count = relevancePage ? relevanceCount : productsResult.count;
+  let products = productsResult.data as unknown as CardProduct[] | null;
+  // Keep the best-match order for this page.
+  if (relevancePage && products) {
+    const rank = new Map(relevancePage.map((id, i) => [id, i]));
+    products = [...products].sort((a: any, b: any) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+  }
   // Pages past the end (e.g. after products are removed) make the range query fail; send them to the last valid page.
   if (requestedPage > 1 && (error || !products?.length)) {
     const { count: availableCount, error: countError } = await buildProductsQuery(true);

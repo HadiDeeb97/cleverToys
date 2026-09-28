@@ -66,6 +66,7 @@ const isActiveCategory = (slug: string) => fixedCategory ? fixedCategory.slug ==
               {saleOnly && <input type="hidden" name="sale" value="1" />}
               <label for="sort">Sort by</label>
               <select id="sort" name="sort" onchange="this.form.submit()">
+                {search && <option value="relevance" selected={sort === 'relevance'}>Best match</option>}
                 <option value="newest" selected={sort === 'newest'}>Newest</option>
                 <option value="price-asc" selected={sort === 'price-asc'}>Price: low to high</option>
                 <option value="price-desc" selected={sort === 'price-desc'}>Price: high to low</option>

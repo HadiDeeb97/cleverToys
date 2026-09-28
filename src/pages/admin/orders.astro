@@ -47,6 +47,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage, enableOrderNotifications, markOrdersSeen } from '../../scripts/admin-access';
+import { smartFilter } from '../../scripts/smart-search';
 
 const STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
 const LABELS: Record<string, string> = { pending: 'Pending', confirmed: 'Confirmed', processing: 'Preparing', shipped: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -81,13 +82,13 @@ function filtered() {
   const from = $<HTMLInputElement>('#date-from').value;
   const to = $<HTMLInputElement>('#date-to').value;
   const sort = $<HTMLSelectElement>('#order-sort').value;
-  const list = orders.filter((o) => {
+  // Status and dates first, then smart search: any word order, typos, phone however typed (src/scripts/smart-search.ts).
+  const list = smartFilter(orders.filter((o) => {
     if (statusFilter !== 'all' && o.status !== statusFilter) return false;
     if (from && new Date(o.created_at) < new Date(`${from}T00:00:00`)) return false;
     if (to && new Date(o.created_at) > new Date(`${to}T23:59:59`)) return false;
-    if (!q) return true;
-    return [o.order_number, o.customer_name, o.customer_phone, o.customer_email].some((v) => String(v || '').toLowerCase().includes(q)) || String(o.customer_phone || '').replace(/\D/g, '').includes(q.replace(/\D/g, '') || '§');
-  });
+    return true;
+  }), q, (o: any) => [[o.order_number, 3], [o.customer_name, 3], [o.customer_email, 1], [o.governorate, 1], [o.city, 1]], (o: any) => [o.customer_phone]);
   if (sort === 'oldest') list.sort((a, b) => a.created_at.localeCompare(b.created_at));
   else if (sort === 'total') list.sort((a, b) => Number(b.total) - Number(a.total));
   else list.sort((a, b) => b.created_at.localeCompare(a.created_at));

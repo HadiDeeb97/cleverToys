@@ -131,6 +131,18 @@
     ['Team & roles', 'Settings', 'staff admins users permissions add admin', '/admin/team'],
     ['Backup', 'Settings', 'export excel download backup', '/admin/backup']
   ];
+  // Small typos still match: two words at most one letter apart (two for longer words).
+  const near = (a, b) => {
+    const max = a.length >= 6 ? 2 : 1;
+    if (!b || Math.abs(a.length - b.length) > max) return false;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = cur;
+    }
+    return prev[b.length] <= max;
+  };
   const normalize = (v) => String(v || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/&/g, ' and ').replace(/[^a-z0-9 ]+/g, ' ');
   const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   // A place is offered only when this admin can open its page (same rule as the sidebar links).
@@ -186,7 +198,7 @@
     if (!words.length) found = PLACES.filter((p) => ['Orders', 'Products', 'Customers', 'Store logo', 'Delivery fee per governorate', 'Discount codes'].includes(p[0]));
     else found = PLACES.map((p) => {
       const label = normalize(p[0]), hay = `${label} ${normalize(p[1])} ${normalize(p[2])}`;
-      if (!words.every((w) => hay.includes(w))) return null;
+      if (!words.every((w) => hay.includes(w) || (w.length > 3 && w.endsWith('s') && hay.includes(w.slice(0, -1))) || (w.length >= 4 && hay.split(' ').some((h) => near(w, h))))) return null;
       const score = (label.startsWith(words[0]) ? 0 : label.includes(words[0]) ? 1 : 2);
       return [score, p];
     }).filter(Boolean).sort((a, b) => a[0] - b[0]).map((x) => x[1]);

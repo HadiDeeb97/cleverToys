@@ -625,6 +625,85 @@
     if (event.cancelable && !scrollsInside(event.target, dx, dy)) event.preventDefault();
   }, { passive: false });
 
+  // ---------- Search suggestions (header, phone menu and shop search boxes) ----------
+  // As shoppers type, the best matching toys and categories appear under the box (/api/search:
+  // any word order, small typos and plurals). Enter or "See all results" still opens the full results.
+  const suggestBound = new WeakSet();
+  const SUGGEST_INPUTS = '#header-search-input, #drawer-search-input, #product-search';
+  function bindSearchSuggest(input) {
+    const form = input.closest('form');
+    if (!form || suggestBound.has(input)) return;
+    suggestBound.add(input);
+    form.querySelectorAll('.search-suggest').forEach((old) => old.remove()); // a copied header may carry an old box
+    input.setAttribute('autocomplete', 'off');
+    const box = document.createElement('div');
+    box.className = 'search-suggest';
+    box.id = `${input.id || 'search'}-suggest`;
+    box.setAttribute('role', 'listbox');
+    box.hidden = true;
+    form.classList.add('has-suggest');
+    form.appendChild(box);
+    input.setAttribute('role', 'combobox');
+    input.setAttribute('aria-controls', box.id);
+    input.setAttribute('aria-expanded', 'false');
+    let timer = 0, controller = null, items = [], active = -1, last = '';
+    const cache = new Map();
+    const close = () => { box.hidden = true; input.setAttribute('aria-expanded', 'false'); active = -1; };
+    // Bold the typed words inside a name (escaped piece by piece, so names stay plain text).
+    const highlight = (text, q) => {
+      const lower = String(text).toLowerCase();
+      const marks = q.toLowerCase().split(/\s+/).filter((w) => w.length > 1).map((w) => [lower.indexOf(w), w.length]).filter(([at]) => at >= 0).sort((a, b) => a[0] - b[0]);
+      let out = '', pos = 0;
+      for (const [at, len] of marks) { if (at < pos) continue; out += `${escapeHtml(text.slice(pos, at))}<mark>${escapeHtml(text.slice(at, at + len))}</mark>`; pos = at + len; }
+      return out + escapeHtml(text.slice(pos));
+    };
+    const render = (data, q) => {
+      const products = data.products || [], categories = data.categories || [];
+      const all = `/products?q=${encodeURIComponent(q)}`;
+      box.innerHTML = [
+        categories.length ? `<p class="ss-title">Categories</p>${categories.map((c) => `<a class="ss-item ss-cat" role="option" href="${escapeHtml(c.url)}"><span class="ss-cat-icon" aria-hidden="true">🗂️</span><span>${highlight(c.name, q)}</span></a>`).join('')}` : '',
+        products.length ? `<p class="ss-title">Toys</p>${products.map((p) => `<a class="ss-item" role="option" href="${escapeHtml(p.url)}">${p.image ? `<img src="${escapeHtml(p.image)}" alt="" loading="lazy" decoding="async">` : `<span class="ss-ph" style="--ph:${Number(p.placeholder?.hue) || 30}" aria-hidden="true">${escapeHtml(p.placeholder?.emoji || '🧸')}</span>`}<span class="ss-name">${highlight(p.name, q)}</span><span class="ss-price">${formatMoney(p.price)}${p.original ? ` <s>${formatMoney(p.original)}</s>` : ''}</span></a>`).join('')}` : '',
+        !products.length && !categories.length ? `<p class="ss-empty">No toys match “${escapeHtml(q)}”. Try a different word.</p>` : '',
+        `<a class="ss-all" role="option" href="${all}">See all results for “${escapeHtml(q)}” →</a>`
+      ].join('');
+      items = [...box.querySelectorAll('[role=option]')];
+      active = -1;
+      box.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+    };
+    const load = async () => {
+      const q = input.value.trim();
+      if (q.length < 2) { close(); return; }
+      if (q === last && !box.hidden) return;
+      last = q;
+      if (cache.has(q)) { render(cache.get(q), q); return; }
+      controller?.abort();
+      controller = new AbortController();
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: controller.signal });
+        const data = await res.json();
+        cache.set(q, data);
+        if (input.value.trim() === q && document.activeElement === input) render(data, q);
+      } catch (error) { if (error?.name !== 'AbortError') console.warn('Search suggestions failed', error); }
+    };
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(load, 140); });
+    input.addEventListener('focus', () => { if (input.value.trim().length >= 2) { last = ''; load(); } });
+    input.addEventListener('keydown', (e) => {
+      if (box.hidden) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        active = e.key === 'ArrowDown' ? Math.min(items.length - 1, active + 1) : Math.max(-1, active - 1);
+        items.forEach((el, i) => el.setAttribute('aria-selected', String(i === active)));
+        if (active >= 0) { items[active].scrollIntoView({ block: 'nearest' }); input.setAttribute('aria-activedescendant', ''); }
+      } else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); location.href = items[active].href; }
+      else if (e.key === 'Escape') close();
+    });
+    document.addEventListener('pointerdown', (e) => { if (!form.contains(e.target)) close(); });
+    form.addEventListener('submit', close);
+  }
+  const formatMoney = (n) => `$${Number(n || 0).toFixed(2)}`;
+  const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
   // ---------- Start ----------
   // This file loads with "defer", so the page is fully parsed when it runs.
   ensureLogos();
@@ -635,6 +714,13 @@
   initReveal();
   document.querySelectorAll(DRAG_ROWS).forEach(bindDragRow);
   bindAccordions();
+  // Attached the first time a search box is used (the header can be re-drawn after loading).
+  document.addEventListener('focusin', (event) => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || !input.matches(SUGGEST_INPUTS) || suggestBound.has(input)) return;
+    bindSearchSuggest(input);
+    input.dispatchEvent(new Event('focus'));
+  });
   whenOpened(setupPixelEvents);
   // Analytics waits until the page has finished loading so it never competes with the page itself.
   // A page the browser loaded ahead of time (speculation rules in src/middleware.ts) is only counted

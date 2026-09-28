@@ -114,6 +114,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
+import { smartFilter } from '../../scripts/smart-search';
 
 type Row = Record<string, any>;
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -185,7 +186,9 @@ function renderProducts() {
   const cat = $<HTMLSelectElement>('#category-filter').value;
   const test = FILTERS.find(([id]) => id === productFilter)?.[2] ?? (() => true);
   const inCategory = cat ? new Set(links.filter((l) => l.category_id === cat).map((l) => l.product_id)) : null;
-  const list = products.filter((p) => test(p) && (!inCategory || inCategory.has(p.id) || p.category_id === cat) && (!q || [p.name, p.sku, p.brand].some((v) => String(v || '').toLowerCase().includes(q))));
+  // Smart search: any word order, small typos and plurals, name first (src/scripts/smart-search.ts).
+  const catName = new Map(categories.map((c: any) => [c.id, c.name]));
+  const list = smartFilter(products.filter((p) => test(p) && (!inCategory || inCategory.has(p.id) || p.category_id === cat)), q, (p: any) => [[p.name, 3], [p.sku, 2], [p.brand, 2], [catName.get(p.category_id), 1], [p.short_description, 1]]);
   const editingId = field('id').value;
   $('#products').innerHTML = list.length ? list.map((p) => {
     const price = Number(p.sale_price ?? p.price);
