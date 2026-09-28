@@ -151,7 +151,7 @@ const tile = (name: string) => placeholderFor(name);
                 <a href={`/category/${category.slug}`} class="category-tile">
                   <span class="tile-media" style={`--ph-h:${ph.hue}`}>
                     {category.image_url ? <img src={category.image_url} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">{ph.emoji}</span>}
-                    <span class="tile-arrow" aria-hidden="true">→</span>
+                    <span class="tile-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
                   </span>
                   <span><strong>{category.name}</strong>{category.description && <small>{category.description}</small>}</span>
                 </a>
