@@ -1,22 +1,314 @@
 ---
 /**
- * About page: /about. Text comes from Admin → Pages (the text below is only a fallback).
+ * About page: /about.
+ *
+ * Words: Admin → Pages → "About" (title, intro line and text). Each "## Heading" in the text becomes
+ * its own story card; text before the first heading is the opening paragraph. The text below is only
+ * used until that page exists.
+ * Everything else comes from the store itself: product photos for the picture, live numbers (toys,
+ * categories, delivery areas, reviews), the four promises from Admin → Storefront, the categories
+ * and the WhatsApp link from Admin → Branding.
  */
 import '../styles/global.css';
-import ContentPageView from '../components/ContentPageView.astro';
+import CategoryTile from '../components/CategoryTile.astro';
 import { getContentPage } from '../lib/content-pages';
-import { markdownToText } from '../lib/markdown';
-// Text from Admin → Pages when available; the original text below is the fallback.
-const page = await getContentPage('about');
-const title=page ? `${page.title} | Clever Toys` : 'About Clever Toys | Clever Toys';
-const description=page ? (page.intro || markdownToText(page.body)) : 'Learn about Clever Toys and our mission to make children’s play more fun, creative and educational.';
+import { markdownToText, renderMarkdown } from '../lib/markdown';
+import { getPageData, DEFAULT_WHATSAPP_URL } from '../lib/page-data';
+import { supabase } from '../lib/supabase';
+
+const FALLBACK = {
+  title: 'Play. Learn. Discover.',
+  intro: 'We believe the right toy can turn an ordinary moment into a chance to imagine, learn and create.',
+  body: '## Our store\nClever Toys brings together fun, educational and creative toys for children of different ages. We focus on practical products, clear information and a simple shopping experience.\n\n## Our promise\nWe aim to offer quality toys, straightforward prices and responsive customer service from browsing to delivery.'
+};
+
+// Everything loads at the same time.
+const [page, pageData, productsResult, countResult, categoriesResult, zonesResult, reviewsResult] = await Promise.all([
+  getContentPage('about'),
+  getPageData(Astro),
+  supabase.from('products').select('primary_image_url').eq('is_active', true).not('primary_image_url', 'is', null).order('is_featured', { ascending: false }).order('created_at', { ascending: false }).limit(4),
+  supabase.from('products').select('id', { count: 'exact', head: true }).eq('is_active', true),
+  supabase.from('categories').select('id,name,slug,description,image_url').eq('is_active', true).order('sort_order', { ascending: true }),
+  supabase.from('delivery_zones').select('governorate').eq('is_active', true),
+  supabase.from('reviews').select('rating').eq('status', 'approved').limit(2000)
+]);
+const { design, storeSettings } = pageData;
+const content = page ?? FALLBACK;
+const whatsappUrl = /^https:\/\//.test(String(storeSettings.whatsapp_url || '')) ? String(storeSettings.whatsapp_url) : DEFAULT_WHATSAPP_URL;
+
+// The text: an opening paragraph, then one card per "## Heading".
+const [leadText, ...chapterTexts] = String(content.body || '').split(/^##\s+/m);
+const lead = leadText.trim() ? renderMarkdown(leadText.trim()) : '';
+const CHAPTER_ICONS = [['🏪', 40], ['🤝', 200], ['🎯', 330], ['💡', 145], ['🌱', 100], ['🎁', 270]] as const;
+const chapters = chapterTexts.map((text, i) => {
+  const [heading, ...rest] = text.split('\n');
+  return { title: heading.trim(), html: renderMarkdown(rest.join('\n').trim()), icon: CHAPTER_ICONS[i % CHAPTER_ICONS.length] };
+}).filter((c) => c.title || c.html);
+
+// Live numbers (a number only shows when there is something to show).
+const photos = ((productsResult.data ?? []) as Array<{ primary_image_url: string }>).map((p) => p.primary_image_url).filter(Boolean);
+const categories = categoriesResult.data ?? [];
+const zones = (zonesResult.data ?? []).length;
+const ratings = ((reviewsResult.data ?? []) as Array<{ rating: number }>).map((r) => Number(r.rating)).filter((r) => r > 0);
+const average = ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
+const stats = [
+  { value: countResult.count ?? 0, suffix: '+', label: 'toys to discover', min: 1 },
+  { value: categories.length, suffix: '', label: categories.length === 1 ? 'category' : 'categories', min: 1 },
+  { value: zones, suffix: '', label: zones === 1 ? 'governorate we deliver to' : 'governorates we deliver to', min: 1 },
+  { value: Math.round(average * 10) / 10, suffix: '★', label: `average from ${ratings.length} reviews`, min: ratings.length >= 3 ? 1 : Infinity, decimals: 1 }
+].filter((s) => s.value >= s.min);
+
+const steps = [
+  { icon: '🧸', title: 'Pick your toys', text: 'Browse by category or age, or search for exactly what you have in mind.' },
+  { icon: '📝', title: 'Order your way', text: 'Check out on the website in a minute, or send your order on WhatsApp.' },
+  { icon: '🚚', title: 'Pay on delivery', text: 'We deliver across Lebanon and you pay in cash when your toys arrive.' }
+];
+
+const title = page ? `${page.title} | Clever Toys` : 'About Clever Toys | Clever Toys';
+const description = page ? (page.intro || markdownToText(page.body)) : 'Learn about Clever Toys and our mission to make children’s play more fun, creative and educational.';
+const HUES = [40, 200, 330, 145];
 ---
-<head><title>{title}</title><meta name="description" content={description}/><link rel="canonical" href={new URL("/about", Astro.site ?? Astro.url.origin).href}/></head>
+<head><title>{title}</title><meta name="description" content={description}/><link rel="canonical" href={new URL('/about', Astro.site ?? Astro.url.origin).href}/></head>
 <header class="site-header"></header>
-{page ? <ContentPageView page={page} eyebrow="Clever Toys" /> : (
-<main>
-  <section class="page-hero"><div class="container"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">Play. Learn. Discover.</span></nav><p class="eyebrow">Clever Toys</p><h1>Play. Learn. Discover.</h1><p>We believe the right toy can turn an ordinary moment into a chance to imagine, learn and create.</p></div></section>
-  <section class="section tight"><div class="container"><div class="content-card prose"><h2>Our store</h2><p>Clever Toys brings together fun, educational and creative toys for children of different ages. We focus on practical products, clear information and a simple shopping experience.</p><h2>Our promise</h2><p>We aim to offer quality toys, straightforward prices and responsive customer service from browsing to delivery.</p><a class="button" href="/products">Explore our toys</a></div></div></section>
+<main class="about-page">
+  <!-- ---------- Hero ---------- -->
+  <section class="ab-hero">
+    <div class="container ab-hero-grid">
+      <div class="ab-hero-copy">
+        <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">Home</a><span>/</span><span aria-current="page">About us</span></nav>
+        <p class="eyebrow">About Clever Toys</p>
+        <h1>{content.title}</h1>
+        {content.intro && <p class="ab-intro">{content.intro}</p>}
+        <div class="ab-actions">
+          <a class="button" href="/products">Shop our toys <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+          <a class="button secondary-button" href={whatsappUrl} target="_blank" rel="noopener noreferrer">Chat with us</a>
+        </div>
+      </div>
+      <div class="ab-collage" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => (
+          <div class={`ab-tile ab-tile-${i + 1}`} style={`--h:${HUES[i]}`}>
+            {photos[i] ? <img src={photos[i]} alt="" loading={i ? 'lazy' : 'eager'} decoding="async" /> : <span>{['🧸', '🚀', '🎨', '🧩'][i]}</span>}
+          </div>
+        ))}
+        <div class="ab-badge"><b>✓</b><span>Cash on delivery<small>Across Lebanon</small></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------- Live numbers ---------- -->
+  {stats.length > 0 && (
+    <section class="ab-stats-wrap" aria-label="Clever Toys in numbers">
+      <div class="container">
+        <div class="ab-stats" style={`--n:${stats.length}`}>
+          {stats.map((s) => (
+            <div class="ab-stat">
+              <strong><span data-count={s.value} data-decimals={s.decimals ?? 0}>{s.decimals ? s.value.toFixed(s.decimals) : s.value}</span>{s.suffix}</strong>
+              <span>{s.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )}
+
+  <!-- ---------- Our story (Admin → Pages) ---------- -->
+  <section class="section">
+    <div class="container">
+      <div class="section-header center"><p class="eyebrow">Our story</p><h2>Why we do what we do</h2></div>
+      {lead && <div class="ab-lead prose" set:html={lead} />}
+      {chapters.length > 0 && (
+        <div class="ab-chapters" style={`--n:${Math.min(chapters.length, 3)}`}>
+          {chapters.map((c) => (
+            <article class="ab-chapter" style={`--h:${c.icon[1]}`}>
+              <span class="ab-icon" aria-hidden="true">{c.icon[0]}</span>
+              {c.title && <h3>{c.title}</h3>}
+              <div class="prose" set:html={c.html} />
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  </section>
+
+  <!-- ---------- Promises (Admin → Storefront) ---------- -->
+  {design.trust.length > 0 && (
+    <section class="section ab-values-section">
+      <div class="container">
+        <div class="section-header center"><p class="eyebrow">Our promise</p><h2>What you can count on</h2></div>
+        <div class="ab-values" style={`--n:${design.trust.length}`}>
+          {design.trust.map((item, i) => (
+            <div class="ab-value" style={`--h:${HUES[i % HUES.length]}`}>
+              <span class="ab-icon" aria-hidden="true">{item.icon || '✓'}</span>
+              <h3>{item.title}</h3>
+              {item.text && <p>{item.text}</p>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )}
+
+  <!-- ---------- How ordering works ---------- -->
+  <section class="section">
+    <div class="container">
+      <div class="section-header center"><p class="eyebrow">Simple from start to finish</p><h2>How ordering works</h2></div>
+      <ol class="ab-steps">
+        {steps.map((s, i) => (
+          <li class="ab-step">
+            <span class="ab-step-num" aria-hidden="true">{i + 1}</span>
+            <span class="ab-icon" aria-hidden="true">{s.icon}</span>
+            <h3>{s.title}</h3>
+            <p>{s.text}</p>
+          </li>
+        ))}
+      </ol>
+    </div>
+  </section>
+
+  <!-- ---------- Categories ---------- -->
+  {categories.length > 0 && (
+    <section class="section tight">
+      <div class="container">
+        <div class="section-header section-header-row">
+          <div><h2>Explore the store</h2><p>Find the right kind of play for every child.</p></div>
+          <a href="/categories" class="text-link">All categories →</a>
+        </div>
+        <div class="category-tiles ab-categories" style={`--n:${Math.min(categories.length, 4)}`}>
+          {categories.slice(0, 4).map((category) => <CategoryTile category={category} />)}
+        </div>
+      </div>
+    </section>
+  )}
+
+  <!-- ---------- Help ---------- -->
+  <section class="section">
+    <div class="container">
+      <div class="ab-cta">
+        <div>
+          <h2>{design.help.title || 'Need help choosing?'}</h2>
+          <p>{design.help.text || 'Tell us the age and what they love, and we will suggest the perfect toy.'}</p>
+        </div>
+        <div class="ab-actions">
+          <a class="button ab-cta-primary" href={whatsappUrl} target="_blank" rel="noopener noreferrer">{design.help.button_label || 'Chat on WhatsApp'}</a>
+          <a class="button ab-cta-secondary" href="/products">Browse all toys</a>
+        </div>
+      </div>
+    </div>
+  </section>
 </main>
-)}
 <footer class="site-footer"></footer>
+
+<script is:inline>
+  // The numbers count up once, when they scroll into view (not for people who prefer less motion).
+  (function () {
+    var els = document.querySelectorAll('.ab-stat [data-count]');
+    if (!els.length || !('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var run = function (el) {
+      var end = parseFloat(el.getAttribute('data-count')) || 0;
+      var decimals = parseInt(el.getAttribute('data-decimals'), 10) || 0;
+      var start = performance.now();
+      var tick = function (now) {
+        var t = Math.min(1, (now - start) / 1100);
+        var eased = 1 - Math.pow(1 - t, 3);
+        el.textContent = (end * eased).toFixed(decimals);
+        if (t < 1) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    };
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) { if (entry.isIntersecting) { io.unobserve(entry.target); run(entry.target); } });
+    }, { threshold: 0.4 });
+    els.forEach(function (el) { io.observe(el); });
+  })();
+</script>
+
+<style>
+  /* ---------- Hero ---------- */
+  .ab-hero{position:relative;overflow:hidden;padding:clamp(20px,3vw,40px) 0 clamp(40px,6vw,80px);background:var(--page-hero-bg)}
+  .ab-hero::before{content:"";position:absolute;right:-12%;top:-30%;width:60vw;max-width:760px;aspect-ratio:1;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--brand-primary) 14%,transparent),transparent 65%);pointer-events:none}
+  .ab-hero-grid{position:relative;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:clamp(28px,5vw,72px);align-items:center}
+  .ab-hero h1{margin:0 0 16px;font-size:clamp(2.4rem,5.2vw,4.2rem);line-height:1.02;letter-spacing:-.02em}
+  .ab-intro{max-width:560px;margin:0 0 28px;color:var(--muted);font-size:clamp(1.05rem,1.6vw,1.22rem);line-height:1.6}
+  .ab-actions{display:flex;flex-wrap:wrap;gap:12px}
+  .ab-actions .button svg{width:18px;height:18px}
+
+  .ab-collage{position:relative;display:grid;grid-template-columns:repeat(6,1fr);grid-template-rows:repeat(6,1fr);aspect-ratio:1/1;max-width:560px;width:100%;justify-self:end}
+  .ab-tile{position:relative;display:grid;place-items:center;overflow:hidden;border-radius:calc(var(--radius-lg) * 1.1);background:hsl(var(--h) 72% 90%);box-shadow:var(--shadow);font-size:clamp(2.4rem,5vw,4rem);transition:transform .5s var(--ease)}
+  .ab-tile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  .ab-tile-1{grid-column:1/5;grid-row:1/5;background:var(--brand-gradient);box-shadow:var(--shadow-lg);font-size:clamp(4rem,9vw,7rem)}
+  .ab-tile-2{grid-column:5/7;grid-row:1/3;margin:10% 0 0 12%;border-radius:50%}
+  .ab-tile-3{grid-column:5/7;grid-row:3/6;margin:8% 0 0 12%}
+  .ab-tile-4{grid-column:2/5;grid-row:5/7;margin:12% 10% 0 0}
+  @media (hover:hover){.ab-collage:hover .ab-tile-1{transform:rotate(-1.5deg) scale(1.01)}.ab-collage:hover .ab-tile-3{transform:translateY(-6px)}}
+  .ab-badge{position:absolute;right:2%;bottom:6%;display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:var(--radius);background:var(--surface);box-shadow:var(--shadow-lg);font-weight:800;font-size:.92rem}
+  .ab-badge b{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--success-soft,#e5f6ec);color:var(--success,#1f8a4c)}
+  .ab-badge small{display:block;color:var(--muted);font-weight:600;font-size:.78rem}
+
+  /* ---------- Numbers ---------- */
+  .ab-stats-wrap{position:relative;margin-top:calc(clamp(24px,4vw,44px) * -1)}
+  .ab-stats{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow);overflow:hidden}
+  .ab-stat{display:grid;gap:4px;padding:clamp(18px,2.6vw,30px);text-align:center}
+  .ab-stat+.ab-stat{border-left:1px solid var(--line)}
+  .ab-stat strong{font-family:var(--font-display);font-size:clamp(2rem,4vw,3rem);line-height:1;letter-spacing:-.02em;background:var(--brand-gradient);-webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums}
+  .ab-stat>span{color:var(--muted);font-weight:600;font-size:.92rem}
+
+  /* ---------- Story ---------- */
+  .ab-lead{max-width:760px;margin:0 auto clamp(24px,3vw,36px);text-align:center;font-size:1.12rem;color:var(--ink-2)}
+  .ab-chapters{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:clamp(14px,2vw,22px)}
+  .ab-chapter,.ab-value,.ab-step{position:relative;padding:clamp(22px,2.6vw,32px);border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface);box-shadow:var(--shadow);transition:transform .3s var(--ease),box-shadow .3s var(--ease)}
+  @media (hover:hover){.ab-chapter:hover,.ab-value:hover,.ab-step:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg)}}
+  .ab-chapter h3,.ab-value h3,.ab-step h3{margin:14px 0 8px;font-size:1.3rem}
+  .ab-chapter .prose{color:var(--ink-2);line-height:1.7}
+  .ab-chapter .prose :global(p){margin:0 0 12px}
+  .ab-chapter .prose :global(p:last-child){margin-bottom:0}
+  .ab-chapter .prose :global(.button){margin-top:6px}
+  .ab-chapter .prose :global(a:not(.button)){color:var(--primary-strong);font-weight:800;text-decoration:underline;text-underline-offset:3px}
+  .ab-icon{display:grid;place-items:center;width:56px;height:56px;border-radius:18px;background:hsl(var(--h,40) 80% 92%);font-size:1.7rem}
+
+  /* ---------- Promises ---------- */
+  .ab-values-section{background:var(--surface-2)}
+  .ab-values{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:clamp(12px,1.8vw,20px)}
+  .ab-value{text-align:center}
+  .ab-value .ab-icon{margin:0 auto;width:64px;height:64px;border-radius:50%;font-size:1.9rem}
+  .ab-value p{margin:0;color:var(--muted)}
+
+  /* ---------- Steps ---------- */
+  .ab-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(14px,2vw,22px);margin:0;padding:0;list-style:none;counter-reset:none}
+  .ab-step p{margin:0;color:var(--muted);line-height:1.6}
+  .ab-step-num{position:absolute;right:22px;top:14px;font-family:var(--font-display);font-size:3.4rem;line-height:1;font-weight:800;color:color-mix(in srgb,var(--brand-primary) 14%,transparent)}
+  .ab-step .ab-icon{--h:210}
+  .ab-step:nth-child(2) .ab-icon{--h:40}
+  .ab-step:nth-child(3) .ab-icon{--h:145}
+
+  /* ---------- Categories ---------- */
+  .ab-categories{grid-template-columns:repeat(var(--n),minmax(0,1fr));max-width:calc(var(--n) * 300px)}
+
+  /* ---------- Help ---------- */
+  .ab-cta{position:relative;display:flex;align-items:center;justify-content:space-between;gap:24px;overflow:hidden;padding:clamp(28px,4vw,52px);border-radius:calc(var(--radius-lg) * 1.2);background:var(--brand-gradient);color:var(--brand-text-on-primary,#fff);box-shadow:var(--shadow-lg)}
+  .ab-cta::after{content:"🎈";position:absolute;right:-10px;bottom:-30px;font-size:9rem;opacity:.14;transform:rotate(-12deg);pointer-events:none}
+  .ab-cta h2{margin:0 0 8px;color:inherit;font-size:clamp(1.6rem,3vw,2.4rem)}
+  .ab-cta p{margin:0;max-width:560px;opacity:.9}
+  .ab-cta .ab-actions{position:relative;z-index:1;flex:0 0 auto}
+  .ab-cta-primary{background:#fff;color:var(--ink);box-shadow:none}
+  .ab-cta-secondary{background:transparent;color:inherit;border:1.5px solid rgba(255,255,255,.6);box-shadow:none}
+  @media (hover:hover){.ab-cta-secondary:hover{background:rgba(255,255,255,.12)}}
+
+  /* ---------- Tablets and phones ---------- */
+  @media (max-width:960px){
+    .ab-hero-grid{grid-template-columns:1fr}
+    .ab-collage{max-width:460px;justify-self:center}
+    .ab-chapters,.ab-values{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .ab-steps{grid-template-columns:1fr}
+    .ab-categories{grid-template-columns:repeat(min(var(--n),2),minmax(0,1fr))}
+    .ab-cta{flex-direction:column;align-items:flex-start}
+  }
+  @media (max-width:640px){
+    .ab-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .ab-stat:nth-child(odd){border-left:0}
+    .ab-stat:nth-child(n+3){border-top:1px solid var(--line)}
+    .ab-stat:last-child:nth-child(odd){grid-column:1/-1}
+    .ab-chapters,.ab-values{grid-template-columns:1fr}
+    .ab-actions{width:100%}
+    .ab-actions .button{flex:1 1 auto;justify-content:center}
+  }
+</style>

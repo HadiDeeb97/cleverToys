@@ -231,7 +231,8 @@
     const REVEAL = [
       '.product-card', '.category-tile', '.category-page-card', '.age-tile', '.section-header', '.promo-banner', '.story-block', '.help-card',
       '.product-layout > .gallery', '.product-details > :not(script)', '.product-accordion > details', '.section-heading-row', '.review-card', '.review-form',
-      '.contact-card', '.content-card', '.cart-item', '.checkout-summary'
+      '.contact-card', '.content-card', '.cart-item', '.checkout-summary',
+      '.ab-stats', '.ab-chapter', '.ab-value', '.ab-step', '.ab-cta', '.ab-lead'
     ].join(', ');
     document.querySelectorAll(REVEAL).forEach((element) => {
       if (element.dataset.reveal) return;
