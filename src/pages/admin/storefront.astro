@@ -47,6 +47,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <button class="tab" data-tab="product" role="tab" aria-selected="false" type="button">Product page</button>
         <button class="tab" data-tab="footer" role="tab" aria-selected="false" type="button">Footer &amp; contact</button>
         <button class="tab" data-tab="contact" role="tab" aria-selected="false" type="button">Contact page</button>
+        <button class="tab" data-tab="about" role="tab" aria-selected="false" type="button">About page</button>
         <button class="tab" data-tab="menus" role="tab" aria-selected="false" type="button">Menus</button>
       </div>
 
@@ -250,6 +251,21 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
               </div>
               <p class="muted small"><a class="text-link" href="/contact" target="_blank" rel="noopener">Open the Contact page ↗</a> (save first to see your changes)</p>
             </div>
+          </div>
+        </section>
+
+        {/* ============ About page ============ */}
+        <section class="sf-tab" id="tab-about" hidden>
+          <div class="admin-panel sf-panel">
+            <h2>Pictures at the top of the About page</h2>
+            <p class="muted">Four pictures arranged as a collage next to the title. A spot without a picture shows one of your product photos (featured toys first). The words of the page are in <a class="text-link" href="/admin/pages">Pages → About</a>.</p>
+            <div class="sf-grid">
+              <div class="sf-field"><span class="sf-label">1. Main picture <small class="muted">(large square)</small></span><div class="sf-image" data-image="about.image_1"></div></div>
+              <div class="sf-field"><span class="sf-label">2. Small picture <small class="muted">(round, top right)</small></span><div class="sf-image" data-image="about.image_2"></div></div>
+              <div class="sf-field"><span class="sf-label">3. Tall picture <small class="muted">(right side)</small></span><div class="sf-image" data-image="about.image_3"></div></div>
+              <div class="sf-field"><span class="sf-label">4. Wide picture <small class="muted">(bottom)</small></span><div class="sf-image" data-image="about.image_4"></div></div>
+            </div>
+            <p class="muted small">Square pictures work best; they are cropped to fit each shape. <a class="text-link" href="/about" target="_blank" rel="noopener">Open the About page ↗</a> (save first to see your changes)</p>
           </div>
         </section>
 
@@ -596,7 +612,7 @@ async function init() {
     guard.hidden = true;
     $('#app').hidden = false;
     const start = location.hash.slice(1);
-    if (['style', 'home', 'product', 'footer', 'contact', 'menus'].includes(start)) showTab(start);
+    if (['style', 'home', 'product', 'footer', 'contact', 'about', 'menus'].includes(start)) showTab(start);
   } catch (error) {
     guard.hidden = false;
     guard.innerHTML = `<h2>Storefront settings could not load</h2><p>${esc(error instanceof Error ? error.message : 'Unknown error')}</p>`;

@@ -154,6 +154,12 @@
   // ---------- Delivery details dialog (before "Order on WhatsApp") ----------
   // Prefilled from the last checkout or WhatsApp order on this device.
   const openDetailsDialog = (order, onSend) => {
+    // The phone field's country picker (normally already loaded on pages with this button).
+    if (!window.__ctPhoneUi && !document.querySelector('script[src^="/phone-ui.js"]')) {
+      const script = document.createElement('script');
+      script.src = '/phone-ui.js?v=20260929-3';
+      document.head.appendChild(script);
+    }
     let dialog = document.getElementById('wa-order-dialog');
     if (!dialog) {
       dialog = document.createElement('dialog');

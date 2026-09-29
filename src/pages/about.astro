@@ -5,7 +5,8 @@
  * Words: Admin → Pages → "About" (title, intro line and text). Each "## Heading" in the text becomes
  * its own story card; text before the first heading is the opening paragraph. The text below is only
  * used until that page exists.
- * Everything else comes from the store itself: product photos for the picture, live numbers (toys,
+ * Pictures: Admin → Storefront → About page (empty spots show product photos).
+ * Everything else comes from the store itself: live numbers (toys,
  * categories, delivery areas, reviews), the four promises from Admin → Storefront, the categories
  * and the WhatsApp link from Admin → Branding.
  */
@@ -46,7 +47,11 @@ const chapters = chapterTexts.map((text, i) => {
 }).filter((c) => c.title || c.html);
 
 // Live numbers (a number only shows when there is something to show).
-const photos = ((productsResult.data ?? []) as Array<{ primary_image_url: string }>).map((p) => p.primary_image_url).filter(Boolean);
+// Collage: the pictures from Admin → Storefront → About page; empty spots use product photos.
+const productPhotos = ((productsResult.data ?? []) as Array<{ primary_image_url: string }>).map((p) => p.primary_image_url).filter(Boolean);
+const chosen = [design.about.image_1, design.about.image_2, design.about.image_3, design.about.image_4];
+let nextProduct = 0;
+const photos = chosen.map((url) => url || productPhotos.filter((p) => !chosen.includes(p))[nextProduct++] || '');
 const categories = categoriesResult.data ?? [];
 const zones = (zonesResult.data ?? []).length;
 const ratings = ((reviewsResult.data ?? []) as Array<{ rating: number }>).map((r) => Number(r.rating)).filter((r) => r > 0);

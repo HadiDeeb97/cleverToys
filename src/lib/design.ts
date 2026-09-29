@@ -39,6 +39,8 @@ export type StoreDesign = {
     show_phone: boolean; show_email: boolean; show_place: boolean; show_instagram: boolean; show_order: boolean;
     show_feed: boolean; feed_title: string; feed_text: string;
   };
+  /** About page pictures (Admin → Storefront & menus → About page); empty ones show product photos. */
+  about: { image_1: string; image_2: string; image_3: string; image_4: string };
   /** Editable menus (Admin → Storefront & menus → Menus). */
   menus: { header: MenuLink[]; help: MenuLink[]; company: MenuLink[] };
 };
@@ -135,6 +137,7 @@ export const DEFAULT_DESIGN: StoreDesign = {
     feed_title: 'Follow us on Instagram',
     feed_text: 'See our newest toys, unboxings and gift ideas first.'
   },
+  about: { image_1: '', image_2: '', image_3: '', image_4: '' },
   menus: {
     header: [{ label: 'Categories', href: '/categories' }, { label: 'About', href: '/about' }, { label: 'Contact', href: '/contact' }, { label: 'Track order', href: '/track-order' }],
     help: [{ label: 'Track your order', href: '/track-order' }, { label: 'Shipping & returns', href: '/shipping-returns' }, { label: 'Contact us', href: '/contact' }, { label: 'My account', href: '/account' }],
@@ -268,6 +271,12 @@ export function parseDesign(value: unknown): StoreDesign {
         feed_text: text(c.feed_text, C.feed_text, 200)
       };
     })(),
+    about: {
+      image_1: safeImage(d.about?.image_1),
+      image_2: safeImage(d.about?.image_2),
+      image_3: safeImage(d.about?.image_3),
+      image_4: safeImage(d.about?.image_4)
+    },
     menus: {
       header: menu(d.menus?.header, D.menus.header, 7),
       help: menu(d.menus?.help, D.menus.help, 8),

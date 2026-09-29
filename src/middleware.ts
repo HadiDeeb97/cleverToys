@@ -77,6 +77,9 @@ const siteIconTags = (faviconUrl: unknown, base: string | undefined) => {
   return `<link rel="icon" href="/favicon.ico" sizes="48x48" /><link rel="icon" href="/favicon.svg" type="image/svg+xml" /><link rel="apple-touch-icon" href="/apple-touch-icon.png" />${manifest}`;
 };
 
+// Phone country picker; public/branding-ui.js loads the same file (same version) when it needs it.
+const PHONE_SCRIPT = '<script src="/phone-ui.js?v=20260929-3" defer></script>';
+
 // ---------- The middleware ----------
 // Runs for every request. Non-HTML responses (API, files) only get security headers.
 // HTML pages are rewritten: shared header/footer, theme colours, branding settings, SEO tags,
@@ -149,7 +152,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const fontHref = FONT_PRESETS[isAdmin ? 'modern' : design.font].href;
   const fontLinks = `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="${fontHref}" media="print" onload="this.media='all'" /><noscript><link rel="stylesheet" href="${fontHref}" /></noscript>`;
   // Bump the ?v= number whenever these files change, so browsers fetch the new version.
-  const storeScript = '<script src="/store-ui.js?v=20260929-15" defer></script><script src="/branding-ui.js?v=20260929-6" defer></script><script src="/phone-ui.js?v=20260929-3" defer></script>';
+  const storeScript = '<script src="/store-ui.js?v=20260929-15" defer></script><script src="/branding-ui.js?v=20260929-7" defer></script>';
   // Instant page changes: when a shopper hovers over (computer) or touches (phone) a store link, the
   // browser starts loading that page right away, so it is usually ready by the time the tap finishes.
   // Supported by Chrome, Edge and Samsung Internet; other browsers ignore it. Cart, checkout, account
@@ -266,7 +269,10 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
 
   output = output.replace(/<link\s+rel=["'](?:shortcut )?icon["'][^>]*>|<link\s+rel=["']apple-touch-icon["'][^>]*>/gi, '');
   // Look for the real <script> tag, not just the text: page scripts may mention store-ui.js in a comment.
-  if (!/<script[^>]+src="\/store-ui\.js/.test(output)) output = output.replace('</head>', `${preconnect}${iconTags}${fontLinks}${earlyTheme}${storeConfig}${pixelScript}${storeScript}${speculationRules}</head>`);
+  // Phone fields with a country picker (public/phone-ui.js): only pages with a phone field, or with the
+  // "Order on WhatsApp" button (its form has one), load it.
+  const phoneScript = isAdmin || /type=["']tel["']|data-buy-whatsapp/i.test(output) ? PHONE_SCRIPT : '';
+  if (!/<script[^>]+src="\/store-ui\.js/.test(output)) output = output.replace('</head>', `${preconnect}${iconTags}${fontLinks}${earlyTheme}${storeConfig}${pixelScript}${storeScript}${phoneScript}${speculationRules}</head>`);
 
   if (isAdmin) {
     // One admin layout for every admin page: sidebar navigation on desktop, compact top bar on phones.

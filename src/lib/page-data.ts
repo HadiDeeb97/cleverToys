@@ -69,12 +69,39 @@ export const parseTheme = (d: any): PublishedTheme | null => {
 export type MenuCategory = { name: string; slug: string; image_url: string | null };
 export type PageData = { storeSettings: Record<string, any>; published: PublishedTheme; seo: any; design: StoreDesign; categories: MenuCategory[]; hasSale: boolean; footerPages: Array<{ slug: string; title: string }> };
 
+// Every page needs the same settings, theme and menus. Each server keeps them for a few seconds, so
+// busy moments do not ask the database (far away, in Tokyo) the same thing again and again. Changes
+// made in the admin panel show on the website within these few seconds.
+const CACHE_MS = 8000;
+type Cached = { at: number; promise: Promise<PageData> };
+const sharedCache = new Map<string, Cached>();
+const seoCache = new Map<string, Cached>();
+function cached(cache: Map<string, Cached>, key: string, load: () => Promise<PageData>) {
+  const now = Date.now();
+  let entry = cache.get(key);
+  if (!entry || now - entry.at > CACHE_MS) {
+    if (cache.size > 300) cache.clear();
+    entry = { at: now, promise: load() };
+    cache.set(key, entry);
+  }
+  return entry.promise;
+}
+
 /**
- * Loads the store settings (Admin → Branding), the published theme and the page's SEO row.
+ * Loads the store settings (Admin → Branding), the published theme, the menus and the page's SEO row.
  * Never throws: if Supabase is unreachable the page still renders with defaults.
- * Always read fresh (no caching), so changes in the admin panel show up on the next page load.
  */
 export async function loadPageData(path: string): Promise<PageData> {
+  const admin = path.startsWith('/admin');
+  const [shared, seo] = await Promise.all([
+    cached(sharedCache, admin ? 'admin' : 'store', () => fetchPageData(path, 'shared')),
+    admin ? null : cached(seoCache, path, () => fetchPageData(path, 'seo'))
+  ]);
+  // A copy, so one page changing its data never affects another page.
+  return { ...shared, storeSettings: { ...shared.storeSettings }, seo: seo?.seo ?? null };
+}
+
+async function fetchPageData(path: string, part: 'shared' | 'seo'): Promise<PageData> {
   const { url: base, key } = supabaseConfig();
   const data: PageData = { storeSettings: { ...defaultStoreSettings }, published: { mode: 'logo', theme: null }, seo: null, design: parseDesign(null), categories: [], hasSale: false, footerPages: [] };
   if (!base || !key) return data;
@@ -141,7 +168,7 @@ export async function loadPageData(path: string): Promise<PageData> {
     } catch {}
   };
 
-  await Promise.all([loadSettings(), loadSeo(), loadCategories(), loadHasSale(), loadFooterPages()]);
+  await Promise.all(part === 'seo' ? [loadSeo()] : [loadSettings(), loadCategories(), loadHasSale(), loadFooterPages()]);
   return data;
 }
 
