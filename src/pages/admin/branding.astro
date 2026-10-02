@@ -58,17 +58,19 @@ const previewFontHref = FONT_PRESETS[design.font]?.href || FONT_PRESETS.premium.
         <div>
           <p class="eyebrow">Social media</p>
           <h2>Social links &amp; visibility</h2>
-          <p>WhatsApp uses the same URL as the floating WhatsApp button.</p>
+          <p>Change the WhatsApp number here and every WhatsApp button on the site uses the new number.</p>
         </div>
         <span id="auth-status" class="status-text" role="status">Checking admin access…</span>
       </div>
 
       <div class="settings-grid">
         <div class="setting-box">
-          <div class="field-heading"><label for="whatsapp-url">WhatsApp link</label><span class="sync-pill">Synced</span></div>
-          <input id="whatsapp-url" type="url" placeholder="https://wa.me/961..." autocomplete="url" />
-          <small>Paste a wa.me link or a phone number with country code. Add <code>?text=</code> to set the greeting.</small>
-          <small class="wa-usage">Used by the floating WhatsApp button, the header WhatsApp icon, and product "Order on WhatsApp" orders (which send to this number with the full order).</small>
+          <div class="field-heading"><label for="whatsapp-number">WhatsApp number</label><span class="sync-pill">Synced</span></div>
+          <input id="whatsapp-number" type="tel" placeholder="71 220 251" autocomplete="tel" />
+          <label for="whatsapp-text" class="wa-greeting-label">First message (optional)</label>
+          <input id="whatsapp-text" type="text" maxlength="200" placeholder="Hello Clever Toys! I have a question about your toys." />
+          <small>Typed for the customer when they open the chat; they can change it before sending.</small>
+          <small class="wa-usage">Used everywhere: the header and footer WhatsApp icons, the floating WhatsApp button, the Contact page, "Ask on WhatsApp" on the home page and "Order on WhatsApp" on products. The business phone (Admin → SEO and Storefront) is separate and does not change.</small>
           <a id="test-whatsapp" class="small-button" href="#" target="_blank" rel="noopener">Test link ↗</a>
           <label class="switch-row compact">
             <span><strong>Show WhatsApp in top bar</strong><small>The floating WhatsApp button remains linked too.</small></span>
@@ -550,12 +552,25 @@ function updateFreeDeliveryPreview() {
   freeDeliveryPreview.textContent = value > 0 ? 'Free above ' + money(value) : 'Disabled';
 }
 
-function normalizeWhatsapp(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return '';
-  if (raw.startsWith('https://') || raw.startsWith('http://')) return raw;
-  const digits = raw.replace(/[^0-9]/g, '');
-  return digits ? `https://wa.me/${digits}` : raw;
+/** The number (digits with country code) and first message saved in a WhatsApp link. */
+function parseWhatsapp(link) {
+  try {
+    const url = new URL(String(link || ''));
+    const host = url.hostname.replace(/^www\./, '');
+    const digits = host === 'wa.me' ? url.pathname.replace(/\D/g, '') : (url.searchParams.get('phone') || '').replace(/\D/g, '');
+    return { digits, text: url.searchParams.get('text') || '' };
+  } catch { return { digits: '', text: '' }; }
+}
+/** The WhatsApp number field as digits with the country code ("96171220251"). */
+function whatsappDigits() {
+  return String(document.querySelector('#whatsapp-number')?.value || '').replace(/\D/g, '').replace(/^00/, '');
+}
+/** The link every WhatsApp button uses: built from the number and the first message. */
+function buildWhatsappLink() {
+  const digits = whatsappDigits();
+  if (!digits) return '';
+  const text = String(document.querySelector('#whatsapp-text')?.value || '').trim();
+  return `https://wa.me/${digits}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
 }
 
 function normalizeInstagram(value) {
@@ -568,19 +583,22 @@ function normalizeInstagram(value) {
 // Keep the "Test link" button pointing at exactly what customers will open.
 function syncWhatsappTest() {
   const link = document.querySelector('#test-whatsapp');
-  const value = normalizeWhatsapp(document.querySelector('#whatsapp-url')?.value);
+  const value = buildWhatsappLink();
   if (!link) return;
   link.href = value || '#';
   link.toggleAttribute('aria-disabled', !value);
 }
-document.querySelector('#whatsapp-url')?.addEventListener('input', syncWhatsappTest);
+document.querySelector('#whatsapp-number')?.addEventListener('input', syncWhatsappTest);
+document.querySelector('#whatsapp-text')?.addEventListener('input', syncWhatsappTest);
 
 async function loadSettings() {
   const result = await supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle();
   if (result.error) throw new Error(`Store settings table is not ready. ${result.error.message}`);
   const settings = { ...defaults, ...(result.data || {}) };
 
-  document.querySelector('#whatsapp-url').value = settings.whatsapp_url || '';
+  const wa = parseWhatsapp(settings.whatsapp_url);
+  document.querySelector('#whatsapp-number').value = wa.digits ? `+${wa.digits}` : '';
+  document.querySelector('#whatsapp-text').value = wa.text;
   syncWhatsappTest();
   document.querySelector('#instagram-url').value = settings.instagram_url || '';
   document.querySelector('#show-whatsapp').checked = Boolean(settings.show_whatsapp);
@@ -604,7 +622,7 @@ async function loadSettings() {
 async function saveSettings() {
   const payload = {
     id: 'default',
-    whatsapp_url: normalizeWhatsapp(document.querySelector('#whatsapp-url').value),
+    whatsapp_url: buildWhatsappLink(),
     instagram_url: normalizeInstagram(document.querySelector('#instagram-url').value),
     show_whatsapp: document.querySelector('#show-whatsapp').checked,
     show_instagram: document.querySelector('#show-instagram').checked,
@@ -616,7 +634,9 @@ async function saveSettings() {
   };
   if (!document.querySelector('#low-stock-field').hidden) payload.low_stock_threshold = Math.max(0, Math.floor(Number(document.querySelector('#low-stock-threshold').value || 5)));
 
-  if (payload.show_whatsapp && !payload.whatsapp_url) throw new Error('Add a WhatsApp link or switch off WhatsApp top-bar visibility.');
+  const digits = whatsappDigits();
+  if (!digits) throw new Error('Add the WhatsApp number: every WhatsApp button on the site uses it.');
+  if (digits.length < 8 || digits.length > 15) throw new Error('Check the WhatsApp number: choose the country and type the number.');
   if (payload.show_instagram && !payload.instagram_url) throw new Error('Add an Instagram link or switch off Instagram top-bar visibility.');
   if (payload.show_ribbon && !payload.ribbon_text) throw new Error('Add ribbon text or switch off the ribbon.');
 
@@ -625,7 +645,8 @@ async function saveSettings() {
   const result = await supabase.from('store_settings').upsert(payload, { onConflict: 'id' }).select('*').single();
   if (result.error) throw new Error(result.error.message);
 
-  document.querySelector('#whatsapp-url').value = result.data.whatsapp_url || '';
+  const savedWa = parseWhatsapp(result.data.whatsapp_url);
+  document.querySelector('#whatsapp-number').value = savedWa.digits ? `+${savedWa.digits}` : '';
   document.querySelector('#instagram-url').value = result.data.instagram_url || '';
   settingsMessage.textContent = 'Store settings saved. New public page loads use the new values immediately.';
 }
@@ -994,7 +1015,7 @@ initAuth();
 .status-text{font-size:.84rem;font-weight:800;color:var(--brand-primary);white-space:nowrap}
 .settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .setting-box{display:grid;gap:10px;padding:16px;border:1px solid var(--line);border-radius:16px;background:var(--surface-2)}
-.setting-box>input,.branding-card textarea,.branding-card input[type=url],.branding-card input[type=number],.branding-card input[type=file]{width:100%;box-sizing:border-box;min-height:46px;border:1px solid var(--line-strong);border-radius:11px;background:#fff;padding:10px 12px;font:inherit}
+.setting-box>input,.branding-card textarea,.branding-card input[type=url],.branding-card input[type=tel],.branding-card input[type=text],.branding-card input[type=number],.branding-card input[type=file]{width:100%;box-sizing:border-box;min-height:46px;border:1px solid var(--line-strong);border-radius:11px;background:#fff;padding:10px 12px;font:inherit}
 .branding-card textarea{resize:vertical;min-height:88px}
 .setting-box small{color:var(--muted)}
 .wa-usage{padding:8px 10px;border-radius:10px;background:var(--surface-2)}
@@ -1002,6 +1023,7 @@ initAuth();
 #test-whatsapp[aria-disabled]{opacity:.5;pointer-events:none}
 .field-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}
 .field-heading label{font-weight:800}
+.wa-greeting-label{font-weight:800;margin-top:4px}
 .sync-pill{padding:4px 8px;border-radius:999px;background:var(--success-soft);color:var(--success);font-size:.72rem;font-weight:800}
 .switch-row{display:flex!important;align-items:center;justify-content:space-between;gap:16px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:#fff}
 .switch-row.compact{margin-top:2px}
