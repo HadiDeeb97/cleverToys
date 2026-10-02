@@ -69,6 +69,8 @@ let visible = PAGE_SIZE;
 const expanded = new Set<string>();
 // Orders whose prices are being edited, and prices typed but not saved yet (kept when the list redraws).
 const editingPrices = new Set<string>();
+// Only owners and managers may delete orders (also enforced by the database: supabase/order_delete.sql).
+let canDelete = false;
 const draftPrices = new Map<string, string>();
 $<HTMLInputElement>('#order-search').value = params.get('q') || '';
 
@@ -128,6 +130,7 @@ function detailsHtml(o: any) {
       ${!editing && items?.length ? `<button class="button secondary-button" type="button" data-edit-prices="${o.id}">✏️ Edit prices &amp; discount</button>` : ''}
       <button class="button secondary-button" type="button" data-print="${o.id}">🧾 Print invoice</button>
       <button class="button secondary-button" type="button" data-copy-link="${o.id}">🔗 Copy tracking link</button>
+      ${canDelete && !editing ? `<button class="button delete-order-button" type="button" data-delete-order="${o.id}">🗑️ Delete order</button>` : ''}
     </div>
   </div>`;
 }
@@ -224,6 +227,21 @@ async function savePrices(orderId: string) {
   toast(`${o.order_number} saved. New total ${money(o.total)}.`);
 }
 
+async function deleteOrder(orderId: string) {
+  const o = orders.find((x) => x.id === orderId);
+  if (!o) return;
+  const restock = ['pending', 'confirmed', 'processing'].includes(o.status);
+  const ok = confirm(`Delete order ${o.order_number} (${o.customer_name}, ${money(o.total)})?\n\n${restock ? 'Its items go back into stock.' : `Stock does not change (the order is ${(LABELS[o.status] || o.status).toLowerCase()}).`}${o.coupon_code ? `\nThe discount code ${o.coupon_code} gets this use back.` : ''}\n\nThis cannot be undone.`);
+  if (!ok) return;
+  const r = await supabase.rpc('admin_delete_order', { p_order_id: orderId });
+  if (r.error) { toast(/Could not find the function/i.test(r.error.message) ? 'Run supabase/order_delete.sql in Supabase first.' : `Could not delete: ${r.error.message}`, 'error'); return; }
+  orders = orders.filter((x) => x.id !== orderId);
+  expanded.delete(orderId); editingPrices.delete(orderId); itemsByOrder.delete(orderId);
+  render();
+  const back = Number((r.data as any)?.restocked || 0);
+  toast(`${o.order_number} deleted.${back ? ` ${back} item${back === 1 ? '' : 's'} back in stock.` : ''}`);
+}
+
 async function setStatus(id: string, status: string) {
   const order = orders.find((o) => o.id === id);
   if (!order || order.status === status) return;
@@ -313,6 +331,8 @@ document.addEventListener('click', async (event) => {
   if (cancelPrices) { const id = cancelPrices.dataset.cancelPrices!; editingPrices.delete(id); for (const item of itemsByOrder.get(id) ?? []) draftPrices.delete(item.id); draftPrices.delete(`discount:${id}`); render(); return; }
   const savePricesBtn = target?.closest<HTMLElement>('[data-save-prices]');
   if (savePricesBtn) { await savePrices(savePricesBtn.dataset.savePrices!); return; }
+  const del = target?.closest<HTMLElement>('[data-delete-order]');
+  if (del) { await deleteOrder(del.dataset.deleteOrder!); return; }
   const print = target?.closest<HTMLElement>('[data-print]');
   if (print) { const o = orders.find((x) => x.id === print.dataset.print); if (o) { await loadItems(o.id); printInvoice(o); } return; }
   const copy = target?.closest<HTMLElement>('[data-copy-link]');
@@ -360,6 +380,8 @@ async function init() {
     if (!isAdmin) { guard.innerHTML = '<h2>Access denied</h2><a class="button" href="/">Back to store</a>'; return; }
     // Staff roles (supabase/cms.sql): stop here if this role cannot open the page.
     if (!(await allowPage(supabase, 'orders', 'Orders'))) return;
+    const can = await supabase.rpc('admin_can_delete_orders');
+    canDelete = !can.error && can.data === true;
     guard.hidden = true;
     $('#orders-app').hidden = false;
     await load();
@@ -407,6 +429,8 @@ init();
 .price-edit-bar span{flex:1 1 240px;color:var(--muted);font-size:.9rem;font-weight:600}
 .price-edit-bar .button{min-height:40px;padding:0 16px;font-size:.9rem}
 .order-actions .button{min-height:42px;padding:0 16px;font-size:.9rem}
+.delete-order-button{margin-left:auto;background:#fff!important;color:#b42318!important;border:1.5px solid #f3b4ae!important;box-shadow:none!important}
+.delete-order-button:hover{background:#fef3f2!important}
 .whatsapp-action{background:#25d366!important;box-shadow:0 3px 0 #1a9e4b!important}
 .load-more-wrap{display:flex;justify-content:center;margin-top:18px}
 @media(max-width:1100px){.order-row{grid-template-columns:1fr auto;grid-template-areas:"toggle total" "customer status" "edit edit"}.order-toggle{grid-area:toggle}.order-customer{grid-area:customer}.order-total{grid-area:total;text-align:right}.order-row .status-pill{grid-area:status;justify-self:end}.order-status-edit{grid-area:edit;justify-content:flex-start}.orders-filters{grid-template-columns:1fr 1fr}.orders-filters #order-search{grid-column:1/-1}.order-detail-grid{grid-template-columns:1fr}}
