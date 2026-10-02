@@ -4,7 +4,9 @@
  *
  *  - Download backup: one .zip file with every table (products, options, photos list, categories,
  *    orders, customers, discount codes, pages, settings…) in data.json, plus every picture from
- *    storage (product, category, banner and branding pictures) in photos/.
+ *    storage (product, category, banner and branding pictures) in photos/, plus schema.sql: the
+ *    database structure (tables, functions, triggers, security rules, nightly job) from
+ *    public.schema_snapshot() in supabase/schema_snapshot.sql, to rebuild the database in a new project.
  *  - Restore: open a backup (.zip, or the older .json), compare it with the store, then put the rows
  *    back (added if missing, overwritten if changed; nothing added since the backup is deleted) and
  *    upload pictures that are missing.
@@ -38,7 +40,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
       <div class="cms-layout">
         <section class="admin-panel">
           <h2>1. Download a backup</h2>
-          <p class="cms-help">One .zip file with all your store data (products, options, categories, orders, customers, discount codes, delivery fees, pages, banners, reviews, SEO and settings) and all your pictures. Keep it somewhere safe, like Google Drive: it contains customer details. We suggest once a week.</p>
+          <p class="cms-help">One .zip file with all your store data (products, options, categories, orders, customers, discount codes, delivery fees, pages, banners, reviews, SEO and settings) and all your pictures, plus the database structure (schema.sql) to rebuild the store in a new Supabase project. Keep it somewhere safe, like Google Drive: it contains customer details. We suggest once a week.</p>
           <label class="backup-check"><input id="with-photos" type="checkbox" checked /> Include pictures <small class="muted">(bigger file, but a complete copy)</small></label>
           <div class="cms-actions" style="margin-top:14px"><button id="full" class="button" type="button">Download backup (.zip)</button></div>
           <div class="backup-progress" id="full-progress" hidden><span></span></div>
@@ -187,15 +189,38 @@ $('#full').addEventListener('click', async () => {
         progress('#full-progress', TABLES.length + (i + 6) / Math.max(1, paths.length), TABLES.length + 1);
       }
     }
+    // The database structure, so the store can be rebuilt in a new project. The backup still works
+    // without it (e.g. before supabase/schema_snapshot.sql was run).
+    status.textContent = 'Reading the database structure…';
+    const schema = await supabase.rpc('schema_snapshot');
+    const hasSchema = !schema.error && typeof schema.data === 'string';
+    if (hasSchema) files['schema.sql'] = strToU8(schema.data as string);
     files['data.json'] = strToU8(JSON.stringify(data));
-    files['READ ME.txt'] = strToU8(`Clever Toys backup, ${new Date().toLocaleString('en-GB')}\n\ndata.json: all store data (${total} rows).\nphotos/: ${photoCount} pictures.\n\nTo put it back: Admin → Backup → Restore from a backup, and choose this .zip file.\nKeep this file private: it contains customer names, phone numbers and addresses.\n`);
+    const readMe = [
+      `Clever Toys backup, ${new Date().toLocaleString('en-GB')}`, '',
+      `data.json: all store data (${total} rows).`,
+      `photos/: ${photoCount} pictures.`,
+      ...(hasSchema ? ['schema.sql: the database structure (tables, functions, triggers, security rules, nightly clean-up job).'] : []), '',
+      'To put it back in this store: Admin → Backup → Restore from a backup, and choose this .zip file.',
+      ...(hasSchema ? [
+        '', 'To rebuild the store in a NEW, empty Supabase project:',
+        '  1. In the new project: SQL Editor → paste all of schema.sql → Run.',
+        '  2. Point the website at the new project (SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY) and deploy.',
+        '     Create your account on the store, then make it the owner in the SQL Editor:',
+        "     insert into public.admin_users (user_id, role) select id, 'owner' from auth.users where email = 'YOUR EMAIL';",
+        '  3. Admin → Backup → Restore from a backup, and choose this .zip file.',
+        '     Customer logins cannot be moved: customers sign up again, and their old orders are kept as guest orders.'
+      ] : []), '',
+      'Keep this file private: it contains customer names, phone numbers and addresses.', ''
+    ];
+    files['READ ME.txt'] = strToU8(readMe.join('\n'));
     status.textContent = 'Making the .zip file…';
     // Pictures are already compressed (WebP/JPEG), so they are stored as they are.
     const zipped = zipSync(Object.fromEntries(Object.entries(files).map(([name, bytes]) => [name, [bytes, { level: name.startsWith('photos/') ? 0 : 6 }]])) as any);
     download(new Blob([zipped as BlobPart], { type: 'application/zip' }), `clever-toys-backup-${stamp()}.zip`);
     try { localStorage.setItem(LAST_KEY, String(Date.now())); } catch {}
     showLastBackup();
-    status.textContent = `Done: ${total.toLocaleString()} rows from ${Object.keys(data.tables as object).length} tables${withPhotos ? ` and ${photoCount} pictures (${(photoBytes / 1048576).toFixed(1)} MB)` : ''}.${failed ? ` ${failed} pictures could not be downloaded.` : ''}`;
+    status.textContent = `Done: ${total.toLocaleString()} rows from ${Object.keys(data.tables as object).length} tables${withPhotos ? ` and ${photoCount} pictures (${(photoBytes / 1048576).toFixed(1)} MB)` : ''}${hasSchema ? ', with the database structure' : ''}.${failed ? ` ${failed} pictures could not be downloaded.` : ''}`;
     toast('Backup downloaded.');
   } catch (error) {
     status.textContent = `Backup failed: ${error instanceof Error ? error.message : 'unknown error'}`;
@@ -275,7 +300,10 @@ async function putBack(table: string, pk: string, rows: any[], errors: string[])
     const r = await supabase.from(table).upsert(batch, { onConflict: pk });
     if (!r.error) { ok += batch.length; continue; }
     for (const row of batch) {
-      const one = await supabase.from(table).upsert(row, { onConflict: pk });
+      let one = await supabase.from(table).upsert(row, { onConflict: pk });
+      // Restoring into a new project: the customer's login does not exist there, so the order is
+      // kept as a guest order (name, phone and address stay on the order).
+      if (one.error?.code === '23503' && row.customer_id) one = await supabase.from(table).upsert({ ...row, customer_id: null }, { onConflict: pk });
       if (one.error) { if (errors.length < 60) errors.push(`${table}: ${one.error.message}`); } else ok++;
     }
   }
