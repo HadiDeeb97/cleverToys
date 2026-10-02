@@ -118,8 +118,14 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <h2>Excel import</h2>
         <p>Download the template, fill it in, then import. Products are matched by slug or SKU and updated; new ones are created. Put comma-separated category names in the <strong>categories</strong> column.</p>
         <p><strong>Photos:</strong> put up to 5 pictures in the <strong>image_1</strong> … <strong>image_5</strong> columns: inside the cell (Excel: Insert → Pictures → Place in Cell) or over the cell, or type a web link. <strong>image_1</strong> becomes the main photo. A row with pictures replaces that product’s photos; a row without keeps them.</p>
-        <div class="import-actions"><button id="template" class="button secondary-button" type="button">Download Excel template</button><input id="file" type="file" accept=".xlsx,.xls,.csv" /><button id="import" class="button" type="button">Import file</button></div>
+        <div class="import-actions"><button id="template" class="button secondary-button" type="button">Download Excel template</button><input id="file" type="file" accept=".xlsx,.xls,.csv" /><button id="import" class="button" type="button">Preview import</button></div>
         <p id="msg" role="status"></p>
+        <!-- Preview: what the file will do, before anything is saved. -->
+        <div id="import-preview" class="import-preview" hidden>
+          <div class="import-summary" id="import-summary"></div>
+          <div class="import-table-wrap"><table class="import-table"><thead><tr><th>Row</th><th>Photos</th><th>Product</th><th>Price</th><th>Stock</th><th>Categories</th><th>Result</th></tr></thead><tbody id="import-rows"></tbody></table></div>
+          <div class="import-actions"><button id="import-confirm" class="button" type="button">Confirm import</button><button id="import-cancel" class="button secondary-button" type="button">Cancel</button></div>
+        </div>
         <div id="errors" class="import-errors" hidden></div>
       </section>
     </div>
@@ -729,57 +735,164 @@ async function replaceProductPhotos(productId: string, name: string, urls: strin
   if (unused.length) supabase.storage.from('product-images').remove(unused).catch(() => {});
 }
 
+// ---------- Import: read → preview → confirm ----------
+type ImportItem = {
+  sheetRow: number; row: Row; name: string; slug: string; price: number | null; sku: string;
+  matched: Row[]; unknownCategories: string[]; existing?: Row; photos: ImportPhoto[];
+  problems: string[]; warnings: string[];
+};
+let pendingImport: ImportItem[] | null = null;
+let previewUrls: string[] = [];
+
+/** Checks every row of the file without saving anything. */
+function prepareImport(rows: Row[], photos: Map<number, ImportPhoto[]>): ImportItem[] {
+  const seen = new Map<string, number>();
+  return rows.map((row, i) => {
+    const sheetRow = Number(row.__rowNum__ ?? i + 1);
+    const name = String(row.name || row.Name || '').trim();
+    const slug = slugify(row.slug || name);
+    const price = num(row.price, null);
+    const sku = String(row.sku || '').trim();
+    const names = String(row.categories || row.category || '').split(',').map((x) => x.trim()).filter(Boolean);
+    const matched: Row[] = [];
+    const unknownCategories: string[] = [];
+    for (const n of names) {
+      const c = categories.find((x) => x.name.toLowerCase() === n.toLowerCase() || x.slug === slugify(n));
+      if (c) { if (!matched.includes(c)) matched.push(c); } else unknownCategories.push(n);
+    }
+    const rowPhotos = (photos.get(sheetRow) || []).slice(0, 10);
+    const problems: string[] = [];
+    const warnings: string[] = [];
+    if (!name) problems.push('Missing name');
+    if (price === null || price < 0) problems.push('Missing or invalid price');
+    if (name && seen.has(slug)) problems.push(`Same product as row ${seen.get(slug)! + 1}`);
+    if (name) seen.set(slug, sheetRow);
+    if (unknownCategories.length) warnings.push(`Unknown categories skipped: ${unknownCategories.join(', ')}`);
+    rowPhotos.forEach((p, n) => { if (p.picture && !BROWSER_IMAGE.test(p.picture.type || '')) warnings.push(`Picture ${n + 1} is a .${p.picture.type} file and will be skipped`); });
+    const existing = name ? products.find((p) => p.slug === slug) || (sku ? products.find((p) => p.sku === sku) : undefined) : undefined;
+    return { sheetRow, row, name, slug, price, sku, matched, unknownCategories, existing, photos: rowPhotos, problems, warnings };
+  });
+}
+
+function clearImportPreview() {
+  previewUrls.forEach((u) => URL.revokeObjectURL(u));
+  previewUrls = [];
+  pendingImport = null;
+  $('#import-preview').hidden = true;
+  $('#import-rows').innerHTML = '';
+}
+
+function renderImportPreview(items: ImportItem[]) {
+  clearImportPreview();
+  pendingImport = items;
+  const ok = items.filter((x) => !x.problems.length);
+  const created = ok.filter((x) => !x.existing).length;
+  const updated = ok.length - created;
+  const skipped = items.length - ok.length;
+  const photoCount = ok.reduce((n, x) => n + x.photos.filter((p) => p.url || BROWSER_IMAGE.test(p.picture?.type || '')).length, 0);
+  const warned = ok.filter((x) => x.warnings.length).length;
+  const chip = (cls: string, n: number, label: string) => `<span class="import-chip ${cls}"><b>${n}</b> ${label}</span>`;
+  $('#import-summary').innerHTML = chip('new', created, 'new') + chip('update', updated, `update${updated === 1 ? '' : 's'}`) + chip('photos', photoCount, `photo${photoCount === 1 ? '' : 's'}`) + (warned ? chip('warn', warned, `with notes`) : '') + (skipped ? chip('skip', skipped, 'skipped (problems)') : '');
+  const thumb = (p: ImportPhoto) => {
+    if (p.url) return `<img src="${esc(p.url)}" alt="" loading="lazy" />`;
+    const pic = p.picture!;
+    if (!BROWSER_IMAGE.test(pic.type || '')) return `<span class="import-thumb-bad">.${esc(pic.type || '?')}</span>`;
+    const url = URL.createObjectURL(new Blob([pic.data as BlobPart], { type: `image/${pic.type}` }));
+    previewUrls.push(url);
+    return `<img src="${url}" alt="" />`;
+  };
+  $('#import-rows').innerHTML = items.map((x) => {
+    const status = x.problems.length ? '<span class="import-status skip">Skipped</span>' : x.existing ? '<span class="import-status update">Update</span>' : '<span class="import-status new">New</span>';
+    const notes = [...x.problems.map((t) => `<li class="bad">${esc(t)}</li>`), ...x.warnings.map((t) => `<li>${esc(t)}</li>`)].join('');
+    const price = x.price === null ? '—' : `$${x.price.toFixed(2)}${num(x.row.sale_price) !== null ? `<small>Sale $${Number(num(x.row.sale_price)).toFixed(2)}</small>` : ''}`;
+    const photosCell = x.photos.length
+      ? `<div class="import-thumbs">${x.photos.slice(0, 5).map((p, n) => `<span class="import-thumb${n === 0 ? ' main' : ''}" title="${n === 0 ? 'Main photo' : `Photo ${n + 1}`}">${thumb(p)}</span>`).join('')}${x.photos.length > 5 ? `<span class="import-more">+${x.photos.length - 5}</span>` : ''}</div>`
+      : `<small class="muted">${x.existing ? 'Keeps current photos' : 'No photos'}</small>`;
+    return `<tr class="${x.problems.length ? 'is-skipped' : ''}">
+      <td class="import-rownum">${x.sheetRow + 1}</td>
+      <td>${photosCell}</td>
+      <td><strong>${esc(x.name || '(no name)')}</strong><small>/${esc(x.slug || '')}${x.sku ? ` · ${esc(x.sku)}` : ''}</small></td>
+      <td>${price}</td>
+      <td>${int(x.row.stock_quantity, 0)}</td>
+      <td>${x.matched.map((c) => `<span class="import-cat">${esc(c.name)}</span>`).join('')}${x.unknownCategories.map((c) => `<span class="import-cat unknown" title="Not found, will be skipped">${esc(c)}</span>`).join('')}${!x.matched.length && !x.unknownCategories.length ? '<small class="muted">None</small>' : ''}</td>
+      <td>${status}${notes ? `<ul class="import-notes">${notes}</ul>` : ''}</td>
+    </tr>`;
+  }).join('');
+  const button = $<HTMLButtonElement>('#import-confirm');
+  button.disabled = ok.length === 0;
+  button.textContent = ok.length ? `Confirm import (${ok.length} product${ok.length === 1 ? '' : 's'})` : 'Nothing to import';
+  $('#import-preview').hidden = false;
+  $('#import-preview').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Step 1: read the file and show the preview (nothing is saved yet).
 $('#import').addEventListener('click', async () => {
   const XLSX = (window as any).XLSX;
   const file = $<HTMLInputElement>('#file').files?.[0];
   const msg = $('#msg'), errBox = $('#errors');
+  errBox.hidden = true;
   if (!file) { msg.textContent = 'Choose a file first.'; return; }
   if (!XLSX) { msg.textContent = 'Excel tools are still loading. Try again in a moment.'; return; }
-  msg.textContent = 'Importing…';
-  const errors: string[] = [];
+  msg.textContent = 'Reading the file…';
   try {
     const buffer = await file.arrayBuffer();
     const wb = XLSX.read(buffer, { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Row[];
+    const rows = (XLSX.utils.sheet_to_json(ws, { defval: '' }) as Row[]).filter((r) => Object.entries(r).some(([k, v]) => k !== '__rowNum__' && String(v ?? '').trim() !== ''));
+    if (!rows.length) { clearImportPreview(); msg.textContent = 'The file has no product rows.'; return; }
     const photos = photosByRow(ws, XLSX, readSheetPictures(buffer), rows);
-    let created = 0, updated = 0, photoCount = 0;
-    for (let i = 0; i < rows.length; i++) {
-      const sheetRow = Number(rows[i].__rowNum__ ?? i + 1);
-      try {
-        const row = rows[i];
-        const rowPhotos = (photos.get(sheetRow) || []).slice(0, 10);
-        msg.textContent = `Importing ${i + 1} of ${rows.length}${rowPhotos.length ? ` · ${rowPhotos.length} photo${rowPhotos.length === 1 ? '' : 's'}` : ''}…`;
-        const name = String(row.name || row.Name || '').trim();
-        if (!name) throw new Error('Missing name');
-        const slug = slugify(row.slug || name);
-        const price = num(row.price, null);
-        if (price === null || price < 0) throw new Error('Invalid price');
-        const matched = String(row.categories || row.category || '').split(',').map((x) => x.trim()).filter(Boolean).map((n) => categories.find((c) => c.name.toLowerCase() === n.toLowerCase() || c.slug === slugify(n))).filter(Boolean) as Row[];
-        const payload = { name, slug, sku: String(row.sku || '').trim() || null, category_id: matched[0]?.id || null, price, sale_price: num(row.sale_price), stock_quantity: int(row.stock_quantity, 0), ...costFromRow(row), age_min: int(row.age_min), age_max: int(row.age_max), brand: String(row.brand || '').trim() || null, short_description: String(row.short_description || ''), description: String(row.description || ''), seo_title: String(row.seo_title || '').trim() || null, seo_description: String(row.seo_description || '').trim() || null, is_active: String(row.is_active).toLowerCase() !== 'false', is_featured: String(row.is_featured).toLowerCase() === 'true', updated_at: new Date().toISOString() };
-        const existing = products.find((p) => p.slug === slug) || (payload.sku ? products.find((p) => p.sku === payload.sku) : undefined);
-        const r = existing ? await supabase.from('products').update(payload as Row).eq('id', existing.id).select().single() : await supabase.from('products').insert(payload as Row).select().single();
-        if (r.error) throw new Error(friendly(r.error.message));
-        const productId = String((r.data as Row).id);
-        await saveProductCategories(productId, matched.map((c) => c.id));
-        if (existing) updated++; else created++;
-        // Photos: uploaded first, then they replace the product's photos (image_1 = main photo).
-        if (rowPhotos.length) {
-          const urls: string[] = [];
-          for (let n = 0; n < rowPhotos.length; n++) {
-            try { urls.push(await uploadImportPhoto(productId, rowPhotos[n], n + 1)); }
-            catch (error) { errors.push(`Row ${sheetRow + 1} (${name}): ${error instanceof Error ? error.message : 'a picture could not be uploaded'}`); }
-          }
-          const unique = [...new Set(urls)];
-          if (unique.length) { await replaceProductPhotos(productId, name, unique); photoCount += unique.length; }
+    renderImportPreview(prepareImport(rows, photos));
+    msg.textContent = 'Check the preview below, then press Confirm import. Nothing has been saved yet.';
+  } catch (error) { clearImportPreview(); msg.textContent = error instanceof Error ? error.message : 'The file could not be read.'; }
+});
+$('#file').addEventListener('change', () => { clearImportPreview(); $('#msg').textContent = ''; $('#errors').hidden = true; });
+$('#import-cancel').addEventListener('click', () => { clearImportPreview(); $('#msg').textContent = 'Import cancelled. Nothing was saved.'; });
+
+// Step 2: save the rows that passed the checks.
+$('#import-confirm').addEventListener('click', async () => {
+  const items = (pendingImport || []).filter((x) => !x.problems.length);
+  if (!items.length) return;
+  const msg = $('#msg'), errBox = $('#errors');
+  const confirmButton = $<HTMLButtonElement>('#import-confirm'), cancelButton = $<HTMLButtonElement>('#import-cancel');
+  confirmButton.disabled = cancelButton.disabled = true;
+  const errors: string[] = [];
+  let created = 0, updated = 0, photoCount = 0;
+  for (let i = 0; i < items.length; i++) {
+    const x = items[i];
+    const row = x.row;
+    try {
+      msg.textContent = `Importing ${i + 1} of ${items.length}${x.photos.length ? ` · ${x.photos.length} photo${x.photos.length === 1 ? '' : 's'}` : ''}…`;
+      const payload = { name: x.name, slug: x.slug, sku: x.sku || null, category_id: x.matched[0]?.id || null, price: x.price, sale_price: num(row.sale_price), stock_quantity: int(row.stock_quantity, 0), ...costFromRow(row), age_min: int(row.age_min), age_max: int(row.age_max), brand: String(row.brand || '').trim() || null, short_description: String(row.short_description || ''), description: String(row.description || ''), seo_title: String(row.seo_title || '').trim() || null, seo_description: String(row.seo_description || '').trim() || null, is_active: String(row.is_active).toLowerCase() !== 'false', is_featured: String(row.is_featured).toLowerCase() === 'true', updated_at: new Date().toISOString() };
+      // Looked up again: an earlier row of this file may have just created it.
+      const existing = products.find((p) => p.slug === x.slug) || (x.sku ? products.find((p) => p.sku === x.sku) : undefined);
+      const r = existing ? await supabase.from('products').update(payload as Row).eq('id', existing.id).select().single() : await supabase.from('products').insert(payload as Row).select().single();
+      if (r.error) throw new Error(friendly(r.error.message));
+      const productId = String((r.data as Row).id);
+      if (!existing) products.push(r.data as Row);
+      await saveProductCategories(productId, x.matched.map((c) => c.id));
+      if (existing) updated++; else created++;
+      // Photos: uploaded first, then they replace the product's photos (image_1 = main photo).
+      if (x.photos.length) {
+        const urls: string[] = [];
+        for (let n = 0; n < x.photos.length; n++) {
+          const photo = x.photos[n];
+          if (photo.picture && !BROWSER_IMAGE.test(photo.picture.type || '')) continue; // shown in the preview notes
+          try { urls.push(await uploadImportPhoto(productId, photo, n + 1)); }
+          catch (error) { errors.push(`Row ${x.sheetRow + 1} (${x.name}): ${error instanceof Error ? error.message : 'a picture could not be uploaded'}`); }
         }
-      } catch (error) { errors.push(`Row ${sheetRow + 1}: ${error instanceof Error ? error.message : 'Unknown error'}`); }
-    }
-    msg.textContent = `Import complete: ${created} created, ${updated} updated${photoCount ? `, ${photoCount} photo${photoCount === 1 ? '' : 's'} added` : ''}, ${errors.length} problem${errors.length === 1 ? '' : 's'}.`;
-    errBox.hidden = errors.length === 0;
-    errBox.innerHTML = errors.length ? '<strong>Import errors</strong>' + errors.slice(0, 50).map((x) => `<p>${esc(x)}</p>`).join('') : '';
-    await load();
-  } catch (error) { msg.textContent = error instanceof Error ? error.message : 'Import failed.'; }
+        const unique = [...new Set(urls)];
+        if (unique.length) { await replaceProductPhotos(productId, x.name, unique); photoCount += unique.length; }
+      }
+    } catch (error) { errors.push(`Row ${x.sheetRow + 1} (${x.name}): ${error instanceof Error ? error.message : 'Unknown error'}`); }
+  }
+  const skipped = (pendingImport || []).length - items.length;
+  clearImportPreview();
+  confirmButton.disabled = cancelButton.disabled = false;
+  $<HTMLInputElement>('#file').value = '';
+  msg.textContent = `Import complete: ${created} created, ${updated} updated${photoCount ? `, ${photoCount} photo${photoCount === 1 ? '' : 's'} added` : ''}${skipped ? `, ${skipped} skipped` : ''}${errors.length ? `, ${errors.length} problem${errors.length === 1 ? '' : 's'}` : ''}.`;
+  errBox.hidden = errors.length === 0;
+  errBox.innerHTML = errors.length ? '<strong>Import problems</strong>' + errors.slice(0, 50).map((t) => `<p>${esc(t)}</p>`).join('') : '';
+  await load();
 });
 
 async function init() {
@@ -890,6 +1003,30 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .import-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .import-errors{padding:14px;border-radius:12px;background:var(--danger-soft);color:var(--danger)}
 .import-errors p{margin:6px 0}
+.import-preview{display:grid;gap:14px}
+.import-summary{display:flex;flex-wrap:wrap;gap:8px}
+.import-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:var(--surface-2);font-size:.86rem;font-weight:700}
+.import-chip b{font-size:1rem}
+.import-chip.new{background:#e7f7ec;color:#166534}.import-chip.update{background:#e8f0fe;color:#1d4ed8}.import-chip.photos{background:#f3e8ff;color:#7e22ce}.import-chip.warn{background:#fff7e0;color:#92400e}.import-chip.skip{background:var(--danger-soft);color:var(--danger)}
+.import-table-wrap{max-height:62vh;overflow:auto;border:1.5px solid var(--line);border-radius:14px}
+.import-table{width:100%;border-collapse:collapse;font-size:.86rem}
+.import-table th{position:sticky;top:0;z-index:1;padding:10px;background:var(--surface-2);text-align:left;font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.import-table td{padding:10px;border-top:1px solid var(--line);vertical-align:top}
+.import-table td small{display:block;color:var(--muted);font-weight:600;margin-top:2px}
+.import-table tr.is-skipped td{background:color-mix(in srgb,var(--danger-soft) 60%,transparent)}
+.import-rownum{color:var(--muted);font-weight:800}
+.import-thumbs{display:flex;gap:4px;align-items:center}
+.import-thumb{display:grid;place-items:center;width:40px;height:40px;overflow:hidden;border-radius:8px;border:1.5px solid var(--line);background:var(--surface-2)}
+.import-thumb.main{width:52px;height:52px;border-color:var(--primary,#4f46e5)}
+.import-thumb img{width:100%;height:100%;object-fit:cover}
+.import-thumb-bad{font-size:.66rem;font-weight:800;color:var(--danger)}
+.import-more{font-weight:800;color:var(--muted);font-size:.8rem}
+.import-cat{display:inline-block;margin:0 4px 4px 0;padding:2px 8px;border-radius:999px;background:var(--surface-2);font-size:.76rem;font-weight:700;white-space:nowrap}
+.import-cat.unknown{background:#fff7e0;color:#92400e;text-decoration:line-through}
+.import-status{display:inline-block;padding:3px 10px;border-radius:999px;font-size:.76rem;font-weight:800}
+.import-status.new{background:#e7f7ec;color:#166534}.import-status.update{background:#e8f0fe;color:#1d4ed8}.import-status.skip{background:var(--danger-soft);color:var(--danger)}
+.import-notes{margin:6px 0 0;padding-left:16px;color:#92400e;font-size:.78rem}
+.import-notes .bad{color:var(--danger);font-weight:700}
 @media(max-width:1100px){.catalog-layout{grid-template-columns:1fr}.product-editor{position:static;max-height:none}}
 @media(max-width:640px){.product-row{grid-template-columns:44px auto 44px;grid-template-areas:"thumb main main" "stock stock toggle" "actions actions actions"}.product-row>.product-thumb{width:44px;height:44px}.product-row>.item-actions{justify-content:flex-start}.list-toolbar,.field-row,.field-row.three{grid-template-columns:1fr}.field-row.four{grid-template-columns:1fr 1fr}.variant-row{grid-template-columns:1fr 1fr 34px}.variant-row .v-name,.variant-row .v-sku{grid-column:auto}.variant-row .v-remove{grid-row:1/4;grid-column:3}}
 </style>

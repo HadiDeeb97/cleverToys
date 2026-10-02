@@ -395,15 +395,54 @@
   try { signedIn = Object.keys(localStorage).some((k) => /^sb-.+-auth-token$/.test(k) && localStorage.getItem(k)); } catch {}
   if (!signedIn) document.querySelectorAll('a[href="/account"]').forEach((a) => { a.href = '/login?next=/account'; });
 
-  // ---------- Broken product photos ----------
-  // If a product photo fails to load (deleted file, bad link), hide it so the card shows its soft
-  // background instead of the browser's broken-image icon. Errors don't bubble, so listen in the capture phase.
+  // ---------- Photos that did not load (slow or lost connection) ----------
+  // A photo that fails is hidden (the card shows its soft background, never the browser's "?" icon)
+  // and tried again: a few times with a pause, as soon as the connection is back, and when the shopper
+  // comes back with the Back button. Going to another page cancels photos that were still loading, and
+  // the browser restores the earlier page with those photos broken until a refresh; this reloads them.
+  const photoTries = new WeakMap();
+  const isBroken = (img) => img instanceof HTMLImageElement && img.complete && img.naturalWidth === 0 && !!img.getAttribute('src');
+  const reloadPhoto = (img) => {
+    const tries = (photoTries.get(img) || 0) + 1;
+    photoTries.set(img, tries);
+    const src = img.getAttribute('src');
+    // A slightly different address so the browser makes a fresh request instead of reusing the failed one.
+    try {
+      const url = new URL(src, location.href);
+      if (url.protocol === 'data:' || url.protocol === 'blob:') { img.src = src; return; }
+      url.searchParams.set('r', String(tries));
+      img.src = url.href;
+    } catch { img.src = src; }
+    const srcset = img.getAttribute('srcset');
+    if (srcset) img.srcset = srcset;
+  };
+  const retryLater = (img) => {
+    const tries = photoTries.get(img) || 0;
+    if (tries >= 3) return;                       // gave up: stays hidden until the connection returns
+    if (navigator.onLine === false) return;       // retried by the "online" event below
+    setTimeout(() => { if (isBroken(img)) reloadPhoto(img); }, [1500, 4000, 9000][tries]);
+  };
+  const retryAllBroken = (fresh) => document.querySelectorAll('img').forEach((img) => {
+    if (!isBroken(img)) return;
+    if (fresh) photoTries.delete(img);
+    img.style.visibility = 'hidden';
+    reloadPhoto(img);
+  });
+  // Errors and loads don't bubble, so listen in the capture phase.
   document.addEventListener('error', (event) => {
     const img = event.target;
-    if (img instanceof HTMLImageElement && img.closest('.product-media, .cart-item, .summary-item, .cart-drawer')) img.style.visibility = 'hidden';
+    if (!(img instanceof HTMLImageElement) || !img.getAttribute('src')) return;
+    img.style.visibility = 'hidden';
+    retryLater(img);
   }, true);
+  document.addEventListener('load', (event) => {
+    const img = event.target;
+    if (img instanceof HTMLImageElement && img.style.visibility === 'hidden' && img.naturalWidth) img.style.removeProperty('visibility');
+  }, true);
+  window.addEventListener('online', () => retryAllBroken(true));
+  window.addEventListener('pageshow', (event) => { if (event.persisted) retryAllBroken(true); });
   // Photos that already failed before this script loaded.
-  document.querySelectorAll('.product-media img').forEach((img) => { if (img.complete && !img.naturalWidth && img.getAttribute('src')) img.style.visibility = 'hidden'; });
+  document.querySelectorAll('img').forEach((img) => { if (isBroken(img)) { img.style.visibility = 'hidden'; retryLater(img); } });
 
   // ---------- Header shadow once the page is scrolled ----------
   const header = document.querySelector('.site-header');
