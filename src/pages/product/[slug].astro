@@ -43,6 +43,13 @@ const [{ data, error }, pageData] = await Promise.all([
 ]);
 const { design } = pageData;
 const product = data as unknown as Product | null;
+// An old address (the product's name or address was changed later): forward to the current one
+// (supabase/product_redirects.sql keeps the list; before that file is run there is nothing to find).
+if (!error && !product && slug) {
+  const moved = await supabase.from('product_slug_history').select('products(slug,is_active)').eq('old_slug', slug).maybeSingle();
+  const target = (moved.data as unknown as { products: { slug: string; is_active: boolean } | null } | null)?.products;
+  if (target?.is_active && target.slug !== slug) return Astro.redirect(`/product/${encodeURIComponent(target.slug)}${Astro.url.search}`, 301);
+}
 if (error || !product) Astro.response.status = 404;
 
 // Photos: the main image first, then the gallery images, without duplicates.
