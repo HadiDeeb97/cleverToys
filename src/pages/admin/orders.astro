@@ -120,9 +120,9 @@ function detailsHtml(o: any) {
     </div>
     <table class="items-table"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody>
     <tfoot><tr><td colspan="3">Subtotal</td><td data-sum="subtotal">${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr>${editing
-      ? `<tr class="discount-edit"><td colspan="3"><label for="discount-${o.id}">Discount${o.coupon_code ? ` (code ${esc(o.coupon_code)})` : ''} in $</label></td><td><input id="discount-${o.id}" class="admin-input price-input" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(draftPrices.get(`discount:${o.id}`) ?? Number(o.discount || 0).toFixed(2))}" data-discount-order="${o.id}" /></td></tr>`
-      : Number(o.discount) ? `<tr><td colspan="3">Discount${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</td><td data-sum="discount">−${money(o.discount)}</td></tr>` : ''}<tr class="grand"><td colspan="3">Total (cash on delivery)</td><td data-sum="total">${money(o.total)}</td></tr></tfoot></table>
-    ${editing ? `<div class="price-edit-bar"><span>Change the prices or the discount, then save. The subtotal and total update; the delivery fee stays the same.</span><button type="button" class="button" data-save-prices="${o.id}">Save</button><button type="button" class="button secondary-button" data-cancel-prices="${o.id}">Cancel</button></div>` : ''}
+      ? `<tr class="discount-edit"><td colspan="3"><label for="discount-${o.id}">Discount${o.coupon_code ? ` (code ${esc(o.coupon_code)})` : ''}</label> <span class="percent-field"><input id="discount-${o.id}" class="admin-input price-input" type="number" inputmode="decimal" min="0" max="100" step="any" value="${esc(draftPrices.get(`discount:${o.id}`) ?? discountPercent(o))}" data-initial="${discountPercent(o)}" data-discount-order="${o.id}" /><b aria-hidden="true">%</b></span></td><td data-sum="discount">−${money(o.discount)}</td></tr>`
+      : Number(o.discount) ? `<tr><td colspan="3">Discount ${discountPercent(o)}%${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</td><td data-sum="discount">−${money(o.discount)}</td></tr>` : ''}<tr class="grand"><td colspan="3">Total (cash on delivery)</td><td data-sum="total">${money(o.total)}</td></tr></tfoot></table>
+    ${editing ? `<div class="price-edit-bar"><span>Change the prices or the discount %, then save. The discount is taken from the items (not delivery); the delivery fee stays the same.</span><button type="button" class="button" data-save-prices="${o.id}">Save</button><button type="button" class="button secondary-button" data-cancel-prices="${o.id}">Cancel</button></div>` : ''}
     <div class="order-actions">
       <a class="button whatsapp-action" target="_blank" rel="noopener" href="https://api.whatsapp.com/send?phone=${whatsappNumber(o.customer_phone)}&text=${encodeURIComponent(whatsappMessage(o))}">💬 Message on WhatsApp</a>
       ${!editing && items?.length ? `<button class="button secondary-button" type="button" data-edit-prices="${o.id}">✏️ Edit prices &amp; discount</button>` : ''}
@@ -162,12 +162,20 @@ async function loadItems(orderId: string) {
   itemsByOrder.set(orderId, (r.data ?? []) as any[]);
 }
 
-/** The order's totals with the prices typed in the open price fields (same sums the database does). */
+/** The order's discount as a percentage of its subtotal ("10", "12.5"), for the discount field. */
+function discountPercent(o: any) {
+  const subtotal = Number(o.subtotal || 0), discount = Number(o.discount || 0);
+  return subtotal > 0 && discount > 0 ? String(Math.round(discount / subtotal * 10000) / 100) : '0';
+}
+/** The order's totals with the prices and discount % typed in the open fields (same sums the database does). */
 function editedTotals(o: any) {
   const inputs = [...document.querySelectorAll<HTMLInputElement>(`[data-price-order="${o.id}"]`)];
   const subtotal = inputs.reduce((sum, input) => sum + Math.round(Math.max(0, Number(input.value) || 0) * 100) / 100 * Number(input.dataset.qty || 0), 0);
   const discountInput = document.querySelector<HTMLInputElement>(`[data-discount-order="${o.id}"]`);
-  const wanted = discountInput ? Math.round(Math.max(0, Number(discountInput.value) || 0) * 100) / 100 : Number(o.discount || 0);
+  const percent = Math.min(100, Math.max(0, Number(discountInput?.value) || 0));
+  // An untouched discount on unchanged prices keeps its exact amount (no rounding to the percentage).
+  const unchanged = !discountInput || (discountInput.value.trim() === discountInput.dataset.initial && Math.abs(subtotal - Number(o.subtotal || 0)) < 0.005);
+  const wanted = unchanged ? Number(o.discount || 0) : Math.round(subtotal * percent) / 100;
   const discount = Math.min(wanted, subtotal);
   return { inputs, discountInput, subtotal, discount, total: Math.max(0, subtotal - discount) + Number(o.delivery_fee || 0) };
 }
@@ -186,7 +194,7 @@ function showEditedTotals(orderId: string) {
 async function savePrices(orderId: string) {
   const o = orders.find((x) => x.id === orderId);
   if (!o) return;
-  const { inputs, discountInput } = editedTotals(o);
+  const { inputs, discountInput, discount: discountAmount } = editedTotals(o);
   const prices: Record<string, number> = {};
   for (const input of inputs) {
     const value = Number(input.value);
@@ -196,8 +204,8 @@ async function savePrices(orderId: string) {
   let discount: number | null = null;
   if (discountInput) {
     const value = discountInput.value.trim() === '' ? 0 : Number(discountInput.value);
-    if (!Number.isFinite(value) || value < 0) { discountInput.focus(); toast('Enter a valid discount (0 or more).', 'error'); return; }
-    discount = Math.round(value * 100) / 100;
+    if (!Number.isFinite(value) || value < 0 || value > 100) { discountInput.focus(); toast('Enter a discount between 0 and 100%.', 'error'); return; }
+    discount = discountAmount;
   }
   const button = document.querySelector<HTMLButtonElement>(`[data-save-prices="${orderId}"]`);
   if (button) button.disabled = true;
@@ -393,6 +401,8 @@ init();
 .order-actions{display:flex;gap:8px;flex-wrap:wrap}
 .price-input{width:110px;min-height:38px;padding:6px 10px;text-align:right}
 .items-table .discount-edit td{color:var(--ink)}
+.percent-field{display:inline-flex;align-items:center;gap:6px;margin-left:10px;vertical-align:middle}
+.percent-field .price-input{width:90px}
 .price-edit-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--brand-primary) 8%,var(--surface))}
 .price-edit-bar span{flex:1 1 240px;color:var(--muted);font-size:.9rem;font-weight:600}
 .price-edit-bar .button{min-height:40px;padding:0 16px;font-size:.9rem}
