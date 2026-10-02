@@ -67,6 +67,9 @@ const params = new URLSearchParams(location.search);
 let statusFilter = STATUSES.includes(params.get('status') || '') ? String(params.get('status')) : 'all';
 let visible = PAGE_SIZE;
 const expanded = new Set<string>();
+// Orders whose prices are being edited, and prices typed but not saved yet (kept when the list redraws).
+const editingPrices = new Set<string>();
+const draftPrices = new Map<string, string>();
 $<HTMLInputElement>('#order-search').value = params.get('q') || '';
 
 // wa.me needs an international number; Lebanese numbers without a country code get 961.
@@ -104,7 +107,11 @@ function renderTabs() {
 
 function detailsHtml(o: any) {
   const items = itemsByOrder.get(o.id);
-  const itemRows = items ? (items.length ? items.map((i) => `<tr><td>${esc(i.product_name)}${i.variant_name ? `<small> · ${esc(i.variant_name)}</small>` : ''}${i.sku ? `<br><small>SKU ${esc(i.sku)}</small>` : ''}</td><td>${Number(i.quantity)}</td><td>${money(i.unit_price)}</td><td>${money(i.total_price)}</td></tr>`).join('') : '<tr><td colspan="4">No items recorded.</td></tr>') : '<tr><td colspan="4">Loading items…</td></tr>';
+  const editing = editingPrices.has(o.id) && Boolean(items?.length);
+  const priceCell = (i: any) => editing
+    ? `<label class="sr-only" for="price-${i.id}">Price for ${esc(i.product_name)}</label><input id="price-${i.id}" class="admin-input price-input" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(draftPrices.get(i.id) ?? Number(i.unit_price).toFixed(2))}" data-price-item="${i.id}" data-price-order="${o.id}" data-qty="${Number(i.quantity)}" />`
+    : money(i.unit_price);
+  const itemRows = items ? (items.length ? items.map((i) => `<tr><td>${esc(i.product_name)}${i.variant_name ? `<small> · ${esc(i.variant_name)}</small>` : ''}${i.sku ? `<br><small>SKU ${esc(i.sku)}</small>` : ''}</td><td>${Number(i.quantity)}</td><td>${priceCell(i)}</td><td data-line-total="${i.id}">${money(i.total_price)}</td></tr>`).join('') : '<tr><td colspan="4">No items recorded.</td></tr>') : '<tr><td colspan="4">Loading items…</td></tr>';
   return `<div class="order-details">
     <div class="order-detail-grid">
       <div><h3>Customer</h3><p><strong>${esc(o.customer_name)}</strong></p><p><a href="tel:${esc(o.customer_phone)}">${esc(o.customer_phone)}</a></p>${o.customer_email ? `<p><a href="mailto:${esc(o.customer_email)}">${esc(o.customer_email)}</a></p>` : ''}</div>
@@ -112,9 +119,13 @@ function detailsHtml(o: any) {
       <div><h3>Notes</h3><p>${o.notes ? esc(o.notes) : '<span class="muted">No notes</span>'}</p></div>
     </div>
     <table class="items-table"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody>
-    <tfoot><tr><td colspan="3">Subtotal</td><td>${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr>${Number(o.discount) ? `<tr><td colspan="3">Discount${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</td><td>−${money(o.discount)}</td></tr>` : ''}<tr class="grand"><td colspan="3">Total (cash on delivery)</td><td>${money(o.total)}</td></tr></tfoot></table>
+    <tfoot><tr><td colspan="3">Subtotal</td><td data-sum="subtotal">${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr>${editing
+      ? `<tr class="discount-edit"><td colspan="3"><label for="discount-${o.id}">Discount${o.coupon_code ? ` (code ${esc(o.coupon_code)})` : ''} in $</label></td><td><input id="discount-${o.id}" class="admin-input price-input" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(draftPrices.get(`discount:${o.id}`) ?? Number(o.discount || 0).toFixed(2))}" data-discount-order="${o.id}" /></td></tr>`
+      : Number(o.discount) ? `<tr><td colspan="3">Discount${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</td><td data-sum="discount">−${money(o.discount)}</td></tr>` : ''}<tr class="grand"><td colspan="3">Total (cash on delivery)</td><td data-sum="total">${money(o.total)}</td></tr></tfoot></table>
+    ${editing ? `<div class="price-edit-bar"><span>Change the prices or the discount, then save. The subtotal and total update; the delivery fee stays the same.</span><button type="button" class="button" data-save-prices="${o.id}">Save</button><button type="button" class="button secondary-button" data-cancel-prices="${o.id}">Cancel</button></div>` : ''}
     <div class="order-actions">
       <a class="button whatsapp-action" target="_blank" rel="noopener" href="https://api.whatsapp.com/send?phone=${whatsappNumber(o.customer_phone)}&text=${encodeURIComponent(whatsappMessage(o))}">💬 Message on WhatsApp</a>
+      ${!editing && items?.length ? `<button class="button secondary-button" type="button" data-edit-prices="${o.id}">✏️ Edit prices &amp; discount</button>` : ''}
       <button class="button secondary-button" type="button" data-print="${o.id}">🧾 Print invoice</button>
       <button class="button secondary-button" type="button" data-copy-link="${o.id}">🔗 Copy tracking link</button>
     </div>
@@ -142,12 +153,67 @@ function render() {
     ${expanded.has(o.id) ? detailsHtml(o) : ''}
   </article>`).join('') : '<div class="empty-state"><h2>No orders match</h2><p>Try another status, search or date range.</p></div>';
   $('#load-more').hidden = list.length <= visible;
+  for (const id of editingPrices) showEditedTotals(id);
 }
 
 async function loadItems(orderId: string) {
   if (itemsByOrder.has(orderId)) return;
-  const r = await supabase.from('order_items').select('order_id,product_name,variant_name,sku,quantity,unit_price,total_price').eq('order_id', orderId);
+  const r = await supabase.from('order_items').select('id,order_id,product_name,variant_name,sku,quantity,unit_price,total_price').eq('order_id', orderId).order('created_at');
   itemsByOrder.set(orderId, (r.data ?? []) as any[]);
+}
+
+/** The order's totals with the prices typed in the open price fields (same sums the database does). */
+function editedTotals(o: any) {
+  const inputs = [...document.querySelectorAll<HTMLInputElement>(`[data-price-order="${o.id}"]`)];
+  const subtotal = inputs.reduce((sum, input) => sum + Math.round(Math.max(0, Number(input.value) || 0) * 100) / 100 * Number(input.dataset.qty || 0), 0);
+  const discountInput = document.querySelector<HTMLInputElement>(`[data-discount-order="${o.id}"]`);
+  const wanted = discountInput ? Math.round(Math.max(0, Number(discountInput.value) || 0) * 100) / 100 : Number(o.discount || 0);
+  const discount = Math.min(wanted, subtotal);
+  return { inputs, discountInput, subtotal, discount, total: Math.max(0, subtotal - discount) + Number(o.delivery_fee || 0) };
+}
+function showEditedTotals(orderId: string) {
+  const o = orders.find((x) => x.id === orderId);
+  const card = document.querySelector(`[data-order="${orderId}"]`);
+  if (!o || !card) return;
+  const t = editedTotals(o);
+  for (const input of t.inputs) {
+    const cell = card.querySelector(`[data-line-total="${input.dataset.priceItem}"]`);
+    if (cell) cell.textContent = money((Math.max(0, Number(input.value) || 0)) * Number(input.dataset.qty || 0));
+  }
+  const set = (key: string, text: string) => { const el = card.querySelector(`[data-sum="${key}"]`); if (el) el.textContent = text; };
+  set('subtotal', money(t.subtotal)); set('discount', `−${money(t.discount)}`); set('total', money(t.total));
+}
+async function savePrices(orderId: string) {
+  const o = orders.find((x) => x.id === orderId);
+  if (!o) return;
+  const { inputs, discountInput } = editedTotals(o);
+  const prices: Record<string, number> = {};
+  for (const input of inputs) {
+    const value = Number(input.value);
+    if (input.value.trim() === '' || !Number.isFinite(value) || value < 0) { input.focus(); toast('Enter a valid price (0 or more).', 'error'); return; }
+    prices[input.dataset.priceItem!] = Math.round(value * 100) / 100;
+  }
+  let discount: number | null = null;
+  if (discountInput) {
+    const value = discountInput.value.trim() === '' ? 0 : Number(discountInput.value);
+    if (!Number.isFinite(value) || value < 0) { discountInput.focus(); toast('Enter a valid discount (0 or more).', 'error'); return; }
+    discount = Math.round(value * 100) / 100;
+  }
+  const button = document.querySelector<HTMLButtonElement>(`[data-save-prices="${orderId}"]`);
+  if (button) button.disabled = true;
+  const r = await supabase.rpc('admin_set_order_prices', { p_order_id: orderId, p_prices: prices, p_discount: discount });
+  if (r.error) {
+    if (button) button.disabled = false;
+    toast(/Could not find the function/i.test(r.error.message) ? 'Run supabase/order_price_edit.sql in Supabase first.' : `Could not save prices: ${r.error.message}`, 'error');
+    return;
+  }
+  Object.assign(o, r.data);
+  const items = itemsByOrder.get(orderId) ?? [];
+  for (const item of items) if (item.id in prices) { item.unit_price = prices[item.id]; item.total_price = prices[item.id] * Number(item.quantity); draftPrices.delete(item.id); }
+  editingPrices.delete(orderId);
+  draftPrices.delete(`discount:${orderId}`);
+  render();
+  toast(`${o.order_number} saved. New total ${money(o.total)}.`);
 }
 
 async function setStatus(id: string, status: string) {
@@ -233,6 +299,12 @@ document.addEventListener('click', async (event) => {
   if (toggle) { const id = toggle.dataset.toggle!; if (expanded.has(id)) expanded.delete(id); else { expanded.add(id); render(); await loadItems(id); } render(); return; }
   const confirmBtn = target?.closest<HTMLElement>('[data-confirm]');
   if (confirmBtn) { await setStatus(confirmBtn.dataset.confirm!, 'confirmed'); return; }
+  const editPrices = target?.closest<HTMLElement>('[data-edit-prices]');
+  if (editPrices) { editingPrices.add(editPrices.dataset.editPrices!); render(); document.querySelector<HTMLInputElement>(`[data-price-order="${editPrices.dataset.editPrices}"]`)?.focus(); return; }
+  const cancelPrices = target?.closest<HTMLElement>('[data-cancel-prices]');
+  if (cancelPrices) { const id = cancelPrices.dataset.cancelPrices!; editingPrices.delete(id); for (const item of itemsByOrder.get(id) ?? []) draftPrices.delete(item.id); draftPrices.delete(`discount:${id}`); render(); return; }
+  const savePricesBtn = target?.closest<HTMLElement>('[data-save-prices]');
+  if (savePricesBtn) { await savePrices(savePricesBtn.dataset.savePrices!); return; }
   const print = target?.closest<HTMLElement>('[data-print]');
   if (print) { const o = orders.find((x) => x.id === print.dataset.print); if (o) { await loadItems(o.id); printInvoice(o); } return; }
   const copy = target?.closest<HTMLElement>('[data-copy-link]');
@@ -241,6 +313,17 @@ document.addEventListener('click', async (event) => {
 document.addEventListener('change', (event) => {
   const select = event.target instanceof HTMLSelectElement && event.target.dataset.status ? event.target : null;
   if (select) setStatus(select.dataset.status!, select.value);
+});
+document.addEventListener('input', (event) => {
+  const input = event.target instanceof HTMLInputElement && event.target.dataset.priceOrder ? event.target : null;
+  if (input) { draftPrices.set(input.dataset.priceItem!, input.value); showEditedTotals(input.dataset.priceOrder!); }
+  const discountInput = event.target instanceof HTMLInputElement && event.target.dataset.discountOrder ? event.target : null;
+  if (discountInput) { draftPrices.set(`discount:${discountInput.dataset.discountOrder}`, discountInput.value); showEditedTotals(discountInput.dataset.discountOrder!); }
+});
+document.addEventListener('keydown', (event) => {
+  const input = event.target instanceof HTMLInputElement ? event.target : null;
+  const orderId = input?.dataset.priceOrder || input?.dataset.discountOrder;
+  if (orderId && event.key === 'Enter') { event.preventDefault(); savePrices(orderId); }
 });
 ['#order-search', '#date-from', '#date-to', '#order-sort'].forEach((sel) => $(sel).addEventListener('input', () => { visible = PAGE_SIZE; render(); }));
 $('#load-more').addEventListener('click', () => { visible += PAGE_SIZE; render(); });
@@ -308,6 +391,11 @@ init();
 .items-table tfoot td{border-bottom:0;padding-top:6px;padding-bottom:6px;color:var(--muted);font-weight:700}
 .items-table tfoot .grand td{padding-top:10px;color:var(--ink);font-size:1.05rem;font-weight:900;border-top:1px solid var(--line)}
 .order-actions{display:flex;gap:8px;flex-wrap:wrap}
+.price-input{width:110px;min-height:38px;padding:6px 10px;text-align:right}
+.items-table .discount-edit td{color:var(--ink)}
+.price-edit-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--brand-primary) 8%,var(--surface))}
+.price-edit-bar span{flex:1 1 240px;color:var(--muted);font-size:.9rem;font-weight:600}
+.price-edit-bar .button{min-height:40px;padding:0 16px;font-size:.9rem}
 .order-actions .button{min-height:42px;padding:0 16px;font-size:.9rem}
 .whatsapp-action{background:#25d366!important;box-shadow:0 3px 0 #1a9e4b!important}
 .load-more-wrap{display:flex;justify-content:center;margin-top:18px}
