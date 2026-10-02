@@ -1,8 +1,17 @@
 ---
 /**
- * Admin → Backup (owners only): download everything the store has (products, orders, customers,
- * content, settings…) as one JSON file, or any single table as an Excel sheet.
- * Nothing leaves the browser except the download itself.
+ * Admin → Backup (owners only).
+ *
+ *  - Download backup: one .zip file with every table (products, options, photos list, categories,
+ *    orders, customers, discount codes, pages, settings…) in data.json, plus every picture from
+ *    storage (product, category, banner and branding pictures) in photos/.
+ *  - Restore: open a backup (.zip, or the older .json), compare it with the store, then put the rows
+ *    back (added if missing, overwritten if changed; nothing added since the backup is deleted) and
+ *    upload pictures that are missing.
+ *  - Export one table to Excel.
+ *
+ * Everything happens in the browser with the admin's own rights; Supabase's free plan has no
+ * downloadable backups, so this is the store's own copy.
  */
 import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
@@ -17,22 +26,40 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
     <div class="admin-head">
       <div>
         <p class="eyebrow">Admin</p>
-        <h1>Backup & export</h1>
-        <p>Keep a copy of your store on your computer. We suggest a full backup once a week.</p>
+        <h1>Backup & restore</h1>
+        <p>Keep a copy of your store on your computer, and put it back if something goes wrong.</p>
       </div>
     </div>
     <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
     <div id="guard" class="empty-state">Checking admin access…</div>
 
     <div id="app" hidden>
+      <p id="last-backup" class="backup-reminder"></p>
       <div class="cms-layout">
         <section class="admin-panel">
-          <h2>Full backup</h2>
-          <p class="cms-help">One file with every table: products, options, photos, categories, orders, customers, discount codes, delivery fees, pages, banners, reviews, SEO, settings, stock history and the activity log. Keep it somewhere safe: it contains customer details.</p>
-          <div class="cms-actions" style="margin-top:14px"><button id="full" class="button" type="button">Download full backup (.json)</button></div>
-          <p id="full-status" class="cms-help" role="status" style="margin-top:10px"></p>
-          <p class="cms-help" style="margin-top:14px">Supabase also keeps its own daily backups of the database (Project → Database → Backups).</p>
+          <h2>1. Download a backup</h2>
+          <p class="cms-help">One .zip file with all your store data (products, options, categories, orders, customers, discount codes, delivery fees, pages, banners, reviews, SEO and settings) and all your pictures. Keep it somewhere safe, like Google Drive: it contains customer details. We suggest once a week.</p>
+          <label class="backup-check"><input id="with-photos" type="checkbox" checked /> Include pictures <small class="muted">(bigger file, but a complete copy)</small></label>
+          <div class="cms-actions" style="margin-top:14px"><button id="full" class="button" type="button">Download backup (.zip)</button></div>
+          <div class="backup-progress" id="full-progress" hidden><span></span></div>
+          <p id="full-status" class="cms-help" role="status"></p>
         </section>
+
+        <section class="admin-panel">
+          <h2>2. Restore from a backup</h2>
+          <p class="cms-help">Choose a backup file to see what is in it. Nothing changes until you press <strong>Restore</strong>. Restoring puts back everything from the backup (deleted items come back, changed items go back to how they were). Things added after the backup stay.</p>
+          <div class="cms-actions" style="margin-top:10px"><input id="restore-file" type="file" accept=".zip,.json,application/zip,application/json" /></div>
+          <div id="restore-preview" hidden>
+            <p id="restore-info" class="cms-help"></p>
+            <div class="backup-table-wrap"><table class="backup-table"><colgroup><col style="width:38px" /><col /><col style="width:72px" /><col style="width:64px" /></colgroup><thead><tr><th></th><th>What</th><th>Backup</th><th>Now</th></tr></thead><tbody id="restore-rows"></tbody></table></div>
+            <label class="backup-check" id="restore-photos-line"><input id="restore-photos" type="checkbox" checked /> Put back pictures that are missing (<span id="restore-photo-count">0</span> in the backup)</label>
+            <div class="cms-actions" style="margin-top:12px"><button id="restore" class="button restore-button" type="button">Restore</button><button id="restore-cancel" class="button secondary-button" type="button">Cancel</button></div>
+          </div>
+          <div class="backup-progress" id="restore-progress" hidden><span></span></div>
+          <p id="restore-status" class="cms-help" role="status"></p>
+          <div id="restore-errors" class="import-errors" hidden></div>
+        </section>
+
         <section class="admin-panel">
           <h2>Export one table to Excel</h2>
           <div id="tables" class="cms-list"></div>
@@ -46,20 +73,38 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 import { startAdmin, esc, toast, type Db } from '../../scripts/admin-access';
 import { exportXlsx } from '../../scripts/table-export';
 
-// [table, label, order column]
-const TABLES: Array<[string, string, string]> = [
-  ['products', 'Products', 'created_at'], ['product_variants', 'Product options', 'created_at'], ['product_images', 'Product photos', 'created_at'],
-  ['categories', 'Categories', 'sort_order'], ['product_categories', 'Product ↔ category links', 'created_at'],
-  ['orders', 'Orders', 'created_at'], ['order_items', 'Order items', 'created_at'], ['customer_profiles', 'Customer profiles', 'created_at'],
-  ['expenses', 'Expenses', 'spent_on'], ['coupons', 'Discount codes', 'created_at'], ['delivery_zones', 'Delivery fees', 'governorate'],
-  ['pages', 'Pages', 'sort_order'], ['banners', 'Home banners', 'sort_order'], ['reviews', 'Reviews', 'created_at'],
-  ['seo_pages', 'SEO pages', 'path_key'], ['store_settings', 'Store settings', 'id'], ['stock_movements', 'Stock history', 'created_at'],
-  ['admin_activity', 'Activity log', 'created_at']
+// Everything in a backup: [table, label, order column, primary key]. Restored in this order, so
+// rows that others point to (categories, products…) come first.
+const TABLES: Array<[string, string, string, string]> = [
+  ['store_settings', 'Store settings', 'id', 'id'],
+  ['categories', 'Categories', 'sort_order', 'id'],
+  ['products', 'Products', 'created_at', 'id'],
+  ['product_variants', 'Product options', 'created_at', 'id'],
+  ['product_images', 'Product photos (list)', 'created_at', 'id'],
+  ['product_categories', 'Product ↔ category links', 'product_id', 'product_id,category_id'],
+  ['coupons', 'Discount codes', 'created_at', 'id'],
+  ['delivery_zones', 'Delivery fees', 'governorate', 'governorate'],
+  ['pages', 'Pages', 'sort_order', 'id'],
+  ['banners', 'Home banners', 'sort_order', 'id'],
+  ['seo_pages', 'SEO pages', 'path_key', 'id'],
+  ['expenses', 'Expenses', 'spent_on', 'id'],
+  ['orders', 'Orders', 'created_at', 'id'],
+  ['order_items', 'Order items', 'created_at', 'id'],
+  ['reviews', 'Reviews', 'created_at', 'id'],
+  // Kept in the backup for reference, never written back: customers' own profiles (only the customer
+  // may change theirs; they are re-saved at their next checkout), old product addresses (filled
+  // automatically), history and logs.
+  ['customer_profiles', 'Customer profiles', 'created_at', ''],
+  ['product_slug_history', 'Old product addresses', 'old_slug', ''],
+  ['stock_movements', 'Stock history', 'created_at', ''],
+  ['admin_activity', 'Activity log', 'created_at', '']
 ];
+const BUCKET = 'product-images';
+const LAST_KEY = 'ct-last-backup';
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
 let supabase: Db;
 
-/** Reads a whole table, 1000 rows at a time. Returns null when the table does not exist yet. */
+/** Reads a whole table, 1000 rows at a time. Returns null when the table does not exist or cannot be read. */
 async function readAll(table: string, order: string): Promise<any[] | null> {
   const rows: any[] = [];
   for (let from = 0; ; from += 1000) {
@@ -71,29 +116,224 @@ async function readAll(table: string, order: string): Promise<any[] | null> {
 }
 const stamp = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
 const cell = (v: unknown) => v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : typeof v === 'number' ? v : String(v);
+const progress = (id: string, done: number, total: number) => {
+  const box = $(id); box.hidden = total === 0;
+  (box.firstElementChild as HTMLElement).style.width = `${total ? Math.round((done / total) * 100) : 0}%`;
+};
+const download = (blob: Blob, name: string) => {
+  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = name;
+  document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+};
 
+/** Every file in the pictures storage (folders are walked one by one). */
+async function listPhotos(prefix = ''): Promise<string[]> {
+  const files: string[] = [];
+  for (let offset = 0; ; offset += 1000) {
+    const r = await supabase.storage.from(BUCKET).list(prefix, { limit: 1000, offset, sortBy: { column: 'name', order: 'asc' } });
+    if (r.error) throw new Error(r.error.message);
+    const items = r.data ?? [];
+    for (const item of items) {
+      const path = prefix ? `${prefix}/${item.name}` : item.name;
+      if (item.id) { if (item.name !== '.emptyFolderPlaceholder') files.push(path); }
+      else files.push(...(await listPhotos(path)));
+    }
+    if (items.length < 1000) return files;
+  }
+}
+
+function showLastBackup() {
+  let last = 0;
+  try { last = Number(localStorage.getItem(LAST_KEY) || 0); } catch {}
+  const box = $('#last-backup');
+  if (!last) { box.textContent = 'No backup downloaded from this computer yet.'; box.className = 'backup-reminder warn'; return; }
+  const days = Math.floor((Date.now() - last) / 86400000);
+  box.textContent = `Last backup from this computer: ${days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`} (${new Date(last).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}).`;
+  box.className = `backup-reminder${days >= 7 ? ' warn' : ' ok'}`;
+}
+
+// ---------- 1. Download ----------
 $('#full').addEventListener('click', async () => {
   const button = $<HTMLButtonElement>('#full'); button.disabled = true;
   const status = $('#full-status');
-  const backup: Record<string, unknown> = { store: 'Clever Toys', created_at: new Date().toISOString(), tables: {} };
-  let total = 0;
-  for (const [table, label, order] of TABLES) {
-    status.textContent = `Reading ${label}…`;
-    const rows = await readAll(table, order);
-    if (rows) { (backup.tables as Record<string, unknown[]>)[table] = rows; total += rows.length; }
+  const withPhotos = $<HTMLInputElement>('#with-photos').checked;
+  try {
+    const { zipSync, strToU8 } = await import('fflate');
+    const data: Record<string, unknown> = { store: 'Clever Toys', format: 2, created_at: new Date().toISOString(), tables: {}, photos: [] };
+    let total = 0;
+    for (let i = 0; i < TABLES.length; i++) {
+      const [table, label, order] = TABLES[i];
+      status.textContent = `Reading ${label}…`;
+      progress('#full-progress', i, TABLES.length + (withPhotos ? 1 : 0));
+      const rows = await readAll(table, order);
+      if (rows) { (data.tables as Record<string, unknown[]>)[table] = rows; total += rows.length; }
+    }
+    const files: Record<string, Uint8Array> = {};
+    let photoCount = 0, photoBytes = 0, failed = 0;
+    if (withPhotos) {
+      status.textContent = 'Listing pictures…';
+      const paths = await listPhotos();
+      data.photos = paths;
+      for (let i = 0; i < paths.length; i += 6) {
+        // A few pictures at a time.
+        await Promise.all(paths.slice(i, i + 6).map(async (path) => {
+          try {
+            const r = await supabase.storage.from(BUCKET).download(path);
+            if (r.error || !r.data) throw new Error('missing');
+            const bytes = new Uint8Array(await r.data.arrayBuffer());
+            files[`photos/${path}`] = bytes; photoCount++; photoBytes += bytes.length;
+          } catch { failed++; }
+        }));
+        status.textContent = `Downloading pictures… ${Math.min(i + 6, paths.length)} of ${paths.length}`;
+        progress('#full-progress', TABLES.length + (i + 6) / Math.max(1, paths.length), TABLES.length + 1);
+      }
+    }
+    files['data.json'] = strToU8(JSON.stringify(data));
+    files['READ ME.txt'] = strToU8(`Clever Toys backup, ${new Date().toLocaleString('en-GB')}\n\ndata.json: all store data (${total} rows).\nphotos/: ${photoCount} pictures.\n\nTo put it back: Admin → Backup → Restore from a backup, and choose this .zip file.\nKeep this file private: it contains customer names, phone numbers and addresses.\n`);
+    status.textContent = 'Making the .zip file…';
+    // Pictures are already compressed (WebP/JPEG), so they are stored as they are.
+    const zipped = zipSync(Object.fromEntries(Object.entries(files).map(([name, bytes]) => [name, [bytes, { level: name.startsWith('photos/') ? 0 : 6 }]])) as any);
+    download(new Blob([zipped as BlobPart], { type: 'application/zip' }), `clever-toys-backup-${stamp()}.zip`);
+    try { localStorage.setItem(LAST_KEY, String(Date.now())); } catch {}
+    showLastBackup();
+    status.textContent = `Done: ${total.toLocaleString()} rows from ${Object.keys(data.tables as object).length} tables${withPhotos ? ` and ${photoCount} pictures (${(photoBytes / 1048576).toFixed(1)} MB)` : ''}.${failed ? ` ${failed} pictures could not be downloaded.` : ''}`;
+    toast('Backup downloaded.');
+  } catch (error) {
+    status.textContent = `Backup failed: ${error instanceof Error ? error.message : 'unknown error'}`;
+    toast('Backup failed.', 'error');
+  } finally {
+    progress('#full-progress', 0, 0);
+    button.disabled = false;
   }
-  const blob = new Blob([JSON.stringify(backup, null, 1)], { type: 'application/json' });
-  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `clever-toys-backup-${stamp()}.json`;
-  document.body.appendChild(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(link.href), 2000);
-  status.textContent = `Done: ${total.toLocaleString()} rows from ${Object.keys(backup.tables as object).length} tables.`;
-  toast('Backup downloaded.');
-  button.disabled = false;
 });
 
+// ---------- 2. Restore ----------
+type Backup = { createdAt: string; tables: Record<string, any[]>; photos: Record<string, Uint8Array> };
+let pending: Backup | null = null;
+
+async function readBackupFile(file: File): Promise<Backup> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b;
+  let json: any;
+  const photos: Record<string, Uint8Array> = {};
+  if (isZip) {
+    const { unzipSync, strFromU8 } = await import('fflate');
+    const files = unzipSync(bytes);
+    if (!files['data.json']) throw new Error('This .zip is not a Clever Toys backup (no data.json inside).');
+    json = JSON.parse(strFromU8(files['data.json']));
+    for (const [name, data] of Object.entries(files)) if (name.startsWith('photos/') && data.length) photos[name.slice(7)] = data;
+  } else {
+    json = JSON.parse(new TextDecoder().decode(bytes));
+  }
+  if (!json || typeof json.tables !== 'object') throw new Error('This file is not a Clever Toys backup.');
+  return { createdAt: String(json.created_at || ''), tables: json.tables, photos };
+}
+
+$('#restore-file').addEventListener('change', async () => {
+  const file = $<HTMLInputElement>('#restore-file').files?.[0];
+  $('#restore-preview').hidden = true; $('#restore-errors').hidden = true; pending = null;
+  if (!file) return;
+  const status = $('#restore-status');
+  status.textContent = 'Reading the backup…';
+  try {
+    const backup = await readBackupFile(file);
+    const restorable = TABLES.filter(([table, , , pk]) => pk && Array.isArray(backup.tables[table]));
+    status.textContent = 'Comparing with the store…';
+    const counts = await Promise.all(restorable.map(async ([table]) => {
+      const r = await supabase.from(table).select('*', { count: 'exact', head: true });
+      return r.error ? null : r.count ?? 0;
+    }));
+    $('#restore-rows').innerHTML = restorable.map(([table, label], i) => {
+      const inBackup = backup.tables[table].length;
+      const now = counts[i];
+      const diff = now === null ? '' : inBackup > now ? 'more' : inBackup < now ? 'less' : '';
+      return `<tr><td><input type="checkbox" data-restore-table="${esc(table)}" checked aria-label="Restore ${esc(label)}" /></td><td>${esc(label)}</td><td><strong>${inBackup}</strong></td><td class="${diff}">${now === null ? '—' : now}</td></tr>`;
+    }).join('');
+    const photoCount = Object.keys(backup.photos).length;
+    $('#restore-photo-count').textContent = String(photoCount);
+    $('#restore-photos-line').hidden = photoCount === 0;
+    const when = backup.createdAt ? new Date(backup.createdAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown date';
+    $('#restore-info').innerHTML = `Backup from <strong>${esc(when)}</strong>. Untick anything you don't want to put back.`;
+    $('#restore-preview').hidden = false;
+    status.textContent = '';
+    pending = backup;
+  } catch (error) {
+    status.textContent = error instanceof Error ? error.message : 'The file could not be read.';
+  }
+});
+
+$('#restore-cancel').addEventListener('click', () => {
+  pending = null; $('#restore-preview').hidden = true;
+  $<HTMLInputElement>('#restore-file').value = '';
+  $('#restore-status').textContent = 'Cancelled. Nothing was changed.';
+});
+
+/** Writes rows back (added if missing, overwritten if they exist). A failing batch is retried row by row. */
+async function putBack(table: string, pk: string, rows: any[], errors: string[]) {
+  let ok = 0;
+  for (let i = 0; i < rows.length; i += 200) {
+    const batch = rows.slice(i, i + 200);
+    const r = await supabase.from(table).upsert(batch, { onConflict: pk });
+    if (!r.error) { ok += batch.length; continue; }
+    for (const row of batch) {
+      const one = await supabase.from(table).upsert(row, { onConflict: pk });
+      if (one.error) { if (errors.length < 60) errors.push(`${table}: ${one.error.message}`); } else ok++;
+    }
+  }
+  return ok;
+}
+
+$('#restore').addEventListener('click', async () => {
+  if (!pending) return;
+  const chosen = new Set([...document.querySelectorAll<HTMLInputElement>('[data-restore-table]')].filter((c) => c.checked).map((c) => c.dataset.restoreTable!));
+  const withPhotos = $<HTMLInputElement>('#restore-photos').checked && Object.keys(pending.photos).length > 0;
+  if (!chosen.size && !withPhotos) { toast('Tick at least one thing to restore.', 'error'); return; }
+  if (!confirm('Restore this backup?\n\nItems from the backup are put back and changed items go back to how they were in the backup. Things added since then are kept.')) return;
+  const button = $<HTMLButtonElement>('#restore'), cancel = $<HTMLButtonElement>('#restore-cancel');
+  button.disabled = cancel.disabled = true;
+  const status = $('#restore-status'), errors: string[] = [];
+  const steps = TABLES.filter(([table, , , pk]) => pk && chosen.has(table));
+  const results: string[] = [];
+  try {
+    for (let i = 0; i < steps.length; i++) {
+      const [table, label, , pk] = steps[i];
+      status.textContent = `Restoring ${label}…`;
+      progress('#restore-progress', i, steps.length + (withPhotos ? 1 : 0));
+      const ok = await putBack(table, pk, pending.tables[table], errors);
+      results.push(`${label}: ${ok}`);
+    }
+    let photosPut = 0;
+    if (withPhotos) {
+      const existing = new Set(await listPhotos());
+      const missing = Object.entries(pending.photos).filter(([path]) => !existing.has(path));
+      for (let i = 0; i < missing.length; i++) {
+        const [path, data] = missing[i];
+        status.textContent = `Putting back pictures… ${i + 1} of ${missing.length}`;
+        progress('#restore-progress', steps.length + i / Math.max(1, missing.length), steps.length + 1);
+        const type = path.endsWith('.webp') ? 'image/webp' : path.endsWith('.png') ? 'image/png' : path.endsWith('.json') ? 'application/json' : 'image/jpeg';
+        const up = await supabase.storage.from(BUCKET).upload(path, new Blob([data as BlobPart], { type }), { contentType: type, upsert: false, cacheControl: '31536000' });
+        if (up.error) { if (errors.length < 60) errors.push(`picture ${path}: ${up.error.message}`); } else photosPut++;
+      }
+      results.push(`Pictures put back: ${photosPut}`);
+    }
+    status.textContent = `Restore finished. ${results.join(' · ')}${errors.length ? ` · ${errors.length} problem${errors.length === 1 ? '' : 's'}` : ''}`;
+    $('#restore-errors').hidden = !errors.length;
+    $('#restore-errors').innerHTML = errors.length ? '<strong>Not restored</strong>' + errors.map((e) => `<p>${esc(e)}</p>`).join('') : '';
+    toast(errors.length ? 'Restore finished with some problems.' : 'Backup restored.', errors.length ? 'error' : 'success');
+    $('#restore-preview').hidden = true; pending = null; $<HTMLInputElement>('#restore-file').value = '';
+  } catch (error) {
+    status.textContent = `Restore stopped: ${error instanceof Error ? error.message : 'unknown error'}. What was already restored stays.`;
+  } finally {
+    progress('#restore-progress', 0, 0);
+    button.disabled = cancel.disabled = false;
+  }
+});
+
+// ---------- Start ----------
 (async () => {
   const started = await startAdmin('backup', 'Backup');
   if (!started) return;
   supabase = started.supabase;
+  showLastBackup();
   $('#tables').innerHTML = TABLES.map(([table, label]) => `<div class="cms-item"><span class="cms-item-main"><strong>${esc(label)}</strong><small><code>${esc(table)}</code></small></span><button type="button" class="small-button" data-table="${esc(table)}">Excel</button></div>`).join('');
   document.querySelectorAll<HTMLButtonElement>('[data-table]').forEach((b) => b.onclick = async () => {
     const entry = TABLES.find(([t]) => t === b.dataset.table)!;
@@ -107,3 +347,23 @@ $('#full').addEventListener('click', async () => {
   });
 })();
 </script>
+
+<style is:global>
+.backup-reminder{margin:0 0 16px;padding:12px 16px;border-radius:12px;font-weight:700;background:var(--surface-2)}
+.backup-reminder.ok{background:#e7f7ec;color:#166534}
+.backup-reminder.warn{background:#fff7e0;color:#92400e}
+.backup-check{display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:600}
+.backup-progress{height:8px;margin-top:14px;border-radius:999px;background:var(--surface-2);overflow:hidden}
+.backup-progress span{display:block;height:100%;width:0;border-radius:inherit;background:var(--primary,#2563eb);transition:width .3s}
+.backup-table-wrap{max-height:340px;overflow:auto;margin-top:10px;border:1.5px solid var(--line);border-radius:12px}
+.backup-table{width:100%;min-width:0!important;table-layout:fixed;border-collapse:collapse;font-size:.88rem}
+.backup-table input[type=checkbox]{width:auto;min-height:0;margin:0}
+.backup-table td:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.backup-table th{position:sticky;top:0;padding:8px 10px;background:var(--surface-2);text-align:left;font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.backup-table td{padding:8px 10px;border-top:1px solid var(--line)}
+.backup-table td.less{color:#92400e;font-weight:700}
+.backup-table td.more{color:#1d4ed8;font-weight:700}
+.backup-table td:nth-child(n+3),.backup-table th:nth-child(n+3){text-align:right;white-space:nowrap}
+.button.restore-button{background:#dc2626;color:#fff;box-shadow:0 8px 20px rgba(220,38,38,.25)}
+@media (hover:hover){.button.restore-button:hover{background:#b91c1c}}
+</style>
