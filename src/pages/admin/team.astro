@@ -18,6 +18,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <h1>Team</h1>
         <p>Choose who can open this admin panel, and what each person can do.</p>
       </div>
+      <div class="cms-actions"><button id="export-xlsx" class="button secondary-button" type="button">Export Excel</button></div>
     </div>
     <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
     <div id="guard" class="empty-state">Checking admin access…</div>
@@ -82,6 +83,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
+import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 
 type Admin = { user_id: string; email: string; role?: string; added_at: string | null; last_sign_in_at: string | null; is_you: boolean };
 const ROLES: Record<string, string> = { owner: 'Owner', manager: 'Manager', orders: 'Orders staff', content: 'Content editor' };
@@ -194,6 +196,17 @@ async function init() {
   }
 }
 init();
+
+// ---------- Export (Excel) ----------
+document.getElementById('export-xlsx')?.addEventListener('click', async () => {
+  const day = (v: string | null) => (v ? new Date(v).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '');
+  await exportXlsxSheets(exportName('team'), [{
+    name: 'Team',
+    columns: [{ header: 'Email', width: 32 }, { header: 'Role', width: 16 }, { header: 'Added', width: 20 }, { header: 'Last sign-in', width: 20 }],
+    rows: admins.map((a) => [a.email, a.role ? ROLES[a.role] || a.role : 'Owner', day(a.added_at), day(a.last_sign_in_at)])
+  }]);
+  toast(`Exported ${admins.length} team members.`);
+});
 </script>
 
 <style is:global>

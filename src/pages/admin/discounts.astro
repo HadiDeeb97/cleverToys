@@ -24,6 +24,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <h1>Discounts & delivery</h1>
         <p>Discount codes for checkout, and delivery fees for each governorate.</p>
       </div>
+      <div class="cms-actions"><button id="export-xlsx" class="button secondary-button" type="button">Export Excel</button></div>
     </div>
     <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
     <div id="guard" class="empty-state">Checking admin access…</div>
@@ -99,6 +100,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 <script>
 import { startAdmin, esc, money, toast, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 
 type Coupon = { id: string; code: string; description: string | null; discount_type: 'percent' | 'fixed' | 'free_delivery'; value: number; min_subtotal: number; max_uses: number | null; used_count: number; starts_at: string | null; ends_at: string | null; is_active: boolean };
 type Zone = { governorate: string; fee: number; is_active: boolean; eta: string | null };
@@ -278,4 +280,33 @@ document.querySelectorAll<HTMLButtonElement>('[data-tab]').forEach((b) => b.addE
   if (canDelivery) await loadZones();
   if (location.hash === '#delivery' && canDelivery) showTab('delivery');
 })();
+
+// ---------- Export (Excel): discount codes and delivery fees ----------
+document.getElementById('export-xlsx')?.addEventListener('click', async () => {
+  const day = (v: string | null) => (v ? new Date(v).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '');
+  const [z, st] = await Promise.all([
+    supabase.from('delivery_zones').select('*').order('sort_order'),
+    supabase.from('store_settings').select('cod_delivery_price,free_delivery_threshold').eq('id', 'default').maybeSingle()
+  ]);
+  const zones = (z.data ?? []) as Zone[];
+  const type = (c: Coupon) => (c.discount_type === 'percent' ? `${c.value}% off` : c.discount_type === 'fixed' ? `$${c.value} off` : 'Free delivery');
+  const settings = (st.data ?? {}) as { cod_delivery_price?: number; free_delivery_threshold?: number };
+  await exportXlsxSheets(exportName('discounts'), [
+    {
+      name: 'Discount codes',
+      columns: [{ header: 'Code', width: 18 }, { header: 'Description', width: 34 }, { header: 'Discount', width: 16 }, { header: 'Minimum order' }, { header: 'Used', width: 8 }, { header: 'Use limit', width: 10 }, { header: 'Starts', width: 20 }, { header: 'Ends', width: 20 }, { header: 'Status', width: 10 }],
+      rows: coupons.map((c) => [c.code, c.description || '', type(c), Number(c.min_subtotal) || 0, c.used_count, c.max_uses ?? 'No limit', day(c.starts_at), day(c.ends_at), c.is_active ? 'Active' : 'Off'])
+    },
+    {
+      name: 'Delivery fees',
+      columns: [{ header: 'Governorate', width: 22 }, { header: 'Fee', width: 10 }, { header: 'Delivery time', width: 22 }, { header: 'We deliver', width: 12 }],
+      rows: [
+        ...zones.map((row) => [row.governorate, Number(row.fee), row.eta || '', row.is_active ? 'Yes' : 'No']),
+        ['Other governorates (standard fee)', Number(settings.cod_delivery_price ?? 0), '', 'Yes'],
+        [`Free delivery from (order total)`, Number(settings.free_delivery_threshold ?? 0) || 'Off', '', '']
+      ]
+    }
+  ]);
+  toast(`Exported ${coupons.length} codes and ${zones.length} delivery fees.`);
+});
 </script>

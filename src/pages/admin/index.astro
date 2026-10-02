@@ -20,6 +20,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <p id="catalog-summary">Loading catalog…</p>
       </div>
       <div class="quick-actions">
+        <button id="export-catalog" class="button secondary-button" type="button" title="Products (same columns as the import template), options and categories">Export Excel</button>
         <button id="new-product" class="button" type="button">+ Add product</button>
       </div>
     </div>
@@ -137,7 +138,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
 import { smartFilter } from '../../scripts/smart-search';
 import { readSheetPictures, type SheetPicture } from '../../scripts/xlsx-images';
-import { downloadImportTemplate } from '../../scripts/import-template';
+import { downloadImportTemplate, TEMPLATE_HEADERS } from '../../scripts/import-template';
+import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 
 type Row = Record<string, any>;
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -734,6 +736,47 @@ async function replaceProductPhotos(productId: string, name: string, urls: strin
   const unused = ((old.data ?? []) as Row[]).map((r) => String(r.image_url)).filter((u) => !urls.includes(u) && u.includes(marker)).map((u) => decodeURIComponent(u.slice(u.indexOf(marker) + marker.length)));
   if (unused.length) supabase.storage.from('product-images').remove(unused).catch(() => {});
 }
+
+// ---------- Export: products (same columns as the import template), options and categories ----------
+// The Products sheet can be edited and imported back (photos are kept as web links).
+$('#export-catalog').addEventListener('click', async () => {
+  const button = $<HTMLButtonElement>('#export-catalog');
+  button.disabled = true;
+  try {
+    const [im, va] = await Promise.all([
+      supabase.from('product_images').select('product_id,image_url,sort_order').order('sort_order'),
+      supabase.from('product_variants').select('*').order('created_at')
+    ]);
+    if (im.error) throw new Error(im.error.message);
+    const photosOf = new Map<string, string[]>();
+    for (const img of (im.data ?? []) as Row[]) { const list = photosOf.get(img.product_id) || []; list.push(img.image_url); photosOf.set(img.product_id, list); }
+    const catName = new Map(categories.map((c) => [c.id, c.name]));
+    const productName = new Map(products.map((p) => [p.id, p.name]));
+    const productRows = products.map((p) => {
+      const photos = [...new Set([p.primary_image_url, ...(photosOf.get(p.id) || [])].filter(Boolean))];
+      const cats = [...new Set([p.category_id, ...links.filter((l) => l.product_id === p.id).map((l) => l.category_id)].filter(Boolean))].map((id) => catName.get(id)).filter(Boolean).join(', ');
+      const value: Record<string, unknown> = {
+        ...p, categories: cats, is_active: p.is_active !== false, is_featured: Boolean(p.is_featured),
+        image_1: photos[0] || '', image_2: photos[1] || '', image_3: photos[2] || '', image_4: photos[3] || '', image_5: photos[4] || ''
+      };
+      return TEMPLATE_HEADERS.map((h) => { const v = value[h]; return typeof v === 'number' ? v : typeof v === 'boolean' ? (v ? 'TRUE' : 'FALSE') : v == null ? '' : String(v); });
+    });
+    const variantRows = ((va.data ?? []) as Row[]).map((v) => [productName.get(v.product_id) || '', v.name, v.sku || '', num(v.price), num(v.sale_price), num(v.cost_price), int(v.stock_quantity, 0), v.is_active === false ? 'Hidden' : 'Visible']);
+    const counts = new Map<string, number>();
+    for (const l of links) counts.set(l.category_id, (counts.get(l.category_id) || 0) + 1);
+    await exportXlsxSheets(exportName('products'), [
+      { name: 'Products', columns: TEMPLATE_HEADERS.map((h) => ({ header: h, width: /description/.test(h) ? 50 : /^image_/.test(h) ? 40 : h === 'name' || h === 'categories' || h === 'seo_title' ? 30 : 14 })), rows: productRows },
+      { name: 'Options', columns: [{ header: 'Product', width: 32 }, { header: 'Option', width: 22 }, { header: 'SKU' }, { header: 'Price' }, { header: 'Sale price' }, { header: 'Cost price' }, { header: 'Stock' }, { header: 'Status' }], rows: variantRows },
+      { name: 'Categories', columns: [{ header: 'Order', width: 8 }, { header: 'Name', width: 28 }, { header: 'Slug', width: 26 }, { header: 'Description', width: 50 }, { header: 'Products', width: 10 }, { header: 'Status', width: 10 }, { header: 'Photo', width: 40 }],
+        rows: categories.map((c, i) => [i + 1, c.name, c.slug, c.description || '', counts.get(c.id) || 0, c.is_active === false ? 'Hidden' : 'Visible', c.image_url || '']) }
+    ]);
+    toast(`Exported ${products.length} products, ${variantRows.length} options and ${categories.length} categories.`);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : 'Export failed.', 'error');
+  } finally {
+    button.disabled = false;
+  }
+});
 
 // ---------- Import: read → preview → confirm ----------
 type ImportItem = {

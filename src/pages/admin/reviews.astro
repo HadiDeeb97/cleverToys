@@ -19,6 +19,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <h1>Reviews</h1>
         <p>Approve what customers write before it appears on the product page.</p>
       </div>
+      <div class="cms-actions"><button id="export-xlsx" class="button secondary-button" type="button">Export Excel</button></div>
     </div>
     <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
     <div id="guard" class="empty-state">Checking admin access…</div>
@@ -33,6 +34,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 <script>
 import { startAdmin, esc, when, toast, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 
 type Review = { id: string; product_id: string; author_name: string; rating: number; title: string | null; body: string; status: 'pending' | 'approved' | 'hidden'; verified: boolean; admin_reply: string | null; created_at: string; products?: { name: string; slug: string } | null };
 const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -102,6 +104,17 @@ async function load() {
   supabase = started.supabase;
   await load();
 })();
+
+// ---------- Export (Excel) ----------
+document.getElementById('export-xlsx')?.addEventListener('click', async () => {
+  const day = (v: string | null) => (v ? new Date(v).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '');
+  await exportXlsxSheets(exportName('reviews'), [{
+    name: 'Reviews',
+    columns: [{ header: 'Date', width: 20 }, { header: 'Product', width: 30 }, { header: 'Name', width: 18 }, { header: 'Rating', width: 8 }, { header: 'Title', width: 26 }, { header: 'Review', width: 60 }, { header: 'Status', width: 11 }, { header: 'Verified buyer', width: 14 }, { header: 'Your reply', width: 40 }],
+    rows: reviews.map((r) => [day(r.created_at), r.products?.name || '', r.author_name, r.rating, r.title || '', r.body, r.status, r.verified ? 'Yes' : 'No', r.admin_reply || ''])
+  }]);
+  toast(`Exported ${reviews.length} reviews.`);
+});
 </script>
 
 <style is:global>

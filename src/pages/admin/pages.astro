@@ -20,7 +20,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <h1>Pages</h1>
         <p>Write and update the store's information pages. No code needed.</p>
       </div>
-      <div class="cms-actions"><button id="new-page" class="button" type="button">+ New page</button></div>
+      <div class="cms-actions"><button id="export-xlsx" class="button secondary-button" type="button">Export Excel</button><button id="new-page" class="button" type="button">+ New page</button></div>
     </div>
     <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
     <div id="guard" class="empty-state">Checking admin access…</div>
@@ -75,6 +75,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 <script>
 import { startAdmin, esc, when, toast, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 import { renderMarkdown } from '../../lib/markdown';
 
 type Page = { id: string; slug: string; title: string; intro: string | null; body: string; is_published: boolean; show_in_footer: boolean; is_system: boolean; sort_order: number; updated_at: string };
@@ -216,6 +217,17 @@ document.querySelectorAll<HTMLButtonElement>('[data-md]').forEach((b) => b.addEv
   const want = new URLSearchParams(location.search).get('edit');
   edit(pages.find((p) => p.slug === want || p.id === want) || pages[0] || null);
 })();
+
+// ---------- Export (Excel) ----------
+document.getElementById('export-xlsx')?.addEventListener('click', async () => {
+  const day = (v: string | null) => (v ? new Date(v).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '');
+  await exportXlsxSheets(exportName('pages'), [{
+    name: 'Pages',
+    columns: [{ header: 'Title', width: 28 }, { header: 'Address', width: 26 }, { header: 'Intro', width: 40 }, { header: 'Text', width: 80 }, { header: 'Published', width: 11 }, { header: 'In footer', width: 10 }, { header: 'Built-in page', width: 13 }, { header: 'Last updated', width: 20 }],
+    rows: pages.map((p) => [p.title, `/${p.slug}`, p.intro || '', p.body, p.is_published ? 'Yes' : 'No', p.show_in_footer ? 'Yes' : 'No', p.is_system ? 'Yes' : 'No', day(p.updated_at)])
+  }]);
+  toast(`Exported ${pages.length} pages.`);
+});
 </script>
 
 <style is:global>

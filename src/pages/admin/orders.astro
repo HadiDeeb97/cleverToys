@@ -20,7 +20,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
       </div>
       <div class="quick-actions">
         <button id="enable-alerts" class="button secondary-button" type="button" title="Show a pop-up on this computer when a new order arrives">🔔 Order alerts</button>
-        <button id="export-csv" class="button secondary-button" type="button">Export CSV</button>
+        <button id="export-xlsx" class="button secondary-button" type="button" title="The orders shown (with your filters), and their items">Export Excel</button>
         <button id="refresh" class="button" type="button">Refresh</button>
       </div>
     </div>
@@ -48,6 +48,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage, enableOrderNotifications, markOrdersSeen } from '../../scripts/admin-access';
 import { smartFilter } from '../../scripts/smart-search';
+import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 
 const STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
 const LABELS: Record<string, string> = { pending: 'Pending', confirmed: 'Confirmed', processing: 'Preparing', shipped: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' };
@@ -176,18 +177,45 @@ function printInvoice(o: any) {
   win.print();
 }
 
-function exportCsv() {
+/** The orders on screen (status, dates and search applied) with their items, as an Excel file. */
+async function exportExcel() {
   const rows = filtered();
-  const cell = (v: unknown) => { const text = String(v ?? ''); return /[",\n]/.test(text) || /^[=+\-@]/.test(text) ? `"${text.replace(/^([=+\-@])/, "'$1").replace(/"/g, '""')}"` : text; };
-  const header = ['Order', 'Date', 'Status', 'Customer', 'Phone', 'Email', 'Governorate', 'City', 'Area', 'Address', 'Subtotal', 'Delivery', 'Discount', 'Discount code', 'Total', 'Notes'];
-  const lines = [header, ...rows.map((o) => [o.order_number, new Date(o.created_at).toISOString(), o.status, o.customer_name, o.customer_phone, o.customer_email, o.governorate, o.city, o.area, o.address, o.subtotal, o.delivery_fee, o.discount, o.coupon_code, o.total, o.notes])].map((r) => r.map(cell).join(','));
-  const blob = new Blob([`﻿${lines.join('\n')}`], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `clever-toys-orders-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
-  toast(`Exported ${rows.length} orders.`);
+  if (!rows.length) { toast('No orders to export with these filters.', 'error'); return; }
+  const button = $<HTMLButtonElement>('#export-xlsx');
+  button.disabled = true;
+  try {
+    const items: any[] = [];
+    const ids = rows.map((o) => o.id);
+    for (let i = 0; i < ids.length; i += 150) {
+      const r = await supabase.from('order_items').select('order_id,product_name,variant_name,sku,quantity,unit_price,total_price').in('order_id', ids.slice(i, i + 150));
+      if (r.error) throw new Error(r.error.message);
+      items.push(...(r.data ?? []));
+    }
+    const byOrder = new Map<string, any[]>();
+    for (const it of items) { const list = byOrder.get(it.order_id) || []; list.push(it); byOrder.set(it.order_id, list); }
+    const number = new Map(rows.map((o) => [o.id, o.order_number]));
+    const n = (v: unknown) => (v === null || v === undefined || v === '' ? null : Number(v));
+    const date = (v: string) => new Date(v).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+    await exportXlsxSheets(exportName('orders'), [
+      {
+        name: 'Orders',
+        columns: [{ header: 'Order', width: 22 }, { header: 'Date', width: 20 }, { header: 'Status', width: 12 }, { header: 'Customer', width: 22 }, { header: 'Phone', width: 18 }, { header: 'Email', width: 26 }, { header: 'Governorate', width: 16 }, { header: 'City', width: 16 }, { header: 'Area', width: 16 }, { header: 'Address', width: 34 }, { header: 'Items', width: 50 }, { header: 'Subtotal' }, { header: 'Delivery' }, { header: 'Discount' }, { header: 'Discount code' }, { header: 'Total' }, { header: 'Notes', width: 34 }],
+        rows: rows.map((o) => [o.order_number, date(o.created_at), o.status, o.customer_name, o.customer_phone, o.customer_email, o.governorate, o.city, o.area, o.address,
+          (byOrder.get(o.id) || []).map((it) => `${it.quantity}× ${it.product_name}${it.variant_name ? ` (${it.variant_name})` : ''}`).join('; '),
+          n(o.subtotal), n(o.delivery_fee), n(o.discount), o.coupon_code, n(o.total), o.notes])
+      },
+      {
+        name: 'Items',
+        columns: [{ header: 'Order', width: 22 }, { header: 'Product', width: 32 }, { header: 'Option', width: 18 }, { header: 'SKU' }, { header: 'Quantity', width: 10 }, { header: 'Unit price' }, { header: 'Line total' }],
+        rows: items.sort((a, b) => String(number.get(a.order_id)).localeCompare(String(number.get(b.order_id)))).map((it) => [number.get(it.order_id), it.product_name, it.variant_name, it.sku, n(it.quantity), n(it.unit_price), n(it.total_price)])
+      }
+    ]);
+    toast(`Exported ${rows.length} orders and ${items.length} items.`);
+  } catch (error) {
+    toast(error instanceof Error ? error.message : 'Export failed.', 'error');
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function load() {
@@ -216,7 +244,7 @@ document.addEventListener('change', (event) => {
 });
 ['#order-search', '#date-from', '#date-to', '#order-sort'].forEach((sel) => $(sel).addEventListener('input', () => { visible = PAGE_SIZE; render(); }));
 $('#load-more').addEventListener('click', () => { visible += PAGE_SIZE; render(); });
-$('#export-csv').addEventListener('click', exportCsv);
+$('#export-xlsx').addEventListener('click', exportExcel);
 $('#refresh').addEventListener('click', async () => { itemsByOrder.clear(); await load(); markOrdersSeen(); toast('Orders refreshed.'); });
 // Browser pop-ups for new orders (while any admin page is open). The badge and sound work without this.
 const alertsButton = $<HTMLButtonElement>('#enable-alerts');

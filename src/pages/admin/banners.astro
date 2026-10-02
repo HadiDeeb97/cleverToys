@@ -21,7 +21,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <h1>Home banners</h1>
         <p>A slideshow at the top of the home page. Schedule offers to start and stop by themselves.</p>
       </div>
-      <div class="cms-actions"><a class="button secondary-button" href="/" target="_blank" rel="noopener">View home page ↗</a></div>
+      <div class="cms-actions"><button id="export-xlsx" class="button secondary-button" type="button">Export Excel</button><a class="button secondary-button" href="/" target="_blank" rel="noopener">View home page ↗</a></div>
     </div>
     <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
     <div id="guard" class="empty-state">Checking admin access…</div>
@@ -69,6 +69,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 
 <script>
 import { startAdmin, esc, toast, toWebp, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 import { safeLink } from '../../lib/design';
 
 type Banner = { id: string; title: string; subtitle: string | null; image_url: string | null; link_url: string | null; button_text: string | null; text_tone: 'light' | 'dark'; background: string | null; starts_at: string | null; ends_at: string | null; is_active: boolean; sort_order: number };
@@ -214,6 +215,17 @@ $('#new').addEventListener('click', () => { edit(null); input('title').focus(); 
   if (!(await load())) return;
   edit(banners[0] || null);
 })();
+
+// ---------- Export (Excel) ----------
+document.getElementById('export-xlsx')?.addEventListener('click', async () => {
+  const day = (v: string | null) => (v ? new Date(v).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '');
+  await exportXlsxSheets(exportName('banners'), [{
+    name: 'Home banners',
+    columns: [{ header: 'Order', width: 8 }, { header: 'Title', width: 30 }, { header: 'Subtitle', width: 40 }, { header: 'Button', width: 16 }, { header: 'Link', width: 30 }, { header: 'Picture', width: 40 }, { header: 'Starts', width: 20 }, { header: 'Ends', width: 20 }, { header: 'Status', width: 10 }],
+    rows: banners.map((b, i) => [i + 1, b.title, b.subtitle || '', b.button_text || '', b.link_url || '', b.image_url || '', day(b.starts_at), day(b.ends_at), b.is_active ? 'On' : 'Off'])
+  }]);
+  toast(`Exported ${banners.length} banners.`);
+});
 </script>
 
 <style is:global>

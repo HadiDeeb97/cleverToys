@@ -19,6 +19,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <h1>Activity log</h1>
         <p>Who changed what in the admin panel, and when. Changes are kept for 15 days.</p>
       </div>
+      <div class="cms-actions"><button id="export-xlsx" class="button secondary-button" type="button">Export Excel</button></div>
     </div>
     <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
     <div id="guard" class="empty-state">Checking admin access…</div>
@@ -43,7 +44,8 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 </main>
 
 <script>
-import { startAdmin, esc, when, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+import { startAdmin, esc, when, toast, missingTable, setupNotice, type Db } from '../../scripts/admin-access';
+import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 
 type Entry = { id: number; user_email: string | null; action: 'create' | 'update' | 'delete'; entity: string; entity_id: string | null; label: string | null; changes: Record<string, [unknown, unknown]> | null; created_at: string };
 const PAGE = 100;
@@ -96,6 +98,25 @@ async function load(append = false) {
   $('#more').addEventListener('click', () => load(true));
   await load();
 })();
+
+// ---------- Export (Excel): everything in the log (the last 15 days) ----------
+document.getElementById('export-xlsx')?.addEventListener('click', async () => {
+  const day = (v: string | null) => (v ? new Date(v).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' }) : '');
+  const all: Entry[] = [];
+  for (let from = 0; from < 20000; from += 1000) {
+    const r = await supabase.from('admin_activity').select('*').order('id', { ascending: false }).range(from, from + 999);
+    if (r.error) { toast(r.error.message, 'error'); return; }
+    all.push(...((r.data ?? []) as Entry[]));
+    if ((r.data ?? []).length < 1000) break;
+  }
+  const show = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v)).slice(0, 120);
+  await exportXlsxSheets(exportName('activity'), [{
+    name: 'Activity log',
+    columns: [{ header: 'Date', width: 20 }, { header: 'Who', width: 26 }, { header: 'Action', width: 10 }, { header: 'Area', width: 18 }, { header: 'Item', width: 30 }, { header: 'Changes', width: 90 }],
+    rows: all.map((e) => [day(e.created_at), e.user_email || '', e.action, e.entity.replace(/_/g, ' '), e.label || e.entity_id || '', e.changes ? Object.entries(e.changes).map(([field, [before, after]]) => `${field.replace(/_/g, ' ')}: ${show(before)} → ${show(after)}`).join('; ') : ''])
+  }]);
+  toast(`Exported ${all.length} entries.`);
+});
 </script>
 
 <style is:global>
