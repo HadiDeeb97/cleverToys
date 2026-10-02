@@ -18,8 +18,11 @@ const { data: category, error: categoryError } = await supabase.from('categories
 
 // No real "sale" category: /category/sale opens the automatic Sale page instead.
 if (!category && !categoryError && slug === 'sale') return Astro.redirect('/products?sale=1');
+// Categories that were merged into another one (supabase/category_cleanup.sql): old links keep working.
+const MERGED: Record<string, string> = { 'remote-control': 'vehicles-cars' };
+if (!category && !categoryError && slug && MERGED[slug]) return Astro.redirect(`/category/${MERGED[slug]}${Astro.url.search}`, 301);
 if (categoryError || !category) Astro.response.status = 404;
-const title = category ? category.seo_title || `${category.name} Toys | Clever Toys` : 'Category Not Found | Clever Toys';
+const title = category ? category.seo_title || `${category.name} | Clever Toys` : 'Category Not Found | Clever Toys';
 const description = category ? category.seo_description || category.description || `Shop ${category.name.toLowerCase()} toys at Clever Toys.` : 'The requested toy category could not be found.';
 const canonicalUrl = new URL(`/category/${slug}`, Astro.site ?? Astro.url.origin).href;
 // The filter panel lists every category (like the shop page). Only this category ticked: stay here.
