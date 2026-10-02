@@ -274,7 +274,8 @@ html:has(body.has-drawer){overflow:hidden}
 @media (hover:hover){.breadcrumbs a:hover{color:var(--ink)}}
 .breadcrumbs span[aria-current]{color:var(--ink)}
 .tile-media{position:relative;display:grid;place-items:center;overflow:hidden;background:hsl(var(--ph-h,40) 70% 92%);color:hsl(var(--ph-h,40) 45% 35%);font-size:clamp(2rem,5vw,3.4rem)}
-.tile-media img{width:100%;height:100%;object-fit:cover;transition:transform .6s var(--ease)}
+/* The picture covers the emoji; if the picture is missing or fails, the emoji shows instead. */
+.tile-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transition:transform .6s var(--ease)}
 .tile-media>span{transition:transform .6s var(--ease)}
 .empty-state,.success-card{padding:clamp(40px,6vw,72px) 28px;text-align:center;border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--surface)}
 .empty-state h2,.success-card h1{margin:0 0 10px;font-size:clamp(1.6rem,3vw,2.2rem)}

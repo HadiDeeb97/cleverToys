@@ -28,15 +28,16 @@ export const ICONS = {
 
 /** Square category picture, or a soft coloured tile with a toy emoji when there is no photo. */
 export const tileMedia = (name: string, image: string | null | undefined, className = 'tile-media') => {
-  if (image && /^https?:\/\//.test(image)) return `<span class="${className}"><img src="${esc(image)}" alt="" loading="lazy" decoding="async" /></span>`;
   const ph = placeholderFor(name);
-  return `<span class="${className}" style="--ph-h:${ph.hue}"><span aria-hidden="true">${ph.emoji}</span></span>`;
+  // The emoji stays underneath the picture, so a missing or failed picture still shows something.
+  const img = image && /^https?:\/\//.test(image) ? `<img src="${esc(image)}" alt="" loading="lazy" decoding="async" />` : '';
+  return `<span class="${className}" style="--ph-h:${ph.hue}"><span aria-hidden="true">${ph.emoji}</span>${img}</span>`;
 };
 
 /** Category tile with the hover arrow, the same markup as src/components/CategoryTile.astro (home page, /categories). */
 const categoryTileHtml = (c: MenuCategory, extraClass = '') => {
   const ph = placeholderFor(c.name);
-  const media = c.image_url && /^https?:\/\//.test(c.image_url) ? `<img src="${esc(c.image_url)}" alt="" loading="lazy" decoding="async" />` : `<span aria-hidden="true">${ph.emoji}</span>`;
+  const media = `<span aria-hidden="true">${ph.emoji}</span>${c.image_url && /^https?:\/\//.test(c.image_url) ? `<img src="${esc(c.image_url)}" alt="" loading="lazy" decoding="async" />` : ''}`;
   return `<a class="category-tile${extraClass ? ` ${extraClass}` : ''}" href="/category/${encodeURIComponent(c.slug)}"><span class="tile-media" style="--ph-h:${ph.hue}">${media}<span class="tile-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></span><span><strong>${esc(c.name)}</strong></span></a>`;
 };
 
