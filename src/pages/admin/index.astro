@@ -202,7 +202,8 @@ async function load() {
   $('#category-filter').innerHTML = '<option value="">All categories</option>' + categories.map((cat) => `<option value="${cat.id}">${esc(cat.name)}</option>`).join('');
   renderCategoryChecks(currentCategoryIds());
   // Google & Meta box: available once supabase/catalog_controls.sql has added its columns.
-  adFieldsReady = products.length ? 'in_feed' in products[0] : adFieldsReady;
+  const adCheck = await supabase.from('products').select('in_feed,ad_label').limit(1);
+  adFieldsReady = !adCheck.error;
   $('#ads-box').hidden = !adFieldsReady;
   const labels = [...new Set(products.map((x) => String(x.ad_label || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   $('#ad-labels').innerHTML = labels.map((label) => `<option value="${esc(label)}"></option>`).join('');
