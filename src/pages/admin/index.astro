@@ -52,6 +52,12 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
           <div class="field-row four"><label>Price (USD)<input name="price" type="number" min="0" step="0.01" required /></label><label>Sale price<input name="sale_price" type="number" min="0" step="0.01" /></label><label>Cost price<input name="cost_price" type="number" min="0" step="0.01" placeholder="What it costs you" /></label><label>Stock<input name="stock_quantity" type="number" min="0" value="0" required /></label></div>
           <p id="profit-hint" class="profit-hint" aria-live="polite"></p>
           <fieldset class="category-picker"><legend>Categories</legend><div id="category-checks" class="check-grid"></div></fieldset>
+          <fieldset class="category-picker related-picker" id="related-box" hidden>
+            <legend>Related toys</legend>
+            <small class="field-help">Shown first in “You may also like” on this toy’s page, in this order. The rest is filled automatically with the best matches.</small>
+            <ol id="related-list" class="related-list"></ol>
+            <div class="related-search"><input id="related-search" type="search" placeholder="Search a toy to add…" autocomplete="off" aria-label="Search a toy to add" /><ul id="related-results" class="related-results" hidden></ul></div>
+          </fieldset>
           <div class="variant-box">
             <div class="panel-title"><h3>Variants</h3><button id="add-variant" class="small-button" type="button">+ Add variant</button></div>
             <p id="stock-from-options" class="muted stock-note" hidden>This toy’s stock is the total of its options’ stock (shown in the Stock field above).</p>
@@ -188,6 +194,10 @@ async function load() {
   links = (l.data ?? []) as Row[];
   $('#category-filter').innerHTML = '<option value="">All categories</option>' + categories.map((cat) => `<option value="${cat.id}">${esc(cat.name)}</option>`).join('');
   renderCategoryChecks(currentCategoryIds());
+  // Related toys picker: available once supabase/related_products.sql has been run.
+  const rel = await supabase.from('product_relations').select('product_id').limit(1);
+  relationsReady = !rel.error;
+  renderRelated();
   renderProducts();
   renderCategories();
   const active = products.filter((x) => x.is_active).length;
@@ -291,6 +301,7 @@ async function editProduct(id: string) {
   renderVariants();
   renderImages();
   loadStockHistory(id);
+  loadRelated(id);
   renderProducts();
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
   field('name').focus({ preventScroll: true });
@@ -316,6 +327,7 @@ function clearForm(focus = true) {
   field('is_active').checked = true;
   field('slug').dataset.auto = '1';
   renderCategoryChecks([]);
+  relatedIds = []; renderRelated();
   variants = []; images = [];
   renderVariants(); renderImages();
   $('#form-title').textContent = 'Add product';
@@ -325,6 +337,58 @@ function clearForm(focus = true) {
   renderProducts();
   if (focus) { form.scrollIntoView({ behavior: 'smooth', block: 'start' }); field('name').focus({ preventScroll: true }); }
 }
+
+// ---------- Related toys (supabase/related_products.sql) ----------
+// Hand-picked toys shown first in "You may also like". The box stays hidden until the SQL file is run.
+let relatedIds: string[] = [];
+let relationsReady = false;
+function renderRelated() {
+  $('#related-box').hidden = !relationsReady;
+  const byId = new Map(products.map((p) => [String(p.id), p]));
+  $('#related-list').innerHTML = relatedIds.length
+    ? relatedIds.map((rid, i) => {
+        const p = byId.get(rid);
+        return `<li class="related-item"><span>${esc(p?.name || 'Removed toy')}${p && p.is_active === false ? ' <small class="muted">(hidden)</small>' : ''}</span><span class="related-actions"><button type="button" class="small-button" data-related-move="${i}" data-dir="-1" aria-label="Move up"${i === 0 ? ' disabled' : ''}>↑</button><button type="button" class="small-button" data-related-move="${i}" data-dir="1" aria-label="Move down"${i === relatedIds.length - 1 ? ' disabled' : ''}>↓</button><button type="button" class="small-button danger-button" data-related-remove="${i}" aria-label="Remove">×</button></span></li>`;
+      }).join('')
+    : '<li class="muted related-empty">None chosen: only automatic matches are shown.</li>';
+}
+function renderRelatedResults() {
+  const box = $('#related-results');
+  const q = $<HTMLInputElement>('#related-search').value.trim().toLowerCase();
+  const current = field('id').value;
+  const found = q ? products.filter((p) => p.id !== current && !relatedIds.includes(p.id) && [p.name, p.sku].some((v) => String(v || '').toLowerCase().includes(q))).slice(0, 8) : [];
+  box.hidden = !q;
+  box.innerHTML = found.length ? found.map((p) => `<li><button type="button" data-related-add="${p.id}">${esc(p.name)}${p.sku ? ` <small class="muted">${esc(p.sku)}</small>` : ''}</button></li>`).join('') : '<li class="muted">No toy matches.</li>';
+}
+async function loadRelated(id: string) {
+  const r = await supabase.from('product_relations').select('related_id,sort_order').eq('product_id', id).order('sort_order');
+  if (field('id').value !== id) return;
+  relationsReady = !r.error;
+  relatedIds = ((r.data ?? []) as Row[]).map((x) => String(x.related_id));
+  renderRelated();
+}
+async function saveRelated(id: string) {
+  if (!relationsReady) return;
+  const del = await supabase.from('product_relations').delete().eq('product_id', id);
+  if (del.error) throw new Error(del.error.message);
+  const rows = relatedIds.filter((rid) => rid !== id).map((related_id, sort_order) => ({ product_id: id, related_id, sort_order }));
+  if (rows.length) { const ins = await supabase.from('product_relations').insert(rows); if (ins.error) throw new Error(ins.error.message); }
+}
+$('#related-search').addEventListener('input', renderRelatedResults);
+$('#related-search').addEventListener('keydown', (event) => {
+  if ((event as KeyboardEvent).key === 'Enter') { event.preventDefault(); $<HTMLButtonElement>('#related-results [data-related-add]')?.click(); }
+  if ((event as KeyboardEvent).key === 'Escape') { $<HTMLInputElement>('#related-search').value = ''; renderRelatedResults(); }
+});
+document.addEventListener('click', (event) => {
+  const t = event.target instanceof Element ? event.target : null;
+  const add = t?.closest<HTMLElement>('[data-related-add]');
+  if (add) { if (relatedIds.length < 12) relatedIds.push(add.dataset.relatedAdd!); else toast('Up to 12 related toys.', 'error'); $<HTMLInputElement>('#related-search').value = ''; renderRelatedResults(); renderRelated(); $<HTMLInputElement>('#related-search').focus(); return; }
+  const move = t?.closest<HTMLElement>('[data-related-move]');
+  if (move) { const i = Number(move.dataset.relatedMove), j = i + Number(move.dataset.dir); if (j >= 0 && j < relatedIds.length) { [relatedIds[i], relatedIds[j]] = [relatedIds[j], relatedIds[i]]; renderRelated(); } return; }
+  const remove = t?.closest<HTMLElement>('[data-related-remove]');
+  if (remove) { relatedIds.splice(Number(remove.dataset.relatedRemove), 1); renderRelated(); return; }
+  if (!t?.closest('.related-search')) $('#related-results').hidden = true;
+});
 
 async function saveProductCategories(id: string, ids: string[]) {
   const unique = [...new Set(ids.filter(Boolean))];
@@ -556,6 +620,7 @@ form.addEventListener('submit', async (event) => {
     if (r.error) throw new Error(friendly(r.error.message));
     const saved = r.data as Row;
     await saveProductCategories(saved.id, selected);
+    await saveRelated(saved.id);
     products = products.map((p) => (p.id === saved.id ? { ...p, ...saved } : p));
     if (!id) products.unshift(saved);
     const files = [...($<HTMLInputElement>('#image-files').files ?? [])];
@@ -1017,6 +1082,19 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .profit-hint.gain{color:var(--success)}.profit-hint.loss{color:var(--danger)}
 .no-cost{color:#8a5a00}
 .category-picker{margin:0;padding:12px;border:1.5px solid var(--line);border-radius:14px}
+.related-picker{display:grid;gap:8px}
+.related-list{display:grid;gap:6px;margin:0;padding:0;list-style:none;counter-reset:rel}
+.related-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px 6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);counter-increment:rel}
+.related-item>span:first-child::before{content:counter(rel) ". ";color:var(--muted);font-weight:800}
+.related-actions{display:flex;gap:4px}
+.related-actions .small-button{min-height:30px;padding:0 9px}
+.related-empty{font-size:.85rem}
+.related-search{position:relative}
+.related-search input{width:100%}
+.related-results{position:absolute;z-index:20;left:0;right:0;top:calc(100% + 4px);margin:0;padding:4px;list-style:none;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-sm);max-height:260px;overflow:auto}
+.related-results li{padding:6px 8px}
+.related-results button{width:100%;padding:6px 8px;border:0;border-radius:8px;background:none;text-align:left;font:inherit;cursor:pointer;color:inherit}
+.related-results button:hover,.related-results button:focus{background:var(--surface-2)}
 .category-picker legend{padding:0 6px;font-weight:800;font-size:.93rem}
 .check-grid{display:flex;flex-wrap:wrap;gap:6px}
 .form-card label.check-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1.5px solid var(--line);border-radius:99px;font-size:.85rem;cursor:pointer}

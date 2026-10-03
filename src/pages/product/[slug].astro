@@ -89,7 +89,11 @@ let reviewsEnabled = false;
 let deliveryZones: Array<{ governorate: string; fee: number; is_active: boolean }> = [];
 if (product) {
   const categoryIds = [...new Set([...(product.product_categories ?? []).map((row: { category_id: string }) => row.category_id), ...(product.categories?.id ? [product.categories.id] : [])])];
-  const [related, filler, reviewsResult, zonesResult] = await Promise.all([
+  // Best matches from the database (supabase/related_products.sql): hand-picked toys, then toys bought
+  // together, sharing categories, ages, name words and price. The two queries below are the fallback
+  // used until that file is run.
+  const [matches, related, filler, reviewsResult, zonesResult] = await Promise.all([
+    supabase.rpc('related_products', { p_product_id: product.id, p_limit: 8 }),
     categoryIds.length
       ? supabase.from('product_categories').select(`product_id,products:product_id(${similarFields})`).in('category_id', categoryIds).neq('product_id', product.id).limit(60)
       : Promise.resolve({ data: [] as any[] }),
@@ -100,13 +104,19 @@ if (product) {
   deliveryZones = (zonesResult.error ? [] : zonesResult.data ?? []) as typeof deliveryZones;
   reviewsEnabled = !reviewsResult.error;
   reviews = (reviewsResult.data ?? []) as Review[];
+  const matchIds = matches.error ? [] : ((matches.data ?? []) as Array<{ id: string }>).map((m) => m.id);
+  if (matchIds.length) {
+    const rows = await supabase.from('products').select(similarFields).in('id', matchIds).eq('is_active', true);
+    const byId = new Map(((rows.data ?? []) as SimilarProduct[]).map((row) => [row.id, row]));
+    similarProducts = matchIds.map((id) => byId.get(id)).filter((row): row is SimilarProduct => Boolean(row));
+  }
   const byRank = (a: SimilarProduct, b: SimilarProduct) => Number(b.is_featured) - Number(a.is_featured) || String(b.created_at).localeCompare(String(a.created_at));
   const seen = new Set<string>([product.id]);
   const relatedProducts = ((related.data ?? []) as any[])
     .map((row) => row.products as SimilarProduct | null)
     .filter((item): item is SimilarProduct => Boolean(item && item.is_active))
     .sort(byRank);
-  for (const item of [...relatedProducts, ...((filler.data ?? []) as SimilarProduct[])]) {
+  for (const item of similarProducts.length ? [] : [...relatedProducts, ...((filler.data ?? []) as SimilarProduct[])]) {
     if (similarProducts.length >= 8 || seen.has(item.id)) continue;
     seen.add(item.id);
     similarProducts.push(item);
