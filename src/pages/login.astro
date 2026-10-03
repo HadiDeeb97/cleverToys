@@ -8,6 +8,7 @@
  */
 import '../styles/global.css';
 import { supabaseConfig } from '../lib/config';
+import { GOOGLE_ICON } from '../scripts/google-signin';
 
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 const next = new URL(Astro.request.url).searchParams.get('next') || '';
@@ -20,11 +21,12 @@ const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '';
 <header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart">Cart</a></nav></div></header>
 <main class="auth-shell">
   <div class="auth-art" aria-hidden="true"><p class="eyebrow">Clever Toys</p><h2>Welcome back</h2><p>Sign in to track your orders, save your delivery details and check out faster.</p></div>
-  <div class="auth-main"><div><div class="section-header"><h1>Sign in</h1><p>Access your Clever Toys account or admin dashboard.</p></div><div id="login-config" data-url={supabaseUrl} data-key={supabaseKey} data-next={safeNext} hidden></div><form id="login-form" class="form-card"><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign In</button><p id="message" role="status"></p><button id="resend" class="button secondary-button" type="button" hidden>Resend confirmation email</button><p><a href="/forgot-password">Forgot your password?</a></p><p>New to Clever Toys? <a href="/register"><strong>Create an account</strong></a></p></form></div></div>
+  <div class="auth-main"><div><div class="section-header"><h1>Sign in</h1><p>Access your Clever Toys account or admin dashboard.</p></div><div id="login-config" data-url={supabaseUrl} data-key={supabaseKey} data-next={safeNext} hidden></div><form id="login-form" class="form-card"><div id="google-box" class="oauth-box" hidden><button id="google-signin" class="button google-button" type="button"><Fragment set:html={GOOGLE_ICON} /> Continue with Google</button><p class="oauth-or"><span>or with your email</span></p></div><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required autocomplete="current-password"></label><button class="button" type="submit">Sign In</button><p id="message" role="status"></p><button id="resend" class="button secondary-button" type="button" hidden>Resend confirmation email</button><p><a href="/forgot-password">Forgot your password?</a></p><p>New to Clever Toys? <a href="/register"><strong>Create an account</strong></a></p></form></div></div>
 </main>
 <script>
   import { createClient } from '@supabase/supabase-js';
   import { authMessage, needsConfirmation } from '../scripts/auth-messages';
+  import { setupGoogleSignIn } from '../scripts/google-signin';
 
   const config = document.querySelector<HTMLElement>('#login-config');
   const url = config?.dataset.url;
@@ -71,6 +73,25 @@ const safeNext = next.startsWith('/') && !next.startsWith('//') ? next : '';
       supabase.auth.getSession().then(({ data }) => {
         if (data.session) goToDashboard();
         else msg.textContent = 'Your email is confirmed. Sign in below.';
+      });
+    }
+  }
+
+  // "Continue with Google" (src/scripts/google-signin.ts), and the way back from Google.
+  if (supabase && url && key) setupGoogleSignIn(supabase, url, key, next);
+  if (supabase && params.has('oauth')) {
+    const failed = hash.get('error_description') || params.get('error_description');
+    if (failed) {
+      msg.textContent = /cancel|denied/i.test(failed) ? 'Google sign-in was cancelled.' : 'Google sign-in did not work. Please try again, or sign in with your email.';
+    } else {
+      msg.textContent = 'Signing you in with Google…';
+      // The Supabase client finishes the sign-in from the link; wait for it, then go on.
+      const client = supabase;
+      const go = (signedIn: boolean) => { if (signedIn) goToDashboard(); else msg.textContent = 'Google sign-in did not finish. Please try again.'; };
+      client.auth.getSession().then(({ data }) => {
+        if (data.session) return go(true);
+        const { data: sub } = client.auth.onAuthStateChange((_event, session) => { if (session) { sub.subscription.unsubscribe(); go(true); } });
+        setTimeout(() => client.auth.getSession().then(({ data: again }) => { if (!again.session) { sub.subscription.unsubscribe(); go(false); } }), 6000);
       });
     }
   }

@@ -8,6 +8,7 @@
  */
 import '../styles/global.css';
 import { supabaseConfig } from '../lib/config';
+import { GOOGLE_ICON } from '../scripts/google-signin';
 
 const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 ---
@@ -18,11 +19,12 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <header class="site-header"><div class="container header-inner"><a href="/" class="logo">Clever Toys</a><nav class="main-nav"><a href="/products">Shop</a><a href="/cart">Cart</a><a href="/login">Sign in</a></nav></div></header>
 <main class="auth-shell">
   <div class="auth-art" aria-hidden="true"><p class="eyebrow">Clever Toys</p><h2>Join the Clever Toys family</h2><p>Create an account to follow your orders and check out in seconds next time.</p></div>
-  <div class="auth-main"><div><div class="section-header"><h1>Create your account</h1><p>Save your details and track your Clever Toys orders.</p></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><form id="register-form" class="form-card"><label>Full name<input name="full_name" required autocomplete="name"></label><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label>Confirm password<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label><button class="button" type="submit">Create Account</button><p id="message" role="status"></p><p>Already have an account? <a href="/login"><strong>Sign in</strong></a></p></form><div id="check-email" class="form-card auth-sent" hidden tabindex="-1"><span class="auth-sent-icon" aria-hidden="true">✉️</span><h2>Check your email</h2><p>We sent a link to <strong id="sent-to"></strong>. Open it to verify your email and activate your account.</p><p class="auth-sent-note">Can't find it? Check your spam or promotions folder. The email can take a minute to arrive.</p><button id="resend" class="button secondary-button" type="button">Resend the link</button><p id="resend-message" role="status"></p><p><button id="change-email" class="link-button" type="button">Use a different email</button> · <a href="/login"><strong>Go to sign in</strong></a></p></div></div></div>
+  <div class="auth-main"><div><div class="section-header"><h1>Create your account</h1><p>Save your details and track your Clever Toys orders.</p></div><div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div><form id="register-form" class="form-card"><div id="google-box" class="oauth-box" hidden><button id="google-signin" class="button google-button" type="button"><Fragment set:html={GOOGLE_ICON} /> Continue with Google</button><p class="oauth-or"><span>or with your email</span></p></div><label>Full name<input name="full_name" required autocomplete="name"></label><label>Email<input name="email" type="email" required autocomplete="email"></label><label>Password<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label>Confirm password<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label><button class="button" type="submit">Create Account</button><p id="message" role="status"></p><p>Already have an account? <a href="/login"><strong>Sign in</strong></a></p></form><div id="check-email" class="form-card auth-sent" hidden tabindex="-1"><span class="auth-sent-icon" aria-hidden="true">✉️</span><h2>Check your email</h2><p>We sent a link to <strong id="sent-to"></strong>. Open it to verify your email and activate your account.</p><p class="auth-sent-note">Can't find it? Check your spam or promotions folder. The email can take a minute to arrive.</p><button id="resend" class="button secondary-button" type="button">Resend the link</button><p id="resend-message" role="status"></p><p><button id="change-email" class="link-button" type="button">Use a different email</button> · <a href="/login"><strong>Go to sign in</strong></a></p></div></div></div>
 </main>
 <script>
 import { createClient } from '@supabase/supabase-js';
 import { authMessage } from '../scripts/auth-messages';
+import { setupGoogleSignIn } from '../scripts/google-signin';
 const config = document.querySelector<HTMLElement>('#auth-config');
 const url = config?.dataset.url;
 const key = config?.dataset.key;
@@ -47,6 +49,8 @@ try {
 } catch (error) {
   msg.textContent = error instanceof Error ? error.message : 'Could not initialize account creation.';
 }
+// "Continue with Google": creates the account from the Google account (src/scripts/google-signin.ts).
+if (supabase && url && key) setupGoogleSignIn(supabase, url, key, '/account');
 form?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!supabase) return;

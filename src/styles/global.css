@@ -779,6 +779,12 @@ form.has-suggest{position:relative}
 .form-card h2{margin:4px 0 0;font-size:1.4rem}
 .form-card>p{margin:0;color:var(--muted);line-height:1.65}
 .form-card label{display:grid;gap:8px;font-weight:700;font-size:.9rem;color:var(--ink)}
+/* "Continue with Google" on /login and /register (src/scripts/google-signin.ts) */
+.oauth-box{display:grid;gap:14px}
+.form-card .google-button{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff!important;color:#1f1f1f!important;border:1.5px solid var(--line-strong)!important;box-shadow:none!important;font-weight:700}
+.form-card .google-button:hover{background:#f7f8fa!important}
+.form-card .oauth-or{display:flex;align-items:center;gap:12px;margin:0;color:var(--muted);font-size:.85rem;font-weight:600}
+.form-card .oauth-or::before,.form-card .oauth-or::after{content:'';flex:1;height:1px;background:var(--line)}
 .form-card label span{color:var(--subtle);font-weight:600}
 .form-card label:has(> span){grid-template-columns:auto 1fr;column-gap:6px;align-items:baseline}
 .form-card label:has(> span)>:is(input,textarea,select){grid-column:1/-1}
