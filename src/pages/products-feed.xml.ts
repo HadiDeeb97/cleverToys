@@ -13,6 +13,8 @@
  *  - Brand: the toy's brand, or the store name when it has none. Toys have no barcodes here, so
  *    identifier_exists is "no".
  *  - Shipping (Lebanon): the standard delivery fee and the free-delivery amount from Admin → Branding.
+ *  - Per toy (Admin → Products, supabase/catalog_controls.sql): "Show in Google & Meta" off leaves it
+ *    out; its "Ad group label" is custom_label_1 (custom_label_0 is the SKU) for grouping ads.
  */
 import type { APIRoute } from 'astro';
 import { supabase } from '../lib/supabase';
@@ -32,6 +34,7 @@ type Variant = { id: string; name: string; sku: string | null; price: number | n
 type Row = {
   id: string; name: string; slug: string; sku: string | null; short_description: string | null; description: string | null;
   price: number; sale_price: number | null; stock_quantity: number; brand: string | null; primary_image_url: string | null;
+  in_feed?: boolean | null; ad_label?: string | null;
   categories: { name: string } | null;
   product_images: Array<{ image_url: string; sort_order: number }> | null;
   product_variants: Variant[] | null;
@@ -43,7 +46,7 @@ export const GET: APIRoute = async ({ site, url }) => {
   const forMeta = url.searchParams.get('for') === 'meta';
   const [productsResult, settingsResult] = await Promise.all([
     supabase.from('products')
-      .select('id,name,slug,sku,short_description,description,price,sale_price,stock_quantity,brand,primary_image_url,categories:category_id(name),product_images(image_url,sort_order),product_variants(id,name,sku,price,sale_price,stock_quantity,attributes,is_active)')
+      .select('*,categories:category_id(name),product_images(image_url,sort_order),product_variants(id,name,sku,price,sale_price,stock_quantity,attributes,is_active)')
       .eq('is_active', true)
       .order('created_at', { ascending: false }),
     supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle()
@@ -61,6 +64,7 @@ export const GET: APIRoute = async ({ site, url }) => {
 
   const items: string[] = [];
   for (const p of (productsResult.data ?? []) as unknown as Row[]) {
+    if (p.in_feed === false) continue;   // "Show in Google & Meta" is off for this toy
     const link = `${origin}/product/${encodeURIComponent(p.slug)}`;
     // Photos in the product page's order: the main one, then the gallery, without repeats.
     const images = [p.primary_image_url, ...[...(p.product_images ?? [])].sort((a, b) => a.sort_order - b.sort_order).map((i) => i.image_url)]
@@ -79,6 +83,7 @@ export const GET: APIRoute = async ({ site, url }) => {
       '<g:identifier_exists>no</g:identifier_exists>',
       '<g:google_product_category>1239</g:google_product_category>',   // Toys & Games
       category ? `<g:product_type>${xml(category)}</g:product_type>` : '',
+      p.ad_label?.trim() ? `<g:custom_label_1>${xml(plain(p.ad_label, 100))}</g:custom_label_1>` : '',
       shipping
     ].filter(Boolean).join('');
 
