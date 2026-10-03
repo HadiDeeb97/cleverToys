@@ -12,7 +12,7 @@ const CHANGEFREQ = new Set(['always', 'hourly', 'daily', 'weekly', 'monthly', 'y
 type Entry = { path: string; lastmod?: string | null; priority?: number | null; changefreq?: string | null; images?: Array<{ url: string; title?: string }> };
 
 export const GET: APIRoute = async ({ site }) => {
-  const origin = site?.origin || 'https://clevertoys.hadidib97.workers.dev';
+  const origin = site?.origin || 'https://clevertoyslb.com';
   const [settingsResult, pagesResult, productsResult, categoriesResult, contentPagesResult] = await Promise.all([
     supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle(),
     supabase.from('seo_pages').select('*'),

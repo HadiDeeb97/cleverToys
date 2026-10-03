@@ -7,7 +7,7 @@ import { supabase } from '../lib/supabase';
 import { DEFAULT_DISALLOW, cleanRobotsLines, parseSeoSettings } from '../lib/seo';
 
 export const GET: APIRoute = async ({ site }) => {
-  const origin = site?.origin || 'https://clevertoys.hadidib97.workers.dev';
+  const origin = site?.origin || 'https://clevertoyslb.com';
   let extra: string[] = [];
   try {
     const { data } = await supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle();

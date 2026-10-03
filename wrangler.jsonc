@@ -12,5 +12,12 @@
   // use { "mode": "smart" }.
   // https://developers.cloudflare.com/workers/configuration/placement/
   "placement": { "mode": "targeted", "hostname": "gqkouymkfarhwgedwlhd.supabase.co" },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // The store's own address. Deploying attaches both names to this Worker and Cloudflare issues
+  // their SSL certificates by itself. The old *.workers.dev address keeps working: src/middleware.ts
+  // forwards it (and www.) to the same page on clevertoyslb.com.
+  "routes": [
+    { "pattern": "clevertoyslb.com", "custom_domain": true },
+    { "pattern": "www.clevertoyslb.com", "custom_domain": true }
+  ]
 }

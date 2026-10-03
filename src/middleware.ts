@@ -84,8 +84,18 @@ const PHONE_SCRIPT = '<script src="/phone-ui.js?v=20260929-3" defer></script>';
 // Runs for every request. Non-HTML responses (API, files) only get security headers.
 // HTML pages are rewritten: shared header/footer, theme colours, branding settings, SEO tags,
 // floating cart/WhatsApp buttons and the admin sidebar.
+/** The store's address (also in astro.config.mjs and wrangler.jsonc). */
+const MAIN_HOST = 'clevertoyslb.com';
+
 export const onRequest: MiddlewareHandler = async (context, next) => {
   const path = context.url.pathname;
+  // One address for the store: visits to the old Cloudflare address or to www. go to the same page on
+  // clevertoyslb.com (permanently, so Google moves its results too). Only page loads (GET/HEAD) are
+  // forwarded; anything sent from an open old tab (e.g. an order) is still handled where it arrives.
+  const host = context.url.hostname.toLowerCase();
+  if ((host === `www.${MAIN_HOST}` || host.endsWith('.workers.dev')) && (context.request.method === 'GET' || context.request.method === 'HEAD')) {
+    return new Response(null, { status: 301, headers: { location: `https://${MAIN_HOST}${path}${context.url.search}`, 'cache-control': 'public, max-age=3600' } });
+  }
   // Start loading page data now, while Astro renders the page, instead of after it (saves a full round trip).
   const looksLikePage = context.request.method === 'GET' && !path.startsWith('/api') && !/\.[a-z0-9]{2,11}$/i.test(path);
   const pageDataPromise = looksLikePage ? loadPageData(path) : null;
