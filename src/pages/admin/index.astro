@@ -52,11 +52,11 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
           <div class="field-row four"><label>Price (USD)<input name="price" type="number" min="0" step="0.01" required /></label><label>Sale price<input name="sale_price" type="number" min="0" step="0.01" /></label><label>Cost price<input name="cost_price" type="number" min="0" step="0.01" placeholder="What it costs you" /></label><label>Stock<input name="stock_quantity" type="number" min="0" value="0" required /></label></div>
           <p id="profit-hint" class="profit-hint" aria-live="polite"></p>
           <fieldset class="category-picker"><legend>Categories</legend><div id="category-checks" class="check-grid"></div></fieldset>
-          <fieldset class="category-picker ads-box" id="ads-box" hidden>
+          <fieldset class="category-picker catalog-box" id="catalog-box" hidden>
             <legend>Google &amp; Meta</legend>
-            <label class="ads-toggle"><input class="toggle" name="in_feed" type="checkbox" checked /> Show in Google &amp; Meta catalogs and ads</label>
-            <label>Ad group label <span>(optional)</span><input name="ad_label" maxlength="100" list="ad-labels" placeholder="e.g. Bestseller, Clearance, New" autocomplete="off" /></label>
-            <datalist id="ad-labels"></datalist>
+            <label class="catalog-toggle"><input class="toggle" name="in_feed" type="checkbox" checked /> Show in Google &amp; Meta catalogs and ads</label>
+            <label>Ad group label <span>(optional)</span><input name="ad_label" maxlength="100" list="group-label-list" placeholder="e.g. Bestseller, Clearance, New" autocomplete="off" /></label>
+            <datalist id="group-label-list"></datalist>
             <small class="field-help">Off keeps the toy on your website but out of the product feed. The label lets you group toys in Google Ads and Meta (custom label 1).</small>
           </fieldset>
           <fieldset class="category-picker related-picker" id="related-box" hidden>
@@ -204,9 +204,9 @@ async function load() {
   // Google & Meta box: available once supabase/catalog_controls.sql has added its columns.
   const adCheck = await supabase.from('products').select('in_feed,ad_label').limit(1);
   adFieldsReady = !adCheck.error;
-  $('#ads-box').hidden = !adFieldsReady;
+  $('#catalog-box').hidden = !adFieldsReady;
   const labels = [...new Set(products.map((x) => String(x.ad_label || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  $('#ad-labels').innerHTML = labels.map((label) => `<option value="${esc(label)}"></option>`).join('');
+  $('#group-label-list').innerHTML = labels.map((label) => `<option value="${esc(label)}"></option>`).join('');
   // Related toys picker: available once supabase/related_products.sql has been run.
   const rel = await supabase.from('product_relations').select('product_id').limit(1);
   relationsReady = !rel.error;
@@ -247,7 +247,7 @@ function renderProducts() {
     const stockClass = p.stock_quantity <= 0 ? 'out' : p.stock_quantity <= lowStockAt ? 'low' : '';
     return `<div class="product-row${editingId === p.id ? ' editing' : ''}${p.is_active ? '' : ' is-hidden'}">
       <div class="product-thumb">${p.primary_image_url ? `<img src="${esc(p.primary_image_url)}" alt="" loading="lazy" />` : '🧸'}</div>
-      <div class="product-main"><button type="button" class="product-name" data-edit="${p.id}">${esc(p.name)}</button><small>${esc(p.sku || 'No SKU')} · ${money(price)}${p.sale_price != null ? ` <s>${money(p.price)}</s>` : ''}${p.cost_price != null && p.cost_price !== '' ? ` · cost ${money(p.cost_price)}${price ? ` (${Math.round(((price - Number(p.cost_price)) / price) * 100)}% margin)` : ''}` : ' · <span class="no-cost">no cost set</span>'}${p.is_featured ? ' · ⭐ Featured' : ''}${p.in_feed === false ? ' · <span class="no-ads">not in Google/Meta</span>' : ''}${p.ad_label ? ` · 🏷️ ${esc(p.ad_label)}` : ''}</small></div>
+      <div class="product-main"><button type="button" class="product-name" data-edit="${p.id}">${esc(p.name)}</button><small>${esc(p.sku || 'No SKU')} · ${money(price)}${p.sale_price != null ? ` <s>${money(p.price)}</s>` : ''}${p.cost_price != null && p.cost_price !== '' ? ` · cost ${money(p.cost_price)}${price ? ` (${Math.round(((price - Number(p.cost_price)) / price) * 100)}% margin)` : ''}` : ' · <span class="no-cost">no cost set</span>'}${p.is_featured ? ' · ⭐ Featured' : ''}${p.in_feed === false ? ' · <span class="off-catalog">not in Google/Meta</span>' : ''}${p.ad_label ? ` · 🏷️ ${esc(p.ad_label)}` : ''}</small></div>
       ${withOptions.has(p.id)
         ? `<label class="stock-edit ${stockClass} from-options" title="Total of this toy's options. Change the stock in its options.">Stock<input type="number" value="${Number(p.stock_quantity)}" readonly tabindex="-1" aria-label="Stock for ${esc(p.name)}: total of its options" /></label>`
         : `<label class="stock-edit ${stockClass}" title="Stock">Stock<input type="number" min="0" value="${Number(p.stock_quantity)}" data-stock="${p.id}" aria-label="Stock for ${esc(p.name)}" /></label>`}
@@ -1098,9 +1098,9 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .no-cost{color:#8a5a00}
 .category-picker{margin:0;padding:12px;border:1.5px solid var(--line);border-radius:14px}
 .related-picker{display:grid;gap:8px}
-.ads-box{display:grid;gap:10px}
-.ads-toggle{display:flex!important;align-items:center;gap:10px}
-.no-ads{color:var(--danger,#b42318);font-weight:700}
+.catalog-box{display:grid;gap:10px}
+.catalog-toggle{display:flex!important;align-items:center;gap:10px}
+.off-catalog{color:var(--danger,#b42318);font-weight:700}
 .related-list{display:grid;gap:6px;margin:0;padding:0;list-style:none;counter-reset:rel}
 .related-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px 6px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);counter-increment:rel}
 .related-item>span:first-child::before{content:counter(rel) ". ";color:var(--muted);font-weight:800}
