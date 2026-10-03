@@ -194,6 +194,17 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
             <h2 class="seo-gap">Meta (Facebook &amp; Instagram) Pixel</h2>
             <p class="muted">Measures visits, add-to-carts and orders from your Facebook and Instagram ads. Leave empty to turn it off.</p>
             <label class="seo-field">Pixel ID<input id="meta-pixel" class="admin-input" inputmode="numeric" placeholder="e.g. 123456789012345, or paste the whole Pixel code" /><small>In Meta Events Manager open <strong>Data sources</strong>, pick your Pixel and copy its ID.</small></label>
+            <h2 class="seo-gap">Google tag (Google Ads &amp; Analytics)</h2>
+            <p class="muted">Measures visits, add-to-carts and orders from your Google ads and Shopping ads. Leave empty to turn it off.</p>
+            <label class="seo-field">Google tag ID<input id="google-tag" class="admin-input" placeholder="e.g. AW-123456789 or G-ABC123XYZ, or paste the whole tag" /><small>In Google Ads open <strong>Goals → Conversions → Settings → Google tag</strong>, or in Analytics <strong>Admin → Data streams</strong>.</small></label>
+            <label class="seo-field">Purchase conversion (optional)<input id="gads-purchase" class="admin-input" placeholder="AW-123456789/AbC-dEfGh, or paste the event snippet" /><small>A Google Ads conversion action for orders placed on the website. Copy its <strong>send_to</strong> value.</small></label>
+            <label class="seo-field">"Order on WhatsApp" conversion (optional)<input id="gads-lead" class="admin-input" placeholder="AW-123456789/XyZ-12345" /><small>Counted as a <strong>lead</strong>, not a purchase or checkout: only website orders count as purchases.</small></label>
+            <h2 class="seo-gap">Product feed for Google &amp; Meta</h2>
+            <p class="muted">Add a link once as a <strong>scheduled feed</strong> (daily). Google and Meta then keep your products, prices, stock and photos up to date by themselves.</p>
+            <div class="feed-links">
+              <div class="feed-link"><span><strong>Google Merchant Center</strong><code id="feed-google"></code></span><button class="small-button" type="button" data-copy-feed="feed-google">Copy</button></div>
+              <div class="feed-link"><span><strong>Meta Commerce Manager</strong><code id="feed-meta"></code></span><button class="small-button" type="button" data-copy-feed="feed-meta">Copy</button></div>
+            </div>
             <h2 class="seo-gap">Default share image</h2>
             <p class="muted">Used when a page without its own image is shared.</p>
             <div class="seo-image-row"><img id="default-image-preview" alt="" hidden /><div class="seo-actions"><label class="small-button seo-file">Upload image<input id="default-image-file" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" /></label><button id="default-image-remove" class="small-button" type="button" hidden>Remove</button></div></div>
@@ -233,6 +244,18 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
 import { exportPdf, exportXlsx } from '../../scripts/table-export';
+import { googleConversion, googleTagId } from '../../lib/seo';
+
+// Product feed links (src/pages/products-feed.xml.ts) with Copy buttons.
+const feedUrl = `${location.origin}/products-feed.xml`;
+document.getElementById('feed-google')!.textContent = feedUrl;
+document.getElementById('feed-meta')!.textContent = `${feedUrl}?for=meta`;
+document.addEventListener('click', async (event) => {
+  const button = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-copy-feed]') : null;
+  if (!button) return;
+  const text = document.getElementById(button.dataset.copyFeed!)?.textContent || '';
+  try { await navigator.clipboard.writeText(text); button.textContent = 'Copied'; setTimeout(() => { button.textContent = 'Copy'; }, 1500); } catch { prompt('Copy this link:', text); }
+});
 
 type Row = Record<string, any>;
 type Level = 'error' | 'warn' | 'info';
@@ -706,6 +729,9 @@ function fillSettings() {
   $<HTMLInputElement>('#g-verify').value = seo.google_verification || '';
   $<HTMLInputElement>('#b-verify').value = seo.bing_verification || '';
   $<HTMLInputElement>('#meta-pixel').value = seo.meta_pixel_id || '';
+  $<HTMLInputElement>('#google-tag').value = seo.google_tag_id || '';
+  $<HTMLInputElement>('#gads-purchase').value = seo.google_ads_purchase || '';
+  $<HTMLInputElement>('#gads-lead').value = seo.google_ads_lead || '';
   $<HTMLInputElement>('#o-name').value = seo.site_name || 'Clever Toys';
   $<HTMLInputElement>('#o-phone').value = seo.org_phone || '';
   $<HTMLInputElement>('#o-email').value = seo.org_email || '';
@@ -885,8 +911,14 @@ function wire() {
     const pixelRaw = $<HTMLInputElement>('#meta-pixel').value.trim();
     const pixel = (pixelRaw.match(/fbq\(\s*['"]init['"]\s*,\s*['"](\d{5,20})['"]/)?.[1] ?? pixelRaw.match(/[?&]id=(\d{5,20})/)?.[1] ?? pixelRaw).replace(/\s/g, '');
     if (pixel && !/^\d{5,20}$/.test(pixel)) { toast('That Pixel ID does not look right. It is a number, usually 15 or 16 digits.', 'error'); return; }
+    // Google tag ID and Google Ads conversions: the IDs alone or taken from the code Google shows.
+    const tagRaw = $<HTMLInputElement>('#google-tag').value.trim(), purchaseRaw = $<HTMLInputElement>('#gads-purchase').value.trim(), leadRaw = $<HTMLInputElement>('#gads-lead').value.trim();
+    const googleTag = googleTagId(tagRaw), googlePurchase = googleConversion(purchaseRaw), googleLead = googleConversion(leadRaw);
+    if (tagRaw && !googleTag) { toast('That Google tag ID does not look right. It starts with AW- or G-.', 'error'); return; }
+    if (purchaseRaw && !googlePurchase) { toast('That purchase conversion does not look right. It looks like AW-123456789/AbC-dEf.', 'error'); return; }
+    if (leadRaw && !googleLead) { toast('That WhatsApp conversion does not look right. It looks like AW-123456789/AbC-dEf.', 'error'); return; }
     const url = (sel: string) => { const v = $<HTMLInputElement>(sel).value.trim(); return /^https?:\/\//i.test(v) ? v : v ? `https://${v}` : ''; };
-    const saved = await saveSeoSettings({ meta_pixel_id: pixel, google_verification: verification(g), bing_verification: verification(b), site_name: $<HTMLInputElement>('#o-name').value.trim() || 'Clever Toys', org_phone: $<HTMLInputElement>('#o-phone').value.trim(), org_email: $<HTMLInputElement>('#o-email').value.trim(), org_city: $<HTMLInputElement>('#o-city').value.trim(), facebook_url: url('#o-facebook'), tiktok_url: url('#o-tiktok'), default_image: defaultImage }, $<HTMLButtonElement>('#settings-save'));
+    const saved = await saveSeoSettings({ meta_pixel_id: pixel, google_tag_id: googleTag, google_ads_purchase: googlePurchase, google_ads_lead: googleLead, google_verification: verification(g), bing_verification: verification(b), site_name: $<HTMLInputElement>('#o-name').value.trim() || 'Clever Toys', org_phone: $<HTMLInputElement>('#o-phone').value.trim(), org_email: $<HTMLInputElement>('#o-email').value.trim(), org_city: $<HTMLInputElement>('#o-city').value.trim(), facebook_url: url('#o-facebook'), tiktok_url: url('#o-tiktok'), default_image: defaultImage }, $<HTMLButtonElement>('#settings-save'));
     if (saved) fillSettings();
   };
 }
@@ -1008,6 +1040,10 @@ td.seo-pills .seo-pill{margin:2px}
 .seo-tag-warn{background:#fef3c7;color:#92400e}
 .seo-editor form,.seo-dialog form{display:grid;gap:14px}
 .seo-field{display:grid;gap:6px;font-weight:700}
+.feed-links{display:grid;gap:8px}
+.feed-link{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.feed-link span{display:grid;gap:2px;min-width:0}
+.feed-link code{font-size:.8rem;color:var(--muted);overflow-wrap:anywhere}
 .seo-field small,.seo-dialog small{color:var(--muted);font-weight:500}
 .seo-label{font-weight:700}
 .seo-field textarea{resize:vertical;min-height:84px;padding:10px 14px;font:inherit}

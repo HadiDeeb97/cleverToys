@@ -208,7 +208,7 @@ form.addEventListener('submit', async (event) => {
     const out = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(out.error || 'Unable to place order.');
     // For the Meta Pixel Purchase event on the confirmation page (public/store-ui.js).
-    try { sessionStorage.setItem('ctPixelPurchase', JSON.stringify({ order_number: out.order_number || '', value: Math.round(total * 100) / 100, num_items: cart.reduce((n, i) => n + Number(i.quantity || 0), 0), content_ids: cart.map((i) => i.productId) })); } catch {}
+    try { sessionStorage.setItem('ctPixelPurchase', JSON.stringify({ order_number: out.order_number || '', value: Math.round(total * 100) / 100, num_items: cart.reduce((n, i) => n + Number(i.quantity || 0), 0), items: cart.map((i) => ({ id: i.variantId || i.productId, name: i.name, price: Number(i.price || 0), quantity: Number(i.quantity || 1) })) })); } catch {}
     localStorage.removeItem(CART_KEY);
     location.href = out.order_number ? `/order-success?order=${encodeURIComponent(out.order_number)}` : '/order-success';
   } catch (error) {

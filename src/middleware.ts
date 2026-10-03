@@ -143,6 +143,15 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   // A page loaded ahead of time (speculation rules) is only counted once the shopper opens it.
   const pixelId = isAdmin ? '' : parseSeoSettings(storeSettings.seo).meta_pixel_id;
   const pixelScript = pixelId ? `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');fbq('init','${pixelId}');var go=function(){fbq('track','PageView')};document.prerendering?document.addEventListener('prerenderingchange',go,{once:true}):go();</script>` : '';
+  // Google tag (Admin → SEO → Settings): Google Ads / Analytics, on storefront pages only. The Google Ads
+  // conversion IDs are configured too, and public/store-ui.js sends the same shop events as the Pixel
+  // (view_item, add_to_cart, begin_checkout, purchase, generate_lead) with the product feed's item IDs.
+  const seoForTags = parseSeoSettings(storeSettings.seo);
+  const googleIds = isAdmin ? [] : [...new Set([seoForTags.google_tag_id, seoForTags.google_ads_purchase.split('/')[0], seoForTags.google_ads_lead.split('/')[0]].filter(Boolean))];
+  const googleConfig = { purchase: seoForTags.google_ads_purchase, lead: seoForTags.google_ads_lead };
+  const googleTagScript = googleIds.length
+    ? `<script async src="https://www.googletagmanager.com/gtag/js?id=${googleIds[0]}"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}window.__CT_GTAG__=${JSON.stringify(googleConfig)};gtag('js',new Date());${googleIds.map((id) => `gtag('config','${id}',{send_page_view:false});`).join('')}var gogt=function(){gtag('event','page_view')};document.prerendering?document.addEventListener('prerenderingchange',gogt,{once:true}):gogt();</script>`
+    : '';
   // The visitor's country (from Cloudflare) picks the starting flag of phone fields (public/phone-ui.js).
   const cfCountry = String((context.request as Request & { cf?: { country?: string } }).cf?.country || context.request.headers.get('cf-ipcountry') || '').toUpperCase();
   const visitorCountry = /^[A-Z]{2}$/.test(cfCountry) && cfCountry !== 'XX' ? cfCountry : '';
@@ -152,7 +161,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   const fontHref = FONT_PRESETS[isAdmin ? 'modern' : design.font].href;
   const fontLinks = `<link rel="preconnect" href="https://fonts.googleapis.com" /><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin /><link rel="stylesheet" href="${fontHref}" media="print" onload="this.media='all'" /><noscript><link rel="stylesheet" href="${fontHref}" /></noscript>`;
   // Bump the ?v= number whenever these files change, so browsers fetch the new version.
-  const storeScript = '<script src="/store-ui.js?v=20261002-1" defer></script><script src="/branding-ui.js?v=20260929-7" defer></script>';
+  const storeScript = '<script src="/store-ui.js?v=20261003-1" defer></script><script src="/branding-ui.js?v=20261003-1" defer></script>';
   // Instant page changes: when a shopper hovers over (computer) or touches (phone) a store link, the
   // browser starts loading that page right away, so it is usually ready by the time the tap finishes.
   // Supported by Chrome, Edge and Samsung Internet; other browsers ignore it. Cart, checkout, account
@@ -272,7 +281,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   // Phone fields with a country picker (public/phone-ui.js): only pages with a phone field, or with the
   // "Order on WhatsApp" button (its form has one), load it.
   const phoneScript = isAdmin || /type=["']tel["']|data-buy-whatsapp/i.test(output) ? PHONE_SCRIPT : '';
-  if (!/<script[^>]+src="\/store-ui\.js/.test(output)) output = output.replace('</head>', `${preconnect}${iconTags}${fontLinks}${earlyTheme}${storeConfig}${pixelScript}${storeScript}${phoneScript}${speculationRules}</head>`);
+  if (!/<script[^>]+src="\/store-ui\.js/.test(output)) output = output.replace('</head>', `${preconnect}${iconTags}${fontLinks}${earlyTheme}${storeConfig}${pixelScript}${googleTagScript}${storeScript}${phoneScript}${speculationRules}</head>`);
 
   if (isAdmin) {
     // One admin layout for every admin page: sidebar navigation on desktop, compact top bar on phones.

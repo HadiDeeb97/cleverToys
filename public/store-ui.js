@@ -599,21 +599,61 @@
     });
   }
 
-  // ---------- Meta Pixel shop events (only when a Pixel ID is set in Admin → SEO → Settings) ----------
-  // src/middleware.ts adds Meta's base code; these calls tell Meta what shoppers do.
+  // ---------- Shop events for Meta Pixel and Google tag (only those set up in Admin → SEO → Settings) ----------
+  // src/middleware.ts adds the base codes; these calls tell Meta and Google what shoppers do.
+  // Item IDs are the product feed's IDs (/products-feed.xml): the option's ID for a toy sold by option,
+  // otherwise the toy's own ID, so ads can show people the exact toys they looked at.
   const pixel = (...args) => { try { if (typeof window.fbq === 'function') window.fbq(...args); } catch {} };
+  const gtagEvent = (...args) => { try { if (typeof window.gtag === 'function') window.gtag(...args); } catch {} };
+  const googleItems = (items) => items.map((i) => ({ item_id: i.id, item_name: i.name || undefined, price: Number(i.price) || undefined, quantity: Number(i.quantity) || 1, google_business_vertical: 'retail' }));
+  /** One shop event, sent to Meta (its standard names) and Google (its recommended names, plus Google Ads conversions). */
+  const track = (event, data) => {
+    const items = data.items || [];
+    const ids = items.map((i) => i.id);
+    const value = Math.round((Number(data.value) || 0) * 100) / 100;
+    const ads = window.__CT_GTAG__ || {};
+    if (event === 'ViewContent') {
+      pixel('track', 'ViewContent', { content_ids: data.groupId ? [data.groupId] : ids, content_name: data.name, content_type: data.groupId ? 'product_group' : 'product', value, currency: 'USD' });
+      gtagEvent('event', 'view_item', { currency: 'USD', value, items: googleItems(items) });
+    } else if (event === 'AddToCart') {
+      pixel('track', 'AddToCart', { content_ids: ids, content_name: data.name, content_type: 'product', contents: items.map((i) => ({ id: i.id, quantity: i.quantity })), value, currency: 'USD' });
+      gtagEvent('event', 'add_to_cart', { currency: 'USD', value, items: googleItems(items) });
+    } else if (event === 'InitiateCheckout') {
+      pixel('track', 'InitiateCheckout', { content_ids: ids, content_type: 'product', num_items: data.numItems, value, currency: 'USD' });
+      gtagEvent('event', 'begin_checkout', { currency: 'USD', value, items: googleItems(items) });
+    } else if (event === 'Purchase') {
+      pixel('track', 'Purchase', { content_ids: ids, content_type: 'product', num_items: data.numItems, value, currency: 'USD' }, { eventID: data.orderNumber });
+      gtagEvent('event', 'purchase', { transaction_id: data.orderNumber, currency: 'USD', value, items: googleItems(items) });
+      if (ads.purchase) gtagEvent('event', 'conversion', { send_to: ads.purchase, value, currency: 'USD', transaction_id: data.orderNumber });
+    } else if (event === 'Lead') {
+      pixel('track', 'Lead', { content_ids: ids, content_name: data.name, content_type: 'product', value, currency: 'USD' });
+      gtagEvent('event', 'generate_lead', { currency: 'USD', value, items: googleItems(items) });
+      if (ads.lead) gtagEvent('event', 'conversion', { send_to: ads.lead, value, currency: 'USD' });
+    }
+  };
+  // Used by "Order on WhatsApp" (public/branding-ui.js).
+  window.cleverTrack = track;
   const whenOpened = (fn) => { if (document.prerendering) document.addEventListener('prerenderingchange', fn, { once: true }); else fn(); };
+  const feedId = (item) => item.variantId || item.productId;
   const cartSnapshot = () => new Map(readCart().map((item) => [`${item.productId}|${item.variantId || ''}`, item]));
   const setupPixelEvents = () => {
-    if (typeof window.fbq !== 'function') return;
+    if (typeof window.fbq !== 'function' && typeof window.gtag !== 'function') return;
     // Product page: ViewContent (data from the page, see src/pages/product/[slug].astro).
+    // A toy sold by option is one product group for Meta; Google gets its first option.
     let product = null;
     try { product = JSON.parse(document.getElementById('pixel-product')?.textContent || 'null'); } catch {}
-    if (product?.id) pixel('track', 'ViewContent', { content_ids: [product.id], content_name: product.name, content_type: 'product', value: Number(product.price) || 0, currency: 'USD' });
+    if (product?.id) {
+      const optionIds = Array.isArray(product.variantIds) ? product.variantIds : [];
+      track('ViewContent', { name: product.name, value: product.price, groupId: optionIds.length ? product.id : null, items: [{ id: optionIds[0] || product.id, name: product.name, price: product.price, quantity: 1 }] });
+    }
     // Checkout page: InitiateCheckout with what is in the cart.
     if (/^\/checkout\/?$/.test(location.pathname)) {
       const cart = readCart();
-      if (cart.length) pixel('track', 'InitiateCheckout', { content_ids: cart.map((i) => i.productId), num_items: cart.reduce((n, i) => n + Number(i.quantity || 0), 0), value: Math.round(cart.reduce((n, i) => n + Number(i.price || 0) * Number(i.quantity || 0), 0) * 100) / 100, currency: 'USD' });
+      if (cart.length) track('InitiateCheckout', {
+        numItems: cart.reduce((n, i) => n + Number(i.quantity || 0), 0),
+        value: cart.reduce((n, i) => n + Number(i.price || 0) * Number(i.quantity || 0), 0),
+        items: cart.map((i) => ({ id: feedId(i), name: i.name, price: i.price, quantity: i.quantity }))
+      });
     }
     // Order confirmation: Purchase, sent once per order (the checkout page saves the order just before coming here).
     if (/^\/order-success\/?$/.test(location.pathname)) {
@@ -621,7 +661,8 @@
         const saved = JSON.parse(sessionStorage.getItem('ctPixelPurchase') || 'null');
         if (saved?.order_number) {
           sessionStorage.removeItem('ctPixelPurchase');
-          pixel('track', 'Purchase', { content_ids: saved.content_ids || [], num_items: saved.num_items || 0, value: Math.round((Number(saved.value) || 0) * 100) / 100, currency: 'USD' }, { eventID: saved.order_number });
+          const items = Array.isArray(saved.items) ? saved.items : (saved.content_ids || []).map((id) => ({ id, quantity: 1 }));
+          track('Purchase', { orderNumber: saved.order_number, numItems: saved.num_items || 0, value: saved.value, items });
         }
       } catch {}
     }
@@ -631,7 +672,7 @@
       const after = cartSnapshot();
       after.forEach((item, key) => {
         const added = Number(item.quantity || 0) - Number(before.get(key)?.quantity || 0);
-        if (added > 0) pixel('track', 'AddToCart', { content_ids: [item.productId], content_name: item.name, content_type: 'product', contents: [{ id: item.productId, quantity: added }], value: Number(item.price || 0) * added, currency: 'USD' });
+        if (added > 0) track('AddToCart', { name: item.name, value: Number(item.price || 0) * added, items: [{ id: feedId(item), name: item.name, price: item.price, quantity: added }] });
       });
       before = after;
     };

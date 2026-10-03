@@ -15,6 +15,11 @@ export type SeoSettings = {
   sitemap_images: boolean;
   robots_extra: string;
   meta_pixel_id: string;
+  /** Google tag: a Google Ads (AW-…) or Google Analytics (G-…) ID. */
+  google_tag_id: string;
+  /** Google Ads conversions ("AW-123456789/AbC-dEf"): a placed order, and an "Order on WhatsApp". */
+  google_ads_purchase: string;
+  google_ads_lead: string;
 };
 
 export const defaultSeoSettings: SeoSettings = {
@@ -31,7 +36,10 @@ export const defaultSeoSettings: SeoSettings = {
   sitemap_categories: true,
   sitemap_images: true,
   robots_extra: '',
-  meta_pixel_id: ''
+  meta_pixel_id: '',
+  google_tag_id: '',
+  google_ads_purchase: '',
+  google_ads_lead: ''
 };
 
 const text = (value: unknown, max = 300) => String(value ?? '').trim().slice(0, max);
@@ -42,6 +50,18 @@ export const verificationCode = (value: unknown) => {
   const raw = text(value, 400);
   const fromTag = raw.match(/content=["']([^"']+)["']/i)?.[1] ?? raw;
   return /^[A-Za-z0-9_\-=.]{4,120}$/.test(fromTag) ? fromTag : '';
+};
+
+/** A Google tag ID ("AW-123456789", "G-ABC123XYZ", "GT-…"), taken from the ID alone or the whole tag code. */
+export const googleTagId = (value: unknown) => {
+  const raw = text(value, 2000);
+  const id = (raw.match(/\b((?:AW|G|GT)-[A-Za-z0-9]{4,20})\b/)?.[1] ?? '').toUpperCase();
+  return /^(AW|G|GT)-[A-Z0-9]{4,20}$/.test(id) ? id : '';
+};
+/** A Google Ads conversion "send to" value ("AW-123456789/AbC-dEf_12"), from itself or the whole event snippet. */
+export const googleConversion = (value: unknown) => {
+  const m = text(value, 2000).match(/\b(AW-\d{6,15})\/([A-Za-z0-9_-]{4,40})\b/);
+  return m ? `${m[1]}/${m[2]}` : '';
 };
 
 export function parseSeoSettings(value: unknown): SeoSettings {
@@ -61,7 +81,10 @@ export function parseSeoSettings(value: unknown): SeoSettings {
     sitemap_images: flag(s.sitemap_images, true),
     robots_extra: text(s.robots_extra, 4000),
     // Meta (Facebook) Pixel ID: digits only.
-    meta_pixel_id: /^\d{5,20}$/.test(String(s.meta_pixel_id ?? '').trim()) ? String(s.meta_pixel_id).trim() : ''
+    meta_pixel_id: /^\d{5,20}$/.test(String(s.meta_pixel_id ?? '').trim()) ? String(s.meta_pixel_id).trim() : '',
+    google_tag_id: googleTagId(s.google_tag_id),
+    google_ads_purchase: googleConversion(s.google_ads_purchase),
+    google_ads_lead: googleConversion(s.google_ads_lead)
   };
 }
 

@@ -275,7 +275,10 @@
       const unitPrice = Number(String(priceEl.textContent || '').replace(/[^0-9.]/g, '')) || 0;
       const subtotal = unitPrice * qty;
       const delivery = getDeliveryFee(subtotal, branding);
-      return { qty, optionName, unitPrice, subtotal, delivery, total: subtotal + delivery, productName: productTitle.textContent?.trim() || 'Toy', productUrl: `${location.origin}${location.pathname}` };
+      // The product feed's ID for this toy (or the chosen option), for the Meta Pixel / Google tag lead event.
+      let feedId = selected?.value || '';
+      if (!feedId) { try { feedId = JSON.parse(document.getElementById('pixel-product')?.textContent || 'null')?.id || ''; } catch {} }
+      return { qty, optionName, unitPrice, subtotal, delivery, total: subtotal + delivery, feedId, productName: productTitle.textContent?.trim() || 'Toy', productUrl: `${location.origin}${location.pathname}` };
     };
 
     const buildMessage = (order, details) => [
@@ -307,8 +310,8 @@
       // No option chosen yet: the product page points the shopper to the options instead.
       if (typeof window.cleverNeedOption === 'function' && window.cleverNeedOption()) return;
       openDetailsDialog(collectOrder(), (order, details) => {
-        // Meta Pixel (if set up): a WhatsApp order counts as a lead.
-        try { if (typeof window.fbq === 'function') window.fbq('track', 'Lead', { content_name: order.productName, value: order.total, currency: 'USD' }); } catch {}
+        // Meta Pixel / Google tag (if set up): a WhatsApp order counts as a lead (public/store-ui.js).
+        try { window.cleverTrack?.('Lead', { name: order.productName, value: order.total, items: order.feedId ? [{ id: order.feedId, name: order.productName, price: order.unitPrice, quantity: order.qty }] : [] }); } catch {}
         window.open(buildWhatsappUrl(getBranding().whatsappUrl, buildMessage(order, details)), '_blank', 'noopener,noreferrer');
       });
     });
