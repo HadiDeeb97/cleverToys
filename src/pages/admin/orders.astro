@@ -1,6 +1,8 @@
 ---
 /**
  * Admin → Orders: every order with search and status filters; change status, see items and customer details.
+ * Edit an order (items, quantities, prices, delivery, discount) and add orders taken outside the website
+ * (supabase/order_editing.sql).
  */
 import '../../styles/global.css';
 import { supabaseConfig } from '../../lib/config';
@@ -21,7 +23,8 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
       <div class="quick-actions">
         <button id="enable-alerts" class="button secondary-button" type="button" title="Show a pop-up on this computer when a new order arrives">🔔 Order alerts</button>
         <button id="export-xlsx" class="button secondary-button" type="button" title="The orders shown (with your filters), and their items">Export Excel</button>
-        <button id="refresh" class="button" type="button">Refresh</button>
+        <button id="refresh" class="button secondary-button" type="button">Refresh</button>
+        <button id="new-order-open" class="button" type="button" title="An order from WhatsApp, Instagram, a phone call or the shop">＋ New order</button>
       </div>
     </div>
     <div id="auth-config" data-url={supabaseUrl} data-key={supabaseKey} hidden></div>
@@ -41,6 +44,28 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
       <div id="orders-list" class="orders-list"></div>
       <div class="load-more-wrap"><button id="load-more" class="button secondary-button" type="button" hidden>Show more orders</button></div>
     </div>
+    <dialog id="new-order" class="wa-dialog new-order-dialog" aria-labelledby="new-order-title">
+      <form id="new-order-form" class="wa-dialog-form" novalidate>
+        <div class="new-order-head"><div><p class="eyebrow">Order from outside the website</p><h2 id="new-order-title">New order</h2></div><button type="button" class="small-button" id="new-order-close" aria-label="Close">✕</button></div>
+        <div class="new-order-grid">
+          <label>Where from<select name="source" class="admin-input"><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="phone">Phone call</option><option value="in_store">In store</option><option value="other">Other</option></select></label>
+          <label>Status<select id="new-order-status" name="status" class="admin-input"></select></label>
+          <label>Date &amp; time<input name="created_at" class="admin-input" type="datetime-local" /></label>
+          <label>Customer name *<input name="customer_name" class="admin-input" maxlength="120" required autocomplete="off" /></label>
+          <label>Phone<input name="customer_phone" class="admin-input" type="tel" autocomplete="off" /></label>
+          <label>Email<input name="customer_email" class="admin-input" type="email" maxlength="200" autocomplete="off" /></label>
+          <label>Governorate<input id="new-order-governorate" name="governorate" class="admin-input" list="governorate-list" maxlength="80" autocomplete="off" /></label>
+          <label>City<input name="city" class="admin-input" maxlength="80" autocomplete="off" /></label>
+          <label>Area<input name="area" class="admin-input" maxlength="80" autocomplete="off" /></label>
+          <label class="wide">Address<input name="address" class="admin-input" maxlength="300" autocomplete="off" /></label>
+          <label class="wide">Notes<textarea name="notes" class="admin-input" rows="2" maxlength="1000"></textarea></label>
+        </div>
+        <datalist id="governorate-list"></datalist>
+        <div><h3 class="new-order-items">Items</h3><div data-draft-box="new"></div></div>
+        <p class="new-order-note">The items are taken from stock, like a website order. The delivery fee follows the governorate (Admin → Discounts &amp; delivery) until you change it.</p>
+        <div class="new-order-actions"><button type="submit" class="button" id="new-order-save">Add order</button><button type="button" class="button secondary-button" id="new-order-cancel">Cancel</button></div>
+      </form>
+    </dialog>
   </div>
 </main>
 
@@ -52,6 +77,8 @@ import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 
 const STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
 const LABELS: Record<string, string> = { pending: 'Pending', confirmed: 'Confirmed', processing: 'Preparing', shipped: 'On the way', delivered: 'Delivered', cancelled: 'Cancelled' };
+// Where an order came from (orders.source); website orders show no badge.
+const SOURCES: Record<string, string> = { website: 'Website', whatsapp: '💬 WhatsApp', instagram: '📸 Instagram', facebook: '📘 Facebook', phone: '📞 Phone call', in_store: '🏬 In store', other: '✍️ Other' };
 const PAGE_SIZE = 25;
 // Order fields come from anonymous checkout input, so everything rendered as HTML is escaped.
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
@@ -67,11 +94,15 @@ const params = new URLSearchParams(location.search);
 let statusFilter = STATUSES.includes(params.get('status') || '') ? String(params.get('status')) : 'all';
 let visible = PAGE_SIZE;
 const expanded = new Set<string>();
-// Orders whose prices are being edited, and prices typed but not saved yet (kept when the list redraws).
-const editingPrices = new Set<string>();
 // Only owners and managers may delete orders (also enforced by the database: supabase/order_delete.sql).
 let canDelete = false;
-const draftPrices = new Map<string, string>();
+// Orders being edited (and the New order form, under NEW) with the changes not saved yet, kept when the list redraws.
+type Line = { key: string; id?: string; product_id: string; variant_id: string | null; name: string; variant_name: string | null; sku: string | null; quantity: string; price: string };
+type Draft = { lines: Line[]; discount: string; initialDiscount: string; delivery: string; deliveryTouched: boolean; search: string };
+const drafts = new Map<string, Draft>();
+const NEW = 'new';
+let lineCount = 0;
+const round2 = (n: number) => Math.round(n * 100) / 100;
 $<HTMLInputElement>('#order-search').value = params.get('q') || '';
 
 // wa.me needs an international number; Lebanese numbers without a country code get 961.
@@ -109,25 +140,21 @@ function renderTabs() {
 
 function detailsHtml(o: any) {
   const items = itemsByOrder.get(o.id);
-  const editing = editingPrices.has(o.id) && Boolean(items?.length);
-  const priceCell = (i: any) => editing
-    ? `<label class="sr-only" for="price-${i.id}">Price for ${esc(i.product_name)}</label><input id="price-${i.id}" class="admin-input price-input" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(draftPrices.get(i.id) ?? Number(i.unit_price).toFixed(2))}" data-price-item="${i.id}" data-price-order="${o.id}" data-qty="${Number(i.quantity)}" />`
-    : money(i.unit_price);
-  const itemRows = items ? (items.length ? items.map((i) => `<tr><td>${esc(i.product_name)}${i.variant_name ? `<small> · ${esc(i.variant_name)}</small>` : ''}${i.sku ? `<br><small>SKU ${esc(i.sku)}</small>` : ''}</td><td>${Number(i.quantity)}</td><td>${priceCell(i)}</td><td data-line-total="${i.id}">${money(i.total_price)}</td></tr>`).join('') : '<tr><td colspan="4">No items recorded.</td></tr>') : '<tr><td colspan="4">Loading items…</td></tr>';
+  const editing = drafts.has(o.id);
+  const itemRows = items ? (items.length ? items.map((i) => `<tr><td>${esc(i.product_name)}${i.variant_name ? `<small> · ${esc(i.variant_name)}</small>` : ''}${i.sku ? `<br><small>SKU ${esc(i.sku)}</small>` : ''}</td><td>${Number(i.quantity)}</td><td>${money(i.unit_price)}</td><td>${money(i.total_price)}</td></tr>`).join('') : '<tr><td colspan="4">No items recorded.</td></tr>') : '<tr><td colspan="4">Loading items…</td></tr>';
+  const table = editing ? `<div data-draft-box="${o.id}">${editorHtml(o.id)}</div>` : `<table class="items-table"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody>
+    <tfoot><tr><td colspan="3">Subtotal</td><td>${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr>${Number(o.discount) ? `<tr><td colspan="3">Discount ${discountPercent(o)}%${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</td><td>−${money(o.discount)}</td></tr>` : ''}<tr class="grand"><td colspan="3">Total (cash on delivery)</td><td>${money(o.total)}</td></tr></tfoot></table>`;
   return `<div class="order-details">
     <div class="order-detail-grid">
       <div><h3>Customer</h3><p><strong>${esc(o.customer_name)}</strong></p><p><a href="tel:${esc(o.customer_phone)}">${esc(o.customer_phone)}</a></p>${o.customer_email ? `<p><a href="mailto:${esc(o.customer_email)}">${esc(o.customer_email)}</a></p>` : ''}</div>
       <div><h3>Delivery address</h3><p>${esc([o.governorate, o.city, o.area].filter(Boolean).join(', '))}</p><p>${esc(o.address)}</p></div>
       <div><h3>Notes</h3><p>${o.notes ? esc(o.notes) : '<span class="muted">No notes</span>'}</p></div>
     </div>
-    <table class="items-table"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody>
-    <tfoot><tr><td colspan="3">Subtotal</td><td data-sum="subtotal">${money(o.subtotal)}</td></tr><tr><td colspan="3">Delivery</td><td>${Number(o.delivery_fee) ? money(o.delivery_fee) : 'Free'}</td></tr>${editing
-      ? `<tr class="discount-edit"><td colspan="3"><label for="discount-${o.id}">Discount${o.coupon_code ? ` (code ${esc(o.coupon_code)})` : ''}</label> <span class="percent-field"><input id="discount-${o.id}" class="admin-input price-input" type="number" inputmode="decimal" min="0" max="100" step="any" value="${esc(draftPrices.get(`discount:${o.id}`) ?? discountPercent(o))}" data-initial="${discountPercent(o)}" data-discount-order="${o.id}" /><b aria-hidden="true">%</b></span></td><td data-sum="discount">−${money(o.discount)}</td></tr>`
-      : Number(o.discount) ? `<tr><td colspan="3">Discount ${discountPercent(o)}%${o.coupon_code ? ` (${esc(o.coupon_code)})` : ''}</td><td data-sum="discount">−${money(o.discount)}</td></tr>` : ''}<tr class="grand"><td colspan="3">Total (cash on delivery)</td><td data-sum="total">${money(o.total)}</td></tr></tfoot></table>
-    ${editing ? `<div class="price-edit-bar"><span>Change the prices or the discount %, then save. The discount is taken from the items (not delivery); the delivery fee stays the same.</span><button type="button" class="button" data-save-prices="${o.id}">Save</button><button type="button" class="button secondary-button" data-cancel-prices="${o.id}">Cancel</button></div>` : ''}
+    ${table}
+    ${editing ? `<div class="price-edit-bar"><span>Change quantities and prices, remove items with ✕ or add toys, set the delivery fee and the discount %, then save. ${o.status === 'cancelled' ? 'Stock does not change (the order is cancelled).' : 'Stock follows the change: removed items go back into stock, added items are taken from it.'}</span><button type="button" class="button" data-save-order="${o.id}">Save changes</button><button type="button" class="button secondary-button" data-cancel-edit="${o.id}">Cancel</button></div>` : ''}
     <div class="order-actions">
       <a class="button whatsapp-action" target="_blank" rel="noopener" href="https://api.whatsapp.com/send?phone=${whatsappNumber(o.customer_phone)}&text=${encodeURIComponent(whatsappMessage(o))}">💬 Message on WhatsApp</a>
-      ${!editing && items?.length ? `<button class="button secondary-button" type="button" data-edit-prices="${o.id}">✏️ Edit prices &amp; discount</button>` : ''}
+      ${!editing && items ? `<button class="button secondary-button" type="button" data-edit-order="${o.id}">✏️ Edit order</button>` : ''}
       <button class="button secondary-button" type="button" data-print="${o.id}">🧾 Print invoice</button>
       <button class="button secondary-button" type="button" data-copy-link="${o.id}">🔗 Copy tracking link</button>
       ${canDelete && !editing ? `<button class="button delete-order-button" type="button" data-delete-order="${o.id}">🗑️ Delete order</button>` : ''}
@@ -143,7 +170,7 @@ function render() {
   const page = list.slice(0, visible);
   $('#orders-list').innerHTML = page.length ? page.map((o) => `<article class="order-card${expanded.has(o.id) ? ' open' : ''}" data-order="${o.id}">
     <div class="order-row">
-      <button type="button" class="order-toggle" aria-expanded="${expanded.has(o.id)}" data-toggle="${o.id}"><span class="chev" aria-hidden="true">›</span><span><strong>${esc(o.order_number)}</strong><small>${new Date(o.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</small></span></button>
+      <button type="button" class="order-toggle" aria-expanded="${expanded.has(o.id)}" data-toggle="${o.id}"><span class="chev" aria-hidden="true">›</span><span><strong>${esc(o.order_number)}</strong><small>${new Date(o.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}</small>${o.source && o.source !== 'website' ? `<small class="order-source">${esc(SOURCES[o.source] || o.source)}</small>` : ''}</span></button>
       <div class="order-customer"><strong>${esc(o.customer_name)}</strong><small>${esc(o.customer_phone)} · ${esc(o.city || o.governorate || '')}</small></div>
       <strong class="order-total">${money(o.total)}${o.coupon_code ? `<small class="order-coupon" title="Discount code">🏷️ ${esc(o.coupon_code)}</small>` : ''}</strong>
       <span class="status-pill status-${esc(o.status)}">${esc(LABELS[o.status] || o.status)}</span>
@@ -156,12 +183,11 @@ function render() {
     ${expanded.has(o.id) ? detailsHtml(o) : ''}
   </article>`).join('') : '<div class="empty-state"><h2>No orders match</h2><p>Try another status, search or date range.</p></div>';
   $('#load-more').hidden = list.length <= visible;
-  for (const id of editingPrices) showEditedTotals(id);
 }
 
 async function loadItems(orderId: string) {
   if (itemsByOrder.has(orderId)) return;
-  const r = await supabase.from('order_items').select('id,order_id,product_name,variant_name,sku,quantity,unit_price,total_price').eq('order_id', orderId).order('created_at');
+  const r = await supabase.from('order_items').select('id,order_id,product_id,variant_id,product_name,variant_name,sku,quantity,unit_price,total_price').eq('order_id', orderId).order('created_at');
   itemsByOrder.set(orderId, (r.data ?? []) as any[]);
 }
 
@@ -170,62 +196,234 @@ function discountPercent(o: any) {
   const subtotal = Number(o.subtotal || 0), discount = Number(o.discount || 0);
   return subtotal > 0 && discount > 0 ? String(Math.round(discount / subtotal * 10000) / 100) : '0';
 }
-/** The order's totals with the prices and discount % typed in the open fields (same sums the database does). */
-function editedTotals(o: any) {
-  const inputs = [...document.querySelectorAll<HTMLInputElement>(`[data-price-order="${o.id}"]`)];
-  const subtotal = inputs.reduce((sum, input) => sum + Math.round(Math.max(0, Number(input.value) || 0) * 100) / 100 * Number(input.dataset.qty || 0), 0);
-  const discountInput = document.querySelector<HTMLInputElement>(`[data-discount-order="${o.id}"]`);
-  const percent = Math.min(100, Math.max(0, Number(discountInput?.value) || 0));
-  // An untouched discount on unchanged prices keeps its exact amount (no rounding to the percentage).
-  const unchanged = !discountInput || (discountInput.value.trim() === discountInput.dataset.initial && Math.abs(subtotal - Number(o.subtotal || 0)) < 0.005);
-  const wanted = unchanged ? Number(o.discount || 0) : Math.round(subtotal * percent) / 100;
-  const discount = Math.min(wanted, subtotal);
-  return { inputs, discountInput, subtotal, discount, total: Math.max(0, subtotal - discount) + Number(o.delivery_fee || 0) };
-}
-function showEditedTotals(orderId: string) {
-  const o = orders.find((x) => x.id === orderId);
-  const card = document.querySelector(`[data-order="${orderId}"]`);
-  if (!o || !card) return;
-  const t = editedTotals(o);
-  for (const input of t.inputs) {
-    const cell = card.querySelector(`[data-line-total="${input.dataset.priceItem}"]`);
-    if (cell) cell.textContent = money((Math.max(0, Number(input.value) || 0)) * Number(input.dataset.qty || 0));
-  }
-  const set = (key: string, text: string) => { const el = card.querySelector(`[data-sum="${key}"]`); if (el) el.textContent = text; };
-  set('subtotal', money(t.subtotal)); set('discount', `−${money(t.discount)}`); set('total', money(t.total));
-}
-async function savePrices(orderId: string) {
+
+// ---------- Editing items (an open order, or the New order form) ----------
+
+/** Starts editing an order: its items, delivery fee and discount % as they are now. */
+function startEdit(orderId: string) {
   const o = orders.find((x) => x.id === orderId);
   if (!o) return;
-  const { inputs, discountInput, discount: discountAmount } = editedTotals(o);
-  const prices: Record<string, number> = {};
-  for (const input of inputs) {
-    const value = Number(input.value);
-    if (input.value.trim() === '' || !Number.isFinite(value) || value < 0) { input.focus(); toast('Enter a valid price (0 or more).', 'error'); return; }
-    prices[input.dataset.priceItem!] = Math.round(value * 100) / 100;
+  drafts.set(orderId, {
+    lines: (itemsByOrder.get(orderId) ?? []).map((i) => ({ key: `l${++lineCount}`, id: i.id, product_id: i.product_id, variant_id: i.variant_id, name: i.product_name, variant_name: i.variant_name, sku: i.sku, quantity: String(i.quantity), price: Number(i.unit_price).toFixed(2) })),
+    discount: discountPercent(o), initialDiscount: discountPercent(o), delivery: Number(o.delivery_fee || 0).toFixed(2), deliveryTouched: true, search: ''
+  });
+  render();
+}
+
+// Delivery fees for the New order form: the same rules as checkout (public.delivery_fee_for).
+let deliveryInfo: { fee: number; threshold: number; zones: any[] } | null = null;
+async function loadDeliveryInfo() {
+  if (deliveryInfo) return;
+  const [settings, zones] = await Promise.all([
+    supabase.from('store_settings').select('cod_delivery_price,free_delivery_threshold').eq('id', 'default').maybeSingle(),
+    supabase.from('delivery_zones').select('governorate,fee,is_active').order('governorate')
+  ]);
+  deliveryInfo = { fee: Math.max(0, Number(settings.data?.cod_delivery_price || 0)), threshold: Math.max(0, Number(settings.data?.free_delivery_threshold || 0)), zones: (zones.data ?? []) as any[] };
+  $('#governorate-list').innerHTML = deliveryInfo.zones.filter((z) => z.is_active).map((z) => `<option value="${esc(z.governorate)}"></option>`).join('');
+}
+function autoDelivery(subtotal: number) {
+  if (!deliveryInfo) return 0;
+  const governorate = $<HTMLInputElement>('#new-order-governorate').value.trim().toLowerCase();
+  const zone = deliveryInfo.zones.find((z) => String(z.governorate).toLowerCase() === governorate);
+  const fee = zone?.is_active ? Number(zone.fee || 0) : deliveryInfo.fee;
+  return deliveryInfo.threshold > 0 && subtotal >= deliveryInfo.threshold ? 0 : fee;
+}
+
+/** The totals with what is typed (the same sums the database does when saving). */
+function draftTotals(id: string) {
+  const d = drafts.get(id)!;
+  const o = id === NEW ? null : orders.find((x) => x.id === id);
+  const line = (l: Line) => round2(Math.max(0, Number(l.price) || 0)) * Math.max(0, Math.floor(Number(l.quantity) || 0));
+  const subtotal = round2(d.lines.reduce((sum, l) => sum + line(l), 0));
+  const percent = Math.min(100, Math.max(0, Number(d.discount) || 0));
+  // An untouched discount on an unchanged subtotal keeps its exact amount (no rounding to the percentage).
+  const unchanged = o && d.discount.trim() === d.initialDiscount && Math.abs(subtotal - Number(o.subtotal || 0)) < 0.005;
+  const discount = Math.min(unchanged ? Number(o.discount || 0) : Math.round(subtotal * percent) / 100, subtotal);
+  if (id === NEW && !d.deliveryTouched) d.delivery = autoDelivery(subtotal).toFixed(2);
+  const delivery = round2(Math.max(0, Number(d.delivery) || 0));
+  return { line, subtotal, discount, delivery, total: Math.max(0, subtotal - discount) + delivery };
+}
+
+function editorHtml(id: string) {
+  const d = drafts.get(id)!;
+  const o = id === NEW ? null : orders.find((x) => x.id === id);
+  const t = draftTotals(id);
+  const rows = d.lines.length ? d.lines.map((l) => `<tr>
+      <td>${esc(l.name)}${l.variant_name ? `<small> · ${esc(l.variant_name)}</small>` : ''}${l.sku ? `<br><small>SKU ${esc(l.sku)}</small>` : ''}${id !== NEW && !l.id ? ' <span class="new-line">added</span>' : ''}</td>
+      <td><input class="admin-input qty-input" type="number" inputmode="numeric" min="1" max="1000" step="1" value="${esc(l.quantity)}" aria-label="Quantity of ${esc(l.name)}" data-draft="${id}" data-line-qty="${l.key}" /></td>
+      <td><input class="admin-input price-input" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(l.price)}" aria-label="Price of ${esc(l.name)}" data-draft="${id}" data-line-price="${l.key}" /></td>
+      <td data-line-total="${l.key}">${money(t.line(l))}</td>
+      <td><button type="button" class="remove-line" title="Remove this item" aria-label="Remove ${esc(l.name)}" data-draft="${id}" data-line-remove="${l.key}">✕</button></td>
+    </tr>`).join('') : `<tr><td colspan="5" class="muted">${id === NEW ? 'No items yet: add a toy below.' : 'All items removed. Add a toy below, or cancel. To remove the whole order, delete it instead.'}</td></tr>`;
+  return `<div class="table-scroll"><table class="items-table edit-table"><thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody>${rows}</tbody>
+    <tfoot>
+      <tr class="picker-row"><td colspan="5"><label class="sr-only" for="pick-${id}">Add a toy</label><input id="pick-${id}" class="admin-input" type="search" autocomplete="off" placeholder="＋ Add a toy: type its name or SKU" value="${esc(d.search)}" data-draft="${id}" data-picker="${id}" /><div class="picker-results" data-picker-results="${id}"></div></td></tr>
+      <tr><td colspan="3">Subtotal</td><td data-sum="subtotal">${money(t.subtotal)}</td><td></td></tr>
+      <tr class="discount-edit"><td colspan="3"><label for="delivery-${id}">Delivery fee</label> <span class="percent-field"><b aria-hidden="true">$</b><input id="delivery-${id}" class="admin-input price-input" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(d.delivery)}" data-draft="${id}" data-delivery="${id}" /></span></td><td data-sum="delivery">${t.delivery ? money(t.delivery) : 'Free'}</td><td></td></tr>
+      <tr class="discount-edit"><td colspan="3"><label for="discount-${id}">Discount${o?.coupon_code ? ` (code ${esc(o.coupon_code)})` : ''}</label> <span class="percent-field"><input id="discount-${id}" class="admin-input price-input" type="number" inputmode="decimal" min="0" max="100" step="any" value="${esc(d.discount)}" data-draft="${id}" data-discount="${id}" /><b aria-hidden="true">%</b></span></td><td data-sum="discount">−${money(t.discount)}</td><td></td></tr>
+      <tr class="grand"><td colspan="3">Total (cash on delivery)</td><td data-sum="total">${money(t.total)}</td><td></td></tr>
+    </tfoot></table></div>`;
+}
+/** Redraws the items of one draft (after adding or removing an item). */
+function renderDraft(id: string, focusPicker = false) {
+  const box = document.querySelector(`[data-draft-box="${id}"]`);
+  if (!box || !drafts.has(id)) return;
+  box.innerHTML = editorHtml(id);
+  if (focusPicker) box.querySelector<HTMLInputElement>('[data-picker]')?.focus();
+}
+/** Updates the line totals and the sums while typing (without redrawing the fields). */
+function updateTotals(id: string) {
+  const box = document.querySelector(`[data-draft-box="${id}"]`);
+  const d = drafts.get(id);
+  if (!box || !d) return;
+  const t = draftTotals(id);
+  for (const l of d.lines) { const cell = box.querySelector(`[data-line-total="${l.key}"]`); if (cell) cell.textContent = money(t.line(l)); }
+  const set = (key: string, text: string) => { const el = box.querySelector(`[data-sum="${key}"]`); if (el) el.textContent = text; };
+  set('subtotal', money(t.subtotal)); set('delivery', t.delivery ? money(t.delivery) : 'Free'); set('discount', `−${money(t.discount)}`); set('total', money(t.total));
+  const deliveryInput = box.querySelector<HTMLInputElement>('[data-delivery]');
+  if (deliveryInput && !d.deliveryTouched && document.activeElement !== deliveryInput) deliveryInput.value = d.delivery;
+}
+
+// The toys to add, loaded the first time the search is used.
+let catalog: Promise<any[]> | null = null;
+function loadCatalog() {
+  catalog ??= Promise.resolve(supabase.from('products').select('id,name,sku,price,sale_price,stock_quantity,is_active,product_variants(id,name,sku,price,sale_price,stock_quantity,is_active)').order('name').limit(5000))
+    .then((r) => { if (r.error) { catalog = null; toast(`Could not load the toys: ${r.error.message}`, 'error'); return []; } return (r.data ?? []) as any[]; });
+  return catalog;
+}
+/** The price the product page shows for a toy or one of its options. */
+const shownPrice = (p: any, v: any) => Number((v ? (v.sale_price ?? v.price ?? p.sale_price ?? p.price) : (p.sale_price ?? p.price)) || 0);
+async function showPicker(id: string) {
+  const d = drafts.get(id);
+  const results = document.querySelector(`[data-picker-results="${id}"]`);
+  if (!d || !results) return;
+  const q = d.search.trim();
+  if (!q) { results.innerHTML = ''; return; }
+  const products = await loadCatalog();
+  if (d.search.trim() !== q) return;   // typed more while loading
+  const found = smartFilter(products, q, (p: any) => [[p.name, 3], [p.sku, 2], ...(p.product_variants ?? []).flatMap((v: any) => [[v.name, 1], [v.sku, 2]] as Array<[unknown, number]>)]).slice(0, 8);
+  const choice = (p: any, v: any) => {
+    const stock = Number(v ? v.stock_quantity : p.stock_quantity) || 0;
+    return `<button type="button" class="picker-option" data-draft="${id}" data-pick-product="${p.id}" data-pick-variant="${v?.id ?? ''}"><span>${esc(p.name)}${v ? ` · <b>${esc(v.name)}</b>` : ''}${p.is_active ? '' : ' <em>(hidden)</em>'}</span><small>${money(shownPrice(p, v))} · ${stock > 0 ? `${stock} in stock` : '<em>out of stock</em>'}</small></button>`;
+  };
+  results.innerHTML = found.length ? found.map((p) => {
+    const options = (p.product_variants ?? []).filter((v: any) => v.is_active);
+    return options.length ? options.map((v: any) => choice(p, v)).join('') : choice(p, null);
+  }).join('') : '<p class="muted">No toy matches.</p>';
+}
+async function pick(id: string, productId: string, variantId: string) {
+  const d = drafts.get(id);
+  const p = (await loadCatalog()).find((x) => x.id === productId);
+  if (!d || !p) return;
+  const v = variantId ? (p.product_variants ?? []).find((x: any) => x.id === variantId) : null;
+  // The same toy (and option) again adds one more to its line.
+  const same = d.lines.find((l) => l.product_id === p.id && (l.variant_id || '') === (v?.id || ''));
+  if (same) same.quantity = String(Math.min(1000, (Math.floor(Number(same.quantity)) || 0) + 1));
+  else d.lines.push({ key: `l${++lineCount}`, product_id: p.id, variant_id: v?.id ?? null, name: p.name, variant_name: v?.name ?? null, sku: (v?.sku || p.sku) ?? null, quantity: '1', price: shownPrice(p, v).toFixed(2) });
+  d.search = '';
+  renderDraft(id, true);
+}
+
+/** The items to save, or null (with a message) when one is not valid. */
+function draftItems(id: string) {
+  const d = drafts.get(id)!;
+  const box = document.querySelector(`[data-draft-box="${id}"]`);
+  const fail = (message: string, selector?: string) => { if (selector) box?.querySelector<HTMLInputElement>(selector)?.focus(); toast(message, 'error'); return null; };
+  if (!d.lines.length) return fail(id === NEW ? 'Add at least one toy.' : 'An order needs at least one item. To remove the whole order, delete it instead.', '[data-picker]');
+  const items = [];
+  for (const l of d.lines) {
+    const quantity = Number(l.quantity), price = Number(l.price);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) return fail(`Enter a quantity from 1 to 1000 for ${l.name}.`, `[data-line-qty="${l.key}"]`);
+    if (l.price.trim() === '' || !Number.isFinite(price) || price < 0) return fail(`Enter a valid price (0 or more) for ${l.name}.`, `[data-line-price="${l.key}"]`);
+    items.push({ id: l.id ?? null, product_id: l.product_id, variant_id: l.variant_id, quantity, unit_price: round2(price) });
   }
-  let discount: number | null = null;
-  if (discountInput) {
-    const value = discountInput.value.trim() === '' ? 0 : Number(discountInput.value);
-    if (!Number.isFinite(value) || value < 0 || value > 100) { discountInput.focus(); toast('Enter a discount between 0 and 100%.', 'error'); return; }
-    discount = discountAmount;
-  }
-  const button = document.querySelector<HTMLButtonElement>(`[data-save-prices="${orderId}"]`);
+  const percent = d.discount.trim() === '' ? 0 : Number(d.discount);
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) return fail('Enter a discount between 0 and 100%.', '[data-discount]');
+  const delivery = d.delivery.trim() === '' ? 0 : Number(d.delivery);
+  if (!Number.isFinite(delivery) || delivery < 0) return fail('Enter a valid delivery fee (0 or more).', '[data-delivery]');
+  return items;
+}
+const missingSql = (message: string) => /Could not find the function|does not exist/i.test(message);
+
+async function saveOrder(orderId: string) {
+  const o = orders.find((x) => x.id === orderId);
+  if (!o || !drafts.has(orderId)) return;
+  const items = draftItems(orderId);
+  if (!items) return;
+  const t = draftTotals(orderId);
+  const button = document.querySelector<HTMLButtonElement>(`[data-save-order="${orderId}"]`);
   if (button) button.disabled = true;
-  const r = await supabase.rpc('admin_set_order_prices', { p_order_id: orderId, p_prices: prices, p_discount: discount });
+  const r = await supabase.rpc('admin_update_order', { p_order_id: orderId, p_items: items, p_discount: t.discount, p_delivery_fee: t.delivery });
   if (r.error) {
     if (button) button.disabled = false;
-    toast(/Could not find the function/i.test(r.error.message) ? 'Run supabase/order_price_edit.sql in Supabase first.' : `Could not save prices: ${r.error.message}`, 'error');
+    toast(missingSql(r.error.message) ? 'Run supabase/order_editing.sql in Supabase first.' : `Could not save: ${r.error.message}`, 'error');
     return;
   }
   Object.assign(o, r.data);
-  const items = itemsByOrder.get(orderId) ?? [];
-  for (const item of items) if (item.id in prices) { item.unit_price = prices[item.id]; item.total_price = prices[item.id] * Number(item.quantity); draftPrices.delete(item.id); }
-  editingPrices.delete(orderId);
-  draftPrices.delete(`discount:${orderId}`);
+  drafts.delete(orderId);
+  itemsByOrder.delete(orderId);
+  catalog = null;   // stock changed
+  await loadItems(orderId);
   render();
   toast(`${o.order_number} saved. New total ${money(o.total)}.`);
 }
+
+// ---------- New order (from WhatsApp, Instagram, a phone call, the shop…) ----------
+const newOrderDialog = $<HTMLDialogElement>('#new-order');
+const newOrderForm = $<HTMLFormElement>('#new-order-form');
+$('#new-order-status').innerHTML = STATUSES.map((s) => `<option value="${s}"${s === 'confirmed' ? ' selected' : ''}>${LABELS[s]}</option>`).join('');
+/** Opens the form; a form closed without adding the order opens again as it was left. */
+async function openNewOrder() {
+  if (!drafts.has(NEW)) {
+    newOrderForm.reset();
+    const now = new Date();
+    // Now, in local time (what datetime-local shows).
+    (newOrderForm.elements.namedItem('created_at') as HTMLInputElement).value = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    drafts.set(NEW, { lines: [], discount: '0', initialDiscount: '0', delivery: '0.00', deliveryTouched: false, search: '' });
+  }
+  renderDraft(NEW);
+  newOrderDialog.showModal();
+  (newOrderForm.elements.namedItem('customer_name') as HTMLInputElement).focus();
+  await loadDeliveryInfo();
+  updateTotals(NEW);
+}
+async function addOrder(event: SubmitEvent) {
+  event.preventDefault();
+  const form = new FormData(newOrderForm);
+  const text = (key: string) => String(form.get(key) ?? '').trim();
+  if (!text('customer_name')) { (newOrderForm.elements.namedItem('customer_name') as HTMLInputElement).focus(); toast('Enter the customer\'s name.', 'error'); return; }
+  const items = draftItems(NEW);
+  if (!items) return;
+  const t = draftTotals(NEW);
+  const when = text('created_at') ? new Date(text('created_at')) : new Date();
+  if (Number.isNaN(when.getTime()) || when.getTime() > Date.now() + 60000) { toast('The order date cannot be in the future.', 'error'); return; }
+  const button = $<HTMLButtonElement>('#new-order-save');
+  button.disabled = true;
+  const r = await supabase.rpc('admin_create_order', { p: {
+    source: text('source'), status: text('status'), created_at: when.toISOString(),
+    customer_name: text('customer_name'), customer_phone: text('customer_phone'), customer_email: text('customer_email'),
+    governorate: text('governorate'), city: text('city'), area: text('area'), address: text('address'), notes: text('notes'),
+    items: items.map(({ id: _id, ...item }) => item), delivery_fee: t.delivery, discount: t.discount
+  } });
+  button.disabled = false;
+  if (r.error) { toast(missingSql(r.error.message) ? 'Run supabase/order_editing.sql in Supabase first.' : `Could not add the order: ${r.error.message}`, 'error'); return; }
+  const order = r.data as any;
+  drafts.delete(NEW);
+  newOrderDialog.close();
+  catalog = null;   // stock changed
+  orders.unshift(order);
+  expanded.add(order.id);
+  render();
+  await loadItems(order.id);
+  render();
+  toast(`Order ${order.order_number} added (${money(order.total)}).`);
+}
+newOrderForm.addEventListener('submit', addOrder);
+$('#new-order-open').addEventListener('click', openNewOrder);
+['#new-order-close', '#new-order-cancel'].forEach((sel) => $(sel).addEventListener('click', () => newOrderDialog.close()));
+$('#new-order-governorate').addEventListener('input', () => updateTotals(NEW));
+// Enter in a field does not add the order by accident (the "Add order" button does).
+newOrderForm.addEventListener('keydown', (event) => { if (event.key === 'Enter' && event.target instanceof HTMLInputElement) event.preventDefault(); });
 
 async function deleteOrder(orderId: string) {
   const o = orders.find((x) => x.id === orderId);
@@ -236,7 +434,7 @@ async function deleteOrder(orderId: string) {
   const r = await supabase.rpc('admin_delete_order', { p_order_id: orderId });
   if (r.error) { toast(/Could not find the function/i.test(r.error.message) ? 'Run supabase/order_delete.sql in Supabase first.' : `Could not delete: ${r.error.message}`, 'error'); return; }
   orders = orders.filter((x) => x.id !== orderId);
-  expanded.delete(orderId); editingPrices.delete(orderId); itemsByOrder.delete(orderId);
+  expanded.delete(orderId); drafts.delete(orderId); itemsByOrder.delete(orderId);
   render();
   const back = Number((r.data as any)?.restocked || 0);
   toast(`${o.order_number} deleted.${back ? ` ${back} item${back === 1 ? '' : 's'} back in stock.` : ''}`);
@@ -291,8 +489,8 @@ async function exportExcel() {
     await exportXlsxSheets(exportName('orders'), [
       {
         name: 'Orders',
-        columns: [{ header: 'Order', width: 22 }, { header: 'Date', width: 20 }, { header: 'Status', width: 12 }, { header: 'Customer', width: 22 }, { header: 'Phone', width: 18 }, { header: 'Email', width: 26 }, { header: 'Governorate', width: 16 }, { header: 'City', width: 16 }, { header: 'Area', width: 16 }, { header: 'Address', width: 34 }, { header: 'Items', width: 50 }, { header: 'Subtotal' }, { header: 'Delivery' }, { header: 'Discount' }, { header: 'Discount code' }, { header: 'Total' }, { header: 'Notes', width: 34 }],
-        rows: rows.map((o) => [o.order_number, date(o.created_at), o.status, o.customer_name, o.customer_phone, o.customer_email, o.governorate, o.city, o.area, o.address,
+        columns: [{ header: 'Order', width: 22 }, { header: 'Date', width: 20 }, { header: 'Status', width: 12 }, { header: 'Source', width: 12 }, { header: 'Customer', width: 22 }, { header: 'Phone', width: 18 }, { header: 'Email', width: 26 }, { header: 'Governorate', width: 16 }, { header: 'City', width: 16 }, { header: 'Area', width: 16 }, { header: 'Address', width: 34 }, { header: 'Items', width: 50 }, { header: 'Subtotal' }, { header: 'Delivery' }, { header: 'Discount' }, { header: 'Discount code' }, { header: 'Total' }, { header: 'Notes', width: 34 }],
+        rows: rows.map((o) => [o.order_number, date(o.created_at), o.status, o.source || 'website', o.customer_name, o.customer_phone, o.customer_email, o.governorate, o.city, o.area, o.address,
           (byOrder.get(o.id) || []).map((it) => `${it.quantity}× ${it.product_name}${it.variant_name ? ` (${it.variant_name})` : ''}`).join('; '),
           n(o.subtotal), n(o.delivery_fee), n(o.discount), o.coupon_code, n(o.total), o.notes])
       },
@@ -325,12 +523,16 @@ document.addEventListener('click', async (event) => {
   if (toggle) { const id = toggle.dataset.toggle!; if (expanded.has(id)) expanded.delete(id); else { expanded.add(id); render(); await loadItems(id); } render(); return; }
   const confirmBtn = target?.closest<HTMLElement>('[data-confirm]');
   if (confirmBtn) { await setStatus(confirmBtn.dataset.confirm!, 'confirmed'); return; }
-  const editPrices = target?.closest<HTMLElement>('[data-edit-prices]');
-  if (editPrices) { editingPrices.add(editPrices.dataset.editPrices!); render(); document.querySelector<HTMLInputElement>(`[data-price-order="${editPrices.dataset.editPrices}"]`)?.focus(); return; }
-  const cancelPrices = target?.closest<HTMLElement>('[data-cancel-prices]');
-  if (cancelPrices) { const id = cancelPrices.dataset.cancelPrices!; editingPrices.delete(id); for (const item of itemsByOrder.get(id) ?? []) draftPrices.delete(item.id); draftPrices.delete(`discount:${id}`); render(); return; }
-  const savePricesBtn = target?.closest<HTMLElement>('[data-save-prices]');
-  if (savePricesBtn) { await savePrices(savePricesBtn.dataset.savePrices!); return; }
+  const edit = target?.closest<HTMLElement>('[data-edit-order]');
+  if (edit) { startEdit(edit.dataset.editOrder!); return; }
+  const cancelEdit = target?.closest<HTMLElement>('[data-cancel-edit]');
+  if (cancelEdit) { drafts.delete(cancelEdit.dataset.cancelEdit!); render(); return; }
+  const save = target?.closest<HTMLElement>('[data-save-order]');
+  if (save) { await saveOrder(save.dataset.saveOrder!); return; }
+  const remove = target?.closest<HTMLElement>('[data-line-remove]');
+  if (remove) { const id = remove.dataset.draft!; const d = drafts.get(id); if (d) { d.lines = d.lines.filter((l) => l.key !== remove.dataset.lineRemove); renderDraft(id); } return; }
+  const choice = target?.closest<HTMLElement>('[data-pick-product]');
+  if (choice) { await pick(choice.dataset.draft!, choice.dataset.pickProduct!, choice.dataset.pickVariant || ''); return; }
   const del = target?.closest<HTMLElement>('[data-delete-order]');
   if (del) { await deleteOrder(del.dataset.deleteOrder!); return; }
   const print = target?.closest<HTMLElement>('[data-print]');
@@ -342,16 +544,32 @@ document.addEventListener('change', (event) => {
   const select = event.target instanceof HTMLSelectElement && event.target.dataset.status ? event.target : null;
   if (select) setStatus(select.dataset.status!, select.value);
 });
+// Typing in an item editor: keep what is typed in its draft and update the totals.
 document.addEventListener('input', (event) => {
-  const input = event.target instanceof HTMLInputElement && event.target.dataset.priceOrder ? event.target : null;
-  if (input) { draftPrices.set(input.dataset.priceItem!, input.value); showEditedTotals(input.dataset.priceOrder!); }
-  const discountInput = event.target instanceof HTMLInputElement && event.target.dataset.discountOrder ? event.target : null;
-  if (discountInput) { draftPrices.set(`discount:${discountInput.dataset.discountOrder}`, discountInput.value); showEditedTotals(discountInput.dataset.discountOrder!); }
+  const input = event.target instanceof HTMLInputElement && event.target.dataset.draft ? event.target : null;
+  const d = input ? drafts.get(input.dataset.draft!) : undefined;
+  if (!input || !d) return;
+  const id = input.dataset.draft!;
+  if (input.dataset.picker) { d.search = input.value; showPicker(id); return; }
+  const line = d.lines.find((l) => l.key === (input.dataset.lineQty || input.dataset.linePrice));
+  if (line && input.dataset.lineQty) line.quantity = input.value;
+  else if (line) line.price = input.value;
+  else if (input.dataset.delivery) { d.delivery = input.value; d.deliveryTouched = true; }
+  else if (input.dataset.discount) d.discount = input.value;
+  updateTotals(id);
 });
 document.addEventListener('keydown', (event) => {
-  const input = event.target instanceof HTMLInputElement ? event.target : null;
-  const orderId = input?.dataset.priceOrder || input?.dataset.discountOrder;
-  if (orderId && event.key === 'Enter') { event.preventDefault(); savePrices(orderId); }
+  const input = event.target instanceof HTMLInputElement && event.target.dataset.draft ? event.target : null;
+  if (!input || (event.key !== 'Enter' && event.key !== 'Escape')) return;
+  const id = input.dataset.draft!;
+  if (input.dataset.picker) {
+    // Enter adds the first toy found; Escape clears the search.
+    event.preventDefault();
+    if (event.key === 'Enter') document.querySelector<HTMLButtonElement>(`[data-picker-results="${id}"] [data-pick-product]`)?.click();
+    else if (input.value) { event.stopPropagation(); input.value = ''; const d = drafts.get(id); if (d) d.search = ''; showPicker(id); }
+    return;
+  }
+  if (event.key === 'Enter') { event.preventDefault(); if (id !== NEW) saveOrder(id); }
 });
 ['#order-search', '#date-from', '#date-to', '#order-sort'].forEach((sel) => $(sel).addEventListener('input', () => { visible = PAGE_SIZE; render(); }));
 $('#load-more').addEventListener('click', () => { visible += PAGE_SIZE; render(); });
@@ -423,6 +641,7 @@ init();
 .order-actions{display:flex;gap:8px;flex-wrap:wrap}
 .price-input{width:110px;min-height:38px;padding:6px 10px;text-align:right}
 .items-table .discount-edit td{color:var(--ink)}
+.price-input::-webkit-inner-spin-button{opacity:.5}
 .percent-field{display:inline-flex;align-items:center;gap:6px;margin-left:10px;vertical-align:middle}
 .percent-field .price-input{width:90px}
 .price-edit-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--brand-primary) 8%,var(--surface))}
@@ -433,6 +652,35 @@ init();
 .delete-order-button:hover{background:#fef3f2!important}
 .whatsapp-action{background:#25d366!important;box-shadow:0 3px 0 #1a9e4b!important}
 .load-more-wrap{display:flex;justify-content:center;margin-top:18px}
+.order-source{display:inline-block!important;margin-top:3px;padding:1px 8px;border-radius:999px;background:var(--surface-2);color:var(--ink)!important;font-size:.72rem!important;font-weight:800!important}
+.table-scroll{overflow-x:auto}
+.edit-table{width:100%}
+.edit-table td:nth-last-child(2),.edit-table th:nth-last-child(2){text-align:right}
+.edit-table td:last-child,.edit-table th:last-child{width:44px;text-align:center}
+.qty-input{width:80px;min-height:38px;padding:6px 10px;text-align:center}
+.remove-line{display:grid;place-items:center;width:34px;height:34px;border:1.5px solid #f3b4ae;border-radius:50%;background:#fff;color:#b42318;font-weight:900;cursor:pointer}
+.remove-line:hover{background:#fef3f2}
+.new-line{display:inline-block;padding:0 7px;border-radius:999px;background:color-mix(in srgb,var(--brand-primary) 14%,var(--surface));font-size:.7rem;font-weight:800}
+.edit-table tfoot .picker-row td{padding:10px 12px;text-align:left!important;color:var(--ink)}
+.picker-row input{width:100%}
+.picker-results{display:grid;gap:4px;margin-top:6px}
+.picker-results:empty{display:none}
+.picker-option{display:flex;justify-content:space-between;gap:12px;align-items:center;width:100%;padding:8px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink);text-align:left;cursor:pointer;font:inherit;font-weight:600}
+.picker-option:hover,.picker-option:focus-visible{border-color:var(--brand-primary)}
+.picker-option small{flex:none;color:var(--muted);font-weight:700}
+.new-order-dialog{width:min(820px,calc(100% - 24px));overflow-x:hidden}
+.new-order-dialog .wa-dialog-form>*{min-width:0}
+.new-order-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.new-order-head h2{margin:0}
+.new-order-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.new-order-grid label{display:grid;gap:4px;color:var(--muted);font-size:.78rem;font-weight:800}
+.new-order-grid label .admin-input{color:var(--ink);font-weight:600}
+.new-order-grid .wide{grid-column:1/-1}
+.new-order-items{margin:0 0 8px;font-size:1rem}
+.new-order-note{margin:0;color:var(--muted);font-size:.85rem;font-weight:600}
+.new-order-actions{display:flex;gap:10px;flex-wrap:wrap}
+@media(max-width:700px){.new-order-grid{grid-template-columns:1fr}}
+@media(max-width:560px){.new-order-dialog .wa-dialog-form{padding:16px}.edit-table td,.edit-table th{padding:8px 5px}.qty-input{width:50px;padding:6px 4px}.edit-table .price-input{width:66px;padding:6px 4px}.edit-table .percent-field{margin-left:4px}.edit-table td:last-child,.edit-table th:last-child{width:32px}.remove-line{width:28px;height:28px}}
 @media(max-width:1100px){.order-row{grid-template-columns:1fr auto;grid-template-areas:"toggle total" "customer status" "edit edit"}.order-toggle{grid-area:toggle}.order-customer{grid-area:customer}.order-total{grid-area:total;text-align:right}.order-row .status-pill{grid-area:status;justify-self:end}.order-status-edit{grid-area:edit;justify-content:flex-start}.orders-filters{grid-template-columns:1fr 1fr}.orders-filters #order-search{grid-column:1/-1}.order-detail-grid{grid-template-columns:1fr}}
 @media(max-width:560px){.order-actions .button{flex:1 1 100%}}
 </style>
