@@ -1,25 +1,26 @@
 /**
  * "Continue with Google" on /login and /register.
  *
- * The button only appears once Google sign-in is switched on in Supabase (Authentication → Providers →
- * Google), so the pages never show a button that does not work. Google sends the shopper back to
+ * The button shows straight away; a quick check in the background hides it if Google sign-in is switched
+ * off in Supabase (Authentication → Providers → Google), so it never stays on screen when it cannot work.
+ * Google sends the shopper back to
  * /login?oauth=1, which finishes signing in (see src/pages/login.astro).
  * A first Google sign-in creates the account (and its customer profile, with the name from Google);
  * an existing account with the same email is the same account.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-/** Shows the Google button when the provider is enabled and starts the sign-in when it is pressed. */
-export async function setupGoogleSignIn(supabase: SupabaseClient<any, any, any>, url: string, key: string, next = '') {
+/** Starts the sign-in when the Google button is pressed, and hides the button if the provider is off. */
+export function setupGoogleSignIn(supabase: SupabaseClient<any, any, any>, url: string, key: string, next = '') {
   const box = document.getElementById('google-box');
   const button = document.getElementById('google-signin') as HTMLButtonElement | null;
   const msg = document.getElementById('message');
   if (!box || !button) return;
-  try {
-    const settings = await fetch(`${url.replace(/\/$/, '')}/auth/v1/settings`, { headers: { apikey: key } }).then((r) => r.json());
-    if (!settings?.external?.google) return;
-  } catch { return; }
-  box.hidden = false;
+  // In the background: only a clear "switched off" hides the button (a slow or failed check leaves it).
+  fetch(`${url.replace(/\/$/, '')}/auth/v1/settings`, { headers: { apikey: key } })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((settings) => { if (settings?.external && settings.external.google === false) box.hidden = true; })
+    .catch(() => {});
   button.addEventListener('click', async () => {
     button.disabled = true;
     if (msg) msg.textContent = 'Opening Google…';
