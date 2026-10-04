@@ -889,7 +889,9 @@ html[data-floating-cart=off] .clever-floating-cart,html[data-floating-whatsapp=o
 .clever-floating-cart .floating-cart-count{position:absolute;right:-3px;top:-3px;min-width:22px;height:22px;padding:0 6px;border-radius:var(--radius-pill);display:grid;place-items:center;background:var(--theme-accent);color:var(--theme-text-on-accent);font-size:11px;font-weight:900;line-height:1;box-shadow:0 0 0 2px var(--surface)}
 .clever-floating-controls .floating-cart-count[hidden]{display:none}
 .clever-floating-whatsapp svg{width:30px;height:30px;display:block}
-body.has-buy-bar .clever-floating-controls a{transform:translateY(-72px)}
+/* Product pages on phones: the sticky Add to cart bar (max-width 760px, section 17) sits at the bottom, so the
+   floating buttons move up above it. Larger screens have no bar, so the buttons stay put. */
+@media (max-width:760px){body.has-buy-bar .clever-floating-controls a{transform:translateY(-72px)}}
 .store-toast{position:fixed;left:50%;bottom:24px;z-index:17000;display:flex;align-items:center;gap:12px;padding:14px 18px;border-radius:var(--radius-pill);background:var(--ink);color:#fff;font-weight:700;box-shadow:var(--shadow-lg);transform:translate(-50%,20px);opacity:0;transition:opacity .25s,transform .3s var(--ease)}
 .store-toast.is-visible{opacity:1;transform:translate(-50%,0)}
 /* WhatsApp order: delivery details dialog (public/branding-ui.js) */
