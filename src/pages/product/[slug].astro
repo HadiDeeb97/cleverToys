@@ -25,11 +25,11 @@ const productFields = [
   'id,name,slug,sku,short_description,description,price,sale_price,stock_quantity,age_min,age_max,brand,primary_image_url,seo_title,seo_description',
   'categories:category_id(id,name,slug)',
   'product_images(id,image_url,alt_text,sort_order,is_primary)',
-  'product_variants(id,name,sku,price,sale_price,stock_quantity,attributes,is_active)',
+  'product_variants(id,name,sku,price,sale_price,stock_quantity,attributes,is_active,image_url)',
   'product_categories(category_id)'
 ].join(',');
 type ProductImage = { id: string; image_url: string; alt_text: string | null; sort_order: number; is_primary: boolean };
-type ProductVariant = { id: string; name: string; sku: string | null; price: number | null; sale_price: number | null; stock_quantity: number; attributes: unknown; is_active: boolean };
+type ProductVariant = { id: string; name: string; sku: string | null; price: number | null; sale_price: number | null; stock_quantity: number; attributes: unknown; is_active: boolean; image_url?: string | null };
 type Product = {
   id: string; name: string; slug: string; sku: string | null; short_description: string | null; description: string | null;
   price: number; sale_price: number | null; stock_quantity: number; age_min: number | null; age_max: number | null; brand: string | null;
@@ -378,7 +378,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
     baseOriginalPrice,
     baseStock: variants.length ? availableStock : product.stock_quantity,
     productImage: images[0]?.image_url || '',
-    variantData: variants.map((v) => ({ id: v.id, name: v.name, sku: v.sku || '', price: v.displayPrice, originalPrice: v.originalPrice, stock: v.stock_quantity }))
+    variantData: variants.map((v) => ({ id: v.id, name: v.name, sku: v.sku || '', price: v.displayPrice, originalPrice: v.originalPrice, stock: v.stock_quantity, image: v.image_url || '' }))
   }}>
   // Runs straight away (inline), so the buttons work as soon as the page appears.
   const CART_KEY = 'cleverToysCart';
@@ -439,7 +439,16 @@ const similarCards = similarProducts as unknown as CardProduct[];
     if (buyBar) $('#buy-bar-price').textContent = money(v?.price ?? basePrice);
     document.querySelectorAll('.variant-option').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.variant === select?.value)));
   }
-  select?.addEventListener('change', () => { message.textContent = ''; sync(); });
+  // The chosen option's photo (Admin → Products → Variants → Photo) becomes the main photo.
+  // An option without its own photo goes back to the main photo (when other options have photos).
+  function showOptionPhoto() {
+    if (!mainImage || !variantData.some((v) => v.image)) return;
+    const url = selectedVariant()?.image || productImage;
+    if (!url) return;
+    mainImage.src = url;
+    document.querySelectorAll('.thumbnail').forEach((item) => item.classList.toggle('active', item.dataset.image === url));
+  }
+  select?.addEventListener('change', () => { message.textContent = ''; sync(); showOptionPhoto(); });
   // Option buttons set the (hidden) select, so every other script sees the same choice.
   document.querySelectorAll('.variant-option').forEach((button) => button.addEventListener('click', () => {
     select.value = button.dataset.variant;
@@ -447,7 +456,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
   }));
   // A link to one option (/product/…?option=<id>, used by the product feed for Google and Meta) opens with it chosen.
   const wantedOption = new URLSearchParams(location.search).get('option');
-  if (select && wantedOption && variantData.some((v) => v.id === wantedOption)) select.value = wantedOption;
+  if (select && wantedOption && variantData.some((v) => v.id === wantedOption)) { select.value = wantedOption; showOptionPhoto(); }
   // Quantity − / +
   document.querySelectorAll('[data-qty]').forEach((button) => button.addEventListener('click', () => {
     const max = Number(qty.max) || 1;
@@ -470,7 +479,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
       existing.maxStock = maxStock;
       existing.price = Number(v?.price ?? basePrice);
     } else {
-      cart.push({ productId, variantId: v?.id || null, variantName: v?.name || null, sku: v?.sku || null, name: productName, slug: productSlug, price: Number(v?.price ?? basePrice), image: productImage, quantity, maxStock });
+      cart.push({ productId, variantId: v?.id || null, variantName: v?.name || null, sku: v?.sku || null, name: productName, slug: productSlug, price: Number(v?.price ?? basePrice), image: v?.image || productImage, quantity, maxStock });
     }
     try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch { message.textContent = 'Your browser blocked the cart. Please allow site storage and try again.'; return; }
     window.dispatchEvent(new CustomEvent('clever-cart-updated'));

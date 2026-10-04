@@ -16,7 +16,7 @@ type Row = {
   primary_image_url: string | null;
   categories?: { name: string; slug: string } | null;
   product_images?: Array<{ image_url: string; alt_text: string | null; sort_order: number | null }> | null;
-  product_variants?: Array<{ id: string; name: string; sku: string | null; price: number | null; sale_price: number | null; stock_quantity: number; is_active: boolean }> | null;
+  product_variants?: Array<{ id: string; name: string; sku: string | null; price: number | null; sale_price: number | null; stock_quantity: number; is_active: boolean; image_url?: string | null }> | null;
 };
 
 export const GET: APIRoute = async ({ url }) => {
@@ -25,7 +25,7 @@ export const GET: APIRoute = async ({ url }) => {
 
   const { data, error } = await supabase
     .from('products')
-    .select('id,name,slug,sku,short_description,description,price,sale_price,stock_quantity,age_min,age_max,brand,primary_image_url,categories:category_id(name,slug),product_images(image_url,alt_text,sort_order),product_variants(id,name,sku,price,sale_price,stock_quantity,is_active)')
+    .select('id,name,slug,sku,short_description,description,price,sale_price,stock_quantity,age_min,age_max,brand,primary_image_url,categories:category_id(name,slug),product_images(image_url,alt_text,sort_order),product_variants(id,name,sku,price,sale_price,stock_quantity,is_active,image_url)')
     .eq('slug', slug)
     .eq('is_active', true)
     .maybeSingle();
@@ -43,7 +43,9 @@ export const GET: APIRoute = async ({ url }) => {
     sku: v.sku ?? null,
     price: Number(v.sale_price ?? v.price ?? p.sale_price ?? p.price ?? 0),
     original: v.sale_price != null ? Number(v.price ?? p.price ?? 0) : v.price == null && p.sale_price != null ? Number(p.price) : null,
-    stock: Math.max(0, Number(v.stock_quantity ?? 0))
+    stock: Math.max(0, Number(v.stock_quantity ?? 0)),
+    // The option's own photo (supabase/variant_images.sql), shown when it is chosen.
+    image: v.image_url || null
   }));
 
   return json({

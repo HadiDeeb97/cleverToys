@@ -54,7 +54,7 @@
 </div>
 
 <script>
-type Variant = { id: string; name: string; sku: string | null; price: number; original: number | null; stock: number };
+type Variant = { id: string; name: string; sku: string | null; price: number; original: number | null; stock: number; image?: string | null };
 type Details = {
   id: string; name: string; slug: string; sku: string | null; shortDescription: string; description: string;
   price: number; original: number | null; stock: number; ageMin: number | null; ageMax: number | null; brand: string | null;
@@ -244,7 +244,7 @@ function addToCart() {
     existing.maxStock = maxStock;
     existing.price = price;
   } else {
-    cart.push({ productId: d.id, variantId: chosen?.id || null, variantName: chosen?.name || null, sku: chosen?.sku || null, name: d.name, slug: d.slug, price, image: d.images[0] || '', quantity: qty, maxStock });
+    cart.push({ productId: d.id, variantId: chosen?.id || null, variantName: chosen?.name || null, sku: chosen?.sku || null, name: d.name, slug: d.slug, price, image: chosen?.image || d.images[0] || '', quantity: qty, maxStock });
   }
   try { localStorage.setItem(CART_KEY, JSON.stringify(cart)); } catch { $('quick-view-message').textContent = 'Your browser blocked the cart. Please allow site storage and try again.'; return; }
   const trigger = opener;
@@ -268,6 +268,8 @@ document.addEventListener('click', (event) => {
     chosen = current.variants.find((v) => v.id === option.dataset.variant) || null;
     $('quick-view-message').textContent = '';
     sync();
+    // The chosen option's own photo; an option without one goes back to the main photo.
+    if (current.variants.some((v) => v.image)) showImage(chosen?.image || current.images[0] || '', current.name);
     return;
   }
   const thumb = target.closest<HTMLButtonElement>('.quick-view-thumb');

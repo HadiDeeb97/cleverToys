@@ -269,8 +269,22 @@ function renderCategories() {
 
 function renderVariants() {
   const field = (label: string, key: string, v: Row, attrs: string, cls = '') => `<label class="v-field ${cls}"><span>${label}</span><input data-v="${key}" value="${esc(v[key] ?? '')}" ${attrs}></label>`;
-  $('#variant-list').innerHTML = variants.map((v, i) => `<div class="variant-row" data-i="${i}">${field('Name', 'name', v, 'placeholder="e.g. Large"', 'v-name')}${field('SKU', 'sku', v, 'placeholder="Optional"', 'v-sku')}<button class="small-button danger-button v-remove" type="button" data-rm="${i}" aria-label="Remove variant">×</button>${field('Price', 'price', v, 'type="number" step="0.01" min="0" placeholder="Product price"')}${field('Sale', 'sale_price', v, 'type="number" step="0.01" min="0"')}${field('Cost', 'cost_price', v, 'type="number" step="0.01" min="0"')}${field('Stock', 'stock_quantity', v, 'type="number" min="0" placeholder="0"')}</div>`).join('');
+  $('#variant-list').innerHTML = variants.map((v, i) => `<div class="variant-row" data-i="${i}">${field('Name', 'name', v, 'placeholder="e.g. Large"', 'v-name')}${field('SKU', 'sku', v, 'placeholder="Optional"', 'v-sku')}<button class="small-button danger-button v-remove" type="button" data-rm="${i}" aria-label="Remove variant">×</button>${field('Price', 'price', v, 'type="number" step="0.01" min="0" placeholder="Product price"')}${field('Sale', 'sale_price', v, 'type="number" step="0.01" min="0"')}${field('Cost', 'cost_price', v, 'type="number" step="0.01" min="0"')}${field('Stock', 'stock_quantity', v, 'type="number" min="0" placeholder="0"')}${variantPhotoPicker(v, i)}</div>`).join('');
   syncProductStockField();
+}
+// The product's own photos (main first), for choosing an option's photo (supabase/variant_images.sql).
+function productPhotos() {
+  const product = products.find((p) => p.id === field('id').value);
+  return [product?.primary_image_url, ...images.map((img) => img.image_url)].filter((url, i, all): url is string => Boolean(url) && all.indexOf(url) === i);
+}
+/** "Photo" strip under an option: None, or one of the product's photos (shown when the shopper picks it). */
+function variantPhotoPicker(v: Row, i: number) {
+  const photos = productPhotos();
+  const chosen = v.image_url || '';
+  const tiles = photos.map((url, n) => `<button type="button" class="v-photo${chosen === url ? ' chosen' : ''}" data-vphoto="${i}" data-url="${esc(url)}" aria-pressed="${chosen === url}" aria-label="Use photo ${n + 1}"><img src="${esc(url)}" alt="" loading="lazy" /></button>`).join('');
+  return `<div class="v-photos"><span>Photo</span>${photos.length
+    ? `<button type="button" class="v-photo v-photo-none${chosen ? '' : ' chosen'}" data-vphoto="${i}" data-url="" aria-pressed="${!chosen}">None</button>${tiles}`
+    : '<small class="muted">Add product photos below and save, then choose one here.</small>'}</div>`;
 }
 // With options, the product's Stock field shows their total and can't be typed in.
 function syncProductStockField() {
@@ -289,6 +303,8 @@ const readVariants = () => document.querySelectorAll<HTMLElement>('.variant-row'
 function renderImages() {
   const id = field('id').value;
   const product = products.find((p) => p.id === id);
+  // The options' photo choices follow the product's photos.
+  if (document.querySelector('.variant-row')) { readVariants(); renderVariants(); }
   $('#image-list').innerHTML = images.length ? images.map((img) => `<figure class="image-item${product?.primary_image_url === img.image_url ? ' primary' : ''}"><img src="${esc(img.image_url)}" alt="${esc(img.alt_text || '')}" /><figcaption>${product?.primary_image_url === img.image_url ? '<span class="main-tag">Main</span>' : `<button type="button" class="small-button" data-primary-img="${img.id}">Make main</button>`}<button type="button" class="small-button danger-button" data-del-img="${img.id}" aria-label="Remove image">×</button></figcaption></figure>`).join('') : '<small class="muted">No images yet.</small>';
 }
 
@@ -449,7 +465,7 @@ async function saveVariants(id: string) {
   for (const o of (old.data ?? []) as Row[]) if (!variants.some((v) => v.id === o.id)) { const d = await supabase.from('product_variants').delete().eq('id', o.id); if (d.error) throw new Error(d.error.message); }
   for (const v of variants) {
     if (!String(v.name || '').trim()) continue;
-    const data = { product_id: id, name: String(v.name).trim(), sku: String(v.sku || '').trim() || null, price: num(v.price), sale_price: num(v.sale_price), cost_price: num(v.cost_price), stock_quantity: int(v.stock_quantity, 0), attributes: v.attributes || {}, is_active: true, updated_at: new Date().toISOString() };
+    const data = { product_id: id, name: String(v.name).trim(), sku: String(v.sku || '').trim() || null, price: num(v.price), sale_price: num(v.sale_price), cost_price: num(v.cost_price), stock_quantity: int(v.stock_quantity, 0), attributes: v.attributes || {}, image_url: v.image_url || null, is_active: true, updated_at: new Date().toISOString() };
     const r = v.id ? await supabase.from('product_variants').update(data).eq('id', v.id) : await supabase.from('product_variants').insert(data);
     if (r.error) throw new Error(friendly(r.error.message));
   }
@@ -542,6 +558,7 @@ document.addEventListener('click', async (event) => {
     await load(); toast(`Deleted ${p.name}.`); return;
   }
   const rm = t.closest<HTMLElement>('[data-rm]'); if (rm) { readVariants(); variants.splice(Number(rm.dataset.rm), 1); renderVariants(); return; }
+  const vphoto = t.closest<HTMLElement>('[data-vphoto]'); if (vphoto) { readVariants(); variants[Number(vphoto.dataset.vphoto)].image_url = vphoto.dataset.url || null; renderVariants(); return; }
   const primary = t.closest<HTMLElement>('[data-primary-img]');
   if (primary) {
     const img = images.find((x) => x.id === primary.dataset.primaryImg); const id = field('id').value;
@@ -1098,6 +1115,12 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .no-cost{color:#8a5a00}
 .category-picker{margin:0;padding:12px;border:1.5px solid var(--line);border-radius:14px}
 .related-picker{display:grid;gap:8px}
+.v-photos{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.v-photos>span{font-size:.78rem;font-weight:800;color:var(--muted);margin-right:2px}
+.v-photo{width:44px;height:44px;padding:0;border:2px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden;cursor:pointer}
+.v-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.v-photo-none{width:auto;padding:0 10px;font:inherit;font-size:.8rem;font-weight:700;color:var(--muted)}
+.v-photo.chosen{border-color:var(--brand-primary,#3b5bfd);box-shadow:0 0 0 2px color-mix(in srgb,var(--brand-primary,#3b5bfd) 25%,transparent)}
 .catalog-box{display:grid;gap:10px}
 .catalog-toggle{display:flex!important;align-items:center;gap:10px}
 .off-catalog{color:var(--danger,#b42318);font-weight:700}

@@ -30,7 +30,7 @@ const plainDescription = (value: unknown, max: number) => plain(String(value ?? 
 const money = (value: number) => `${value.toFixed(2)} USD`;
 const num = (value: unknown) => (value === null || value === undefined || value === '' ? null : Number(value));
 
-type Variant = { id: string; name: string; sku: string | null; price: number | null; sale_price: number | null; stock_quantity: number; attributes: Record<string, unknown> | null; is_active: boolean };
+type Variant = { id: string; name: string; sku: string | null; price: number | null; sale_price: number | null; stock_quantity: number; attributes: Record<string, unknown> | null; is_active: boolean; image_url?: string | null };
 type Row = {
   id: string; name: string; slug: string; sku: string | null; short_description: string | null; description: string | null;
   price: number; sale_price: number | null; stock_quantity: number; brand: string | null; primary_image_url: string | null;
@@ -46,7 +46,7 @@ export const GET: APIRoute = async ({ site, url }) => {
   const forMeta = url.searchParams.get('for') === 'meta';
   const [productsResult, settingsResult] = await Promise.all([
     supabase.from('products')
-      .select('*,categories:category_id(name),product_images(image_url,sort_order),product_variants(id,name,sku,price,sale_price,stock_quantity,attributes,is_active)')
+      .select('*,categories:category_id(name),product_images(image_url,sort_order),product_variants(id,name,sku,price,sale_price,stock_quantity,attributes,is_active,image_url)')
       .eq('is_active', true)
       .order('created_at', { ascending: false }),
     supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle()
@@ -74,10 +74,11 @@ export const GET: APIRoute = async ({ site, url }) => {
     const description = plainDescription(p.description || p.short_description || p.name, 5000);
     const brand = plain(p.brand, 70) || storeName;
     const category = p.categories?.name ? plain(p.categories.name, 200) : '';
-    const common = [
+    // Everything but price, stock and link; an option with its own photo puts that photo first.
+    const commonFor = (photos: string[]) => [
       `<g:description>${xml(description)}</g:description>`,
-      `<g:image_link>${xml(images[0])}</g:image_link>`,
-      ...images.slice(1, 11).map((u) => `<g:additional_image_link>${xml(u)}</g:additional_image_link>`),
+      `<g:image_link>${xml(photos[0])}</g:image_link>`,
+      ...photos.slice(1, 11).map((u) => `<g:additional_image_link>${xml(u)}</g:additional_image_link>`),
       `<g:brand>${xml(brand)}</g:brand>`,
       '<g:condition>new</g:condition>',
       '<g:identifier_exists>no</g:identifier_exists>',
@@ -86,6 +87,7 @@ export const GET: APIRoute = async ({ site, url }) => {
       p.ad_label?.trim() ? `<g:custom_label_1>${xml(plain(p.ad_label, 100))}</g:custom_label_1>` : '',
       shipping
     ].filter(Boolean).join('');
+    const common = commonFor(images);
 
     const variants = (p.product_variants ?? []).filter((v) => v.is_active);
     if (!variants.length) {
@@ -99,6 +101,8 @@ export const GET: APIRoute = async ({ site, url }) => {
       continue;
     }
     for (const v of variants) {
+      const ownPhoto = v.image_url && /^https?:\/\//.test(v.image_url) ? v.image_url : '';
+      const optionCommon = ownPhoto ? commonFor([ownPhoto, ...images.filter((u) => u !== ownPhoto)]) : common;
       // Same prices as the product page shows for this option.
       let price: number, sale: number | null;
       if (num(v.sale_price) !== null) { price = Number(num(v.price) ?? p.price); sale = Number(v.sale_price); }
@@ -114,7 +118,7 @@ export const GET: APIRoute = async ({ site, url }) => {
         + `<g:availability>${Number(v.stock_quantity) > 0 ? inStock : outOfStock}</g:availability>`
         + (color ? `<g:color>${xml(color)}</g:color>` : '') + (size ? `<g:size>${xml(size)}</g:size>` : '')
         + (v.sku || p.sku ? `<g:custom_label_0>${xml(plain(v.sku || p.sku, 100))}</g:custom_label_0>` : '')
-        + `${common}</item>`);
+        + `${optionCommon}</item>`);
     }
   }
 
