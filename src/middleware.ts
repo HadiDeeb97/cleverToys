@@ -93,7 +93,10 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
   // clevertoyslb.com (permanently, so Google moves its results too). Only page loads (GET/HEAD) are
   // forwarded; anything sent from an open old tab (e.g. an order) is still handled where it arrives.
   const host = context.url.hostname.toLowerCase();
-  if ((host === `www.${MAIN_HOST}` || host.endsWith('.workers.dev')) && (context.request.method === 'GET' || context.request.method === 'HEAD')) {
+  // Plain http:// visits (old links, typed addresses) move to the secure https:// address, so phones never
+  // show "Not secure". Only for the store's own addresses, not for local testing.
+  const insecure = context.url.protocol === 'http:' && (host === MAIN_HOST || host === `www.${MAIN_HOST}` || host.endsWith('.workers.dev'));
+  if ((insecure || host === `www.${MAIN_HOST}` || host.endsWith('.workers.dev')) && (context.request.method === 'GET' || context.request.method === 'HEAD')) {
     return new Response(null, { status: 301, headers: { location: `https://${MAIN_HOST}${path}${context.url.search}`, 'cache-control': 'public, max-age=3600' } });
   }
   // Start loading page data now, while Astro renders the page, instead of after it (saves a full round trip).
