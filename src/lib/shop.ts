@@ -3,7 +3,8 @@
  * page of toys (24) plus the filter options, and builds the links for paging and removing filters.
  *
  * URL parameters: search (?q=), category (?category=, /products only), option (?variant=),
- * age (?age_min= / ?age_max=), sale (?sale=1), sorting (?sort=) and page (?page=).
+ * age (?age_min= / ?age_max=), sale (?sale=1), availability (?stock=in / ?stock=out), sorting (?sort=)
+ * and page (?page=).
  * On a category page the category is fixed by the path, so it is not a URL parameter there.
  * The page markup is src/components/ShopView.astro.
  */
@@ -39,6 +40,10 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
   const sort = sortParam && !(sortParam === 'relevance' && !search) ? sortParam : search ? 'relevance' : 'newest';
   // Sale (?sale=1): every toy with a sale price, plus toys where only some options have one.
   const saleOnly = params.get('sale') === '1';
+  // Availability (?stock=in, ?stock=out): both ticked is the same as none. A toy with options counts
+  // its options' stock (products.stock_quantity is kept as their total).
+  const stockFilters = [...new Set(params.getAll('stock').filter((v) => v === 'in' || v === 'out'))];
+  const stockOnly = stockFilters.length === 1 ? stockFilters[0] : '';
   // Toys whose options are on sale. Only looked up on the Sale page (one extra request there).
   const saleVariantIds = saleOnly
     ? [...new Set(((await supabase.from('product_variants').select('product_id').eq('is_active', true).not('sale_price', 'is', null)).data || []).map((r) => String(r.product_id)))]
@@ -74,6 +79,8 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
     if (saleOnly) query = saleVariantIds.length ? query.or(`sale_price.not.is.null,id.in.(${saleVariantIds.join(',')})`) : query.not('sale_price', 'is', null);
     if (filterCategorySlugs.length) query = query.eq('product_categories.categories.is_active', true).in('product_categories.categories.slug', filterCategorySlugs);
     if (selectedVariantFilters.length) query = query.eq('variant_filter.is_active', true).in('variant_filter.name', selectedVariantFilters);
+    if (stockOnly === 'in') query = query.gt('stock_quantity', 0);
+    else if (stockOnly === 'out') query = query.lte('stock_quantity', 0);
     if (ageMin !== null) query = query.or(`age_max.gte.${ageMin},age_max.is.null`);
     if (ageMax !== null) query = query.or(`age_min.lte.${ageMax},age_min.is.null`);
     return query;
@@ -107,13 +114,14 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
   const variantOptions = [...new Set((variantsResult.data || []).map(v => String(v.name || '').trim()).filter(Boolean))];
 
   /** Link to this listing with the current filters, optionally minus one filter (for the removable chips). */
-  function shopUrl({ page = 1, without = '', value = '', base = basePath }: { page?: number; without?: 'q' | 'category' | 'variant' | 'age' | 'sale' | ''; value?: string; base?: string } = {}) {
+  function shopUrl({ page = 1, without = '', value = '', base = basePath }: { page?: number; without?: 'q' | 'category' | 'variant' | 'age' | 'sale' | 'stock' | ''; value?: string; base?: string } = {}) {
     const next = new URLSearchParams();
     if (search && without !== 'q') next.set('q', search);
     selectedCategorySlugs.filter((slug) => !(without === 'category' && slug === value)).forEach((slug) => next.append('category', slug));
     selectedVariantFilters.filter((v) => !(without === 'variant' && v === value)).forEach((v) => next.append('variant', v));
     if (without !== 'age') { if (ageMinParam) next.set('age_min', ageMinParam); if (ageMaxParam) next.set('age_max', ageMaxParam); }
     if (saleOnly && without !== 'sale') next.set('sale', '1');
+    stockFilters.filter((v) => !(without === 'stock' && v === value)).forEach((v) => next.append('stock', v));
     if (sort !== 'newest' && !(sort === 'relevance' && search)) next.set('sort', sort);
     if (page > 1) next.set('page', String(page));
     const qs = next.toString();
@@ -140,6 +148,7 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
 
   const activeChips = [
     ...(saleOnly ? [{ label: 'On sale', href: shopUrl({ without: 'sale' }) }] : []),
+    ...(stockOnly ? [{ label: stockOnly === 'in' ? 'In stock' : 'Out of stock', href: shopUrl({ without: 'stock', value: stockOnly }) }] : []),
     ...(search ? [{ label: `“${search}”`, href: shopUrl({ without: 'q' }) }] : []),
     ...categories.filter((c) => selectedCategorySlugs.includes(c.slug)).map((c) => ({ label: c.name, href: shopUrl({ without: 'category', value: c.slug }) })),
     // On a category page the category itself is a chip too: removing it opens the whole shop with the other filters.
@@ -149,9 +158,9 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
   ];
 
   return {
-    basePath, fixedCategory, search, selectedCategorySlugs, selectedVariantFilters, ageMinParam, ageMaxParam, sort, saleOnly,
+    basePath, fixedCategory, search, selectedCategorySlugs, selectedVariantFilters, ageMinParam, ageMaxParam, sort, saleOnly, stockFilters, stockOnly,
     categories, variantOptions, error, cards: products ?? [], totalProducts, totalPages, currentPage, activeChips,
-    filterCount: (saleOnly ? 1 : 0) + selectedCategorySlugs.length + (fixedCategory ? 1 : 0) + selectedVariantFilters.length + (ageMinParam || ageMaxParam ? 1 : 0),
+    filterCount: (saleOnly ? 1 : 0) + (stockOnly ? 1 : 0) + selectedCategorySlugs.length + (fixedCategory ? 1 : 0) + selectedVariantFilters.length + (ageMinParam || ageMaxParam ? 1 : 0),
     pageUrl: (page: number) => shopUrl({ page })
   };
 }

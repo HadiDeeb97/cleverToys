@@ -3,7 +3,8 @@
  * The shop listing used by /products and /category/<slug>: category shortcuts, the filter panel,
  * result count, sorting, active filter chips, the product grid and paging.
  * Data comes from loadShop() in src/lib/shop.ts. Everything works with plain links and forms,
- * so filters work even before any JavaScript has loaded.
+ * so filters work even before any JavaScript has loaded. Filters: price (sale), availability, category,
+ * option and age.
  * On computers the filters sit in a sidebar; on phones and tablets they slide in from the left.
  */
 import ProductCard from './ProductCard.astro';
@@ -16,8 +17,8 @@ interface Props {
 }
 
 const { shop, hasSale } = Astro.props;
-const { basePath, fixedCategory, search, selectedCategorySlugs, selectedVariantFilters, ageMinParam, ageMaxParam, sort, saleOnly, categories, variantOptions, error, cards, totalProducts, totalPages, currentPage, activeChips, filterCount, pageUrl } = shop;
-const hasFilters = Boolean(saleOnly || selectedCategorySlugs.length || selectedVariantFilters.length || ageMinParam || ageMaxParam);
+const { basePath, fixedCategory, search, selectedCategorySlugs, selectedVariantFilters, ageMinParam, ageMaxParam, sort, saleOnly, stockFilters, stockOnly, categories, variantOptions, error, cards, totalProducts, totalPages, currentPage, activeChips, filterCount, pageUrl } = shop;
+const hasFilters = Boolean(saleOnly || stockOnly || selectedCategorySlugs.length || selectedVariantFilters.length || ageMinParam || ageMaxParam);
 // On a category page the shortcuts open the other category pages; on /products they filter the list.
 const categoryHref = (slug: string) => fixedCategory ? `/category/${encodeURIComponent(slug)}` : `/products?category=${encodeURIComponent(slug)}`;
 const isActiveCategory = (slug: string) => fixedCategory ? fixedCategory.slug === slug : selectedCategorySlugs.includes(slug);
@@ -45,6 +46,7 @@ const isActiveCategory = (slug: string) => fixedCategory ? fixedCategory.slug ==
         </div>
         <div class="filter-groups">
           <fieldset class="filter-group"><legend>Price</legend><div class="filter-check-grid"><label class="filter-check"><input type="checkbox" name="sale" value="1" checked={saleOnly} /><span>On sale</span></label></div></fieldset>
+          <fieldset class="filter-group"><legend>Availability</legend><div class="filter-check-grid"><label class="filter-check"><input type="checkbox" name="stock" value="in" checked={stockFilters.includes('in')} /><span>In stock</span></label><label class="filter-check"><input type="checkbox" name="stock" value="out" checked={stockFilters.includes('out')} /><span>Out of stock</span></label></div></fieldset>
           <fieldset class="filter-group"><legend>Category</legend><div class="filter-check-grid">{categories.map((item) => <label class="filter-check"><input type="checkbox" name="category" value={item.slug} checked={isActiveCategory(item.slug)} /><span>{item.name}</span></label>)}</div></fieldset>
           {variantOptions.length > 0 && <fieldset class="filter-group"><legend>Options</legend><div class="filter-check-grid">{variantOptions.map((item) => <label class="filter-check"><input type="checkbox" name="variant" value={item} checked={selectedVariantFilters.includes(item)} /><span>{item}</span></label>)}</div></fieldset>}
           <fieldset class="filter-group"><legend>Age</legend><div class="age-grid"><label>From<input name="age_min" type="number" inputmode="numeric" min="0" step="1" value={ageMinParam} placeholder="Any" /></label><label>To<input name="age_max" type="number" inputmode="numeric" min="0" step="1" value={ageMaxParam} placeholder="Any" /></label></div></fieldset>
@@ -64,6 +66,7 @@ const isActiveCategory = (slug: string) => fixedCategory ? fixedCategory.slug ==
               {ageMinParam && <input type="hidden" name="age_min" value={ageMinParam} />}
               {ageMaxParam && <input type="hidden" name="age_max" value={ageMaxParam} />}
               {saleOnly && <input type="hidden" name="sale" value="1" />}
+              {stockFilters.map((value) => <input type="hidden" name="stock" value={value} />)}
               <label for="sort">Sort by</label>
               <select id="sort" name="sort" onchange="this.form.submit()">
                 {search && <option value="relevance" selected={sort === 'relevance'}>Best match</option>}

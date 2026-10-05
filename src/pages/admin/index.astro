@@ -39,6 +39,17 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
             <label class="sr-only" for="search">Search products</label>
             <input id="search" class="admin-input" type="search" placeholder="Search by name, SKU or brand" />
             <select id="category-filter" class="admin-input" aria-label="Filter by category"><option value="">All categories</option></select>
+            <button id="more-filters-toggle" class="button secondary-button" type="button" aria-expanded="false" aria-controls="more-filters">Filters</button>
+          </div>
+          <div id="more-filters" class="more-filters" hidden>
+            <label>Sort by<select id="f-sort" class="admin-input"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="name">Name A–Z</option><option value="price-asc">Price: low to high</option><option value="price-desc">Price: high to low</option><option value="stock-asc">Stock: low to high</option><option value="stock-desc">Stock: high to low</option></select></label>
+            <label>Show only<select id="f-only" class="admin-input"><option value="">Everything</option><option value="sale">On sale</option><option value="no-sale">Not on sale</option><option value="options">With options (colour, size…)</option><option value="no-options">Without options</option><option value="no-photo">No photo</option><option value="no-cost">No cost price</option><option value="no-sku">No SKU</option><option value="no-category">No category</option><option value="no-feed">Not in Google &amp; Meta</option></select></label>
+            <label>Price from<input id="f-price-min" class="admin-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Any" /></label>
+            <label>Price to<input id="f-price-max" class="admin-input" type="number" inputmode="decimal" min="0" step="0.01" placeholder="Any" /></label>
+            <label>For age<input id="f-age" class="admin-input" type="number" inputmode="numeric" min="0" max="18" step="1" placeholder="Any" /></label>
+            <label>Brand<select id="f-brand" class="admin-input"><option value="">All brands</option></select></label>
+            <label>Ad group label<select id="f-label" class="admin-input"><option value="">All labels</option></select></label>
+            <div class="more-filters-foot"><span id="filter-result"></span><button id="f-clear" class="small-button" type="button">Clear filters</button></div>
           </div>
           <div id="product-filters" class="chip-row" role="tablist" aria-label="Filter products"></div>
           <div id="products" class="product-rows"></div>
@@ -207,6 +218,12 @@ async function load() {
   $('#catalog-box').hidden = !adFieldsReady;
   const labels = [...new Set(products.map((x) => String(x.ad_label || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   $('#group-label-list').innerHTML = labels.map((label) => `<option value="${esc(label)}"></option>`).join('');
+  // Filter lists: brands and ad group labels in use (keeps the current choice).
+  const fill = (sel: string, first: string, values: string[]) => { const el = $<HTMLSelectElement>(sel); const was = el.value; el.innerHTML = `<option value="">${first}</option>` + values.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join(''); el.value = values.includes(was) ? was : ''; };
+  fill('#f-brand', 'All brands', [...new Set(products.map((x) => String(x.brand || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
+  fill('#f-label', 'All labels', labels);
+  $('#f-brand').closest('label')!.hidden = $<HTMLSelectElement>('#f-brand').options.length < 2;
+  $('#f-label').closest('label')!.hidden = !labels.length;
   // Related toys picker: available once supabase/related_products.sql has been run.
   const rel = await supabase.from('product_relations').select('product_id').limit(1);
   relationsReady = !rel.error;
@@ -232,6 +249,43 @@ const FILTERS: Array<[string, string, (p: Row) => boolean]> = [
   ['out', 'Out of stock', (p) => p.stock_quantity <= 0]
 ];
 
+// The "Filters" panel: extra filters and sorting on top of the chips, the search and the category.
+const ONLY: Record<string, (p: Row) => boolean> = {
+  sale: (p) => p.sale_price != null,
+  'no-sale': (p) => p.sale_price == null,
+  options: (p) => withOptions.has(p.id),
+  'no-options': (p) => !withOptions.has(p.id),
+  'no-photo': (p) => !p.primary_image_url,
+  'no-cost': (p) => p.cost_price == null || p.cost_price === '',
+  'no-sku': (p) => !String(p.sku || '').trim(),
+  'no-category': (p) => !p.category_id && !links.some((l) => l.product_id === p.id),
+  'no-feed': (p) => p.in_feed === false
+};
+const shownPrice = (p: Row) => Number(p.sale_price ?? p.price ?? 0);
+function moreFilters() {
+  const value = (sel: string) => $<HTMLInputElement>(sel).value.trim();
+  const numberOrNull = (sel: string) => (value(sel) === '' || !Number.isFinite(Number(value(sel))) ? null : Number(value(sel)));
+  return { sort: value('#f-sort') || 'newest', only: value('#f-only'), priceMin: numberOrNull('#f-price-min'), priceMax: numberOrNull('#f-price-max'), age: numberOrNull('#f-age'), brand: value('#f-brand'), label: value('#f-label') };
+}
+function passesMore(p: Row, f: ReturnType<typeof moreFilters>) {
+  if (f.only && ONLY[f.only] && !ONLY[f.only](p)) return false;
+  if (f.priceMin !== null && shownPrice(p) < f.priceMin) return false;
+  if (f.priceMax !== null && shownPrice(p) > f.priceMax) return false;
+  // A toy suits an age when it is inside its age range (an empty end means no limit).
+  if (f.age !== null && ((p.age_min != null && Number(p.age_min) > f.age) || (p.age_max != null && Number(p.age_max) < f.age))) return false;
+  if (f.brand && String(p.brand || '').trim() !== f.brand) return false;
+  if (f.label && String(p.ad_label || '').trim() !== f.label) return false;
+  return true;
+}
+const SORTS: Record<string, (a: Row, b: Row) => number> = {
+  oldest: (a, b) => String(a.created_at).localeCompare(String(b.created_at)),
+  name: (a, b) => String(a.name).localeCompare(String(b.name)),
+  'price-asc': (a, b) => shownPrice(a) - shownPrice(b),
+  'price-desc': (a, b) => shownPrice(b) - shownPrice(a),
+  'stock-asc': (a, b) => Number(a.stock_quantity) - Number(b.stock_quantity),
+  'stock-desc': (a, b) => Number(b.stock_quantity) - Number(a.stock_quantity)
+};
+
 function renderProducts() {
   $('#product-filters').innerHTML = FILTERS.map(([id, label, test]) => `<button type="button" class="chip${productFilter === id ? ' active' : ''}" data-filter="${id}">${label} <b>${products.filter(test).length}</b></button>`).join('');
   const q = $<HTMLInputElement>('#search').value.trim().toLowerCase();
@@ -240,7 +294,13 @@ function renderProducts() {
   const inCategory = cat ? new Set(links.filter((l) => l.category_id === cat).map((l) => l.product_id)) : null;
   // Smart search: any word order, small typos and plurals, name first (src/scripts/smart-search.ts).
   const catName = new Map(categories.map((c: any) => [c.id, c.name]));
-  const list = smartFilter(products.filter((p) => test(p) && (!inCategory || inCategory.has(p.id) || p.category_id === cat)), q, (p: any) => [[p.name, 3], [p.sku, 2], [p.brand, 2], [catName.get(p.category_id), 1], [p.short_description, 1]]);
+  const more = moreFilters();
+  const list = smartFilter(products.filter((p) => test(p) && (!inCategory || inCategory.has(p.id) || p.category_id === cat) && passesMore(p, more)), q, (p: any) => [[p.name, 3], [p.sku, 2], [p.brand, 2], [catName.get(p.category_id), 1], [p.short_description, 1]]);
+  // Search results stay in best-match order unless a sort is chosen.
+  if (SORTS[more.sort]) list.sort(SORTS[more.sort]);
+  const extra = ['only', 'priceMin', 'priceMax', 'age', 'brand', 'label'].filter((k) => (more as any)[k] !== null && (more as any)[k] !== '').length + (more.sort !== 'newest' ? 1 : 0);
+  $('#more-filters-toggle').textContent = extra ? `Filters (${extra})` : 'Filters';
+  $('#filter-result').textContent = `Showing ${list.length} of ${products.length} products`;
   const editingId = field('id').value;
   $('#products').innerHTML = list.length ? list.map((p) => {
     const price = Number(p.sale_price ?? p.price);
@@ -616,6 +676,19 @@ autoSlug($<HTMLFormElement>('#category-form'));
 
 $('#search').addEventListener('input', renderProducts);
 $('#category-filter').addEventListener('change', renderProducts);
+$('#more-filters-toggle').addEventListener('click', () => {
+  const panel = $('#more-filters');
+  panel.hidden = !panel.hidden;
+  $('#more-filters-toggle').setAttribute('aria-expanded', String(!panel.hidden));
+});
+['#f-sort', '#f-only', '#f-brand', '#f-label'].forEach((sel) => $(sel).addEventListener('change', renderProducts));
+['#f-price-min', '#f-price-max', '#f-age'].forEach((sel) => $(sel).addEventListener('input', renderProducts));
+$('#f-clear').addEventListener('click', () => {
+  ['#f-price-min', '#f-price-max', '#f-age'].forEach((sel) => { $<HTMLInputElement>(sel).value = ''; });
+  $<HTMLSelectElement>('#f-sort').value = 'newest';
+  ['#f-only', '#f-brand', '#f-label'].forEach((sel) => { $<HTMLSelectElement>(sel).value = ''; });
+  renderProducts();
+});
 $('#clear').addEventListener('click', () => clearForm());
 $('#new-product').addEventListener('click', () => { switchTab('products'); clearForm(); });
 $('#clear-category').addEventListener('click', clearCategoryForm);
@@ -1067,7 +1140,16 @@ init();
 html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .catalog-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(360px,1fr);gap:18px;align-items:start}
 .catalog-layout[hidden]{display:none}
-.list-toolbar{display:grid;grid-template-columns:1fr 200px;gap:10px;margin-bottom:12px}
+.list-toolbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,170px) auto;gap:10px;margin-bottom:12px}
+.list-toolbar>*{min-width:0}
+#more-filters-toggle{min-height:0;padding:0 16px;white-space:nowrap}
+.more-filters{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:12px;padding:12px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface-2)}
+.more-filters[hidden]{display:none}
+.more-filters label{display:grid;gap:4px;color:var(--muted);font-size:.75rem;font-weight:800}
+.more-filters label[hidden]{display:none}
+.more-filters label{min-width:0}
+.more-filters .admin-input{width:100%;min-width:0;min-height:40px;padding:6px 10px;color:var(--ink);font-weight:600}
+.more-filters-foot{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--muted);font-size:.85rem;font-weight:700}
 #product-filters{margin-bottom:12px}
 .product-rows,.category-rows{display:grid;gap:8px}
 .product-row,.category-row{display:grid;grid-template-columns:52px auto auto minmax(0,1fr);grid-template-areas:"thumb main main main" "thumb stock toggle actions";gap:6px 12px;align-items:center;padding:10px 12px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);transition:border-color .15s}
