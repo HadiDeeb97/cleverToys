@@ -47,6 +47,12 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
     <dialog id="new-order" class="wa-dialog new-order-dialog" aria-labelledby="new-order-title">
       <form id="new-order-form" class="wa-dialog-form" novalidate>
         <div class="new-order-head"><div><p class="eyebrow">Order from outside the website</p><h2 id="new-order-title">New order</h2></div><button type="button" class="small-button" id="new-order-close" aria-label="Close">✕</button></div>
+        <div class="customer-pick" id="customer-pick">
+          <label for="customer-search">Existing customer <span>(optional: fills in their details)</span></label>
+          <input id="customer-search" class="admin-input" type="search" placeholder="Search a customer by name, phone or email" autocomplete="off" />
+          <div id="customer-results" class="picker-results"></div>
+          <div id="customer-chosen" class="customer-chosen" hidden></div>
+        </div>
         <div class="new-order-grid">
           <label>Where from<select name="source" class="admin-input"><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="facebook">Facebook</option><option value="phone">Phone call</option><option value="in_store">In store</option><option value="other">Other</option></select></label>
           <label>Status<select id="new-order-status" name="status" class="admin-input"></select></label>
@@ -376,6 +382,7 @@ $('#new-order-status').innerHTML = STATUSES.map((s) => `<option value="${s}"${s 
 async function openNewOrder() {
   if (!drafts.has(NEW)) {
     newOrderForm.reset();
+    setChosenCustomer(null);
     const now = new Date();
     // Now, in local time (what datetime-local shows).
     (newOrderForm.elements.namedItem('created_at') as HTMLInputElement).value = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -403,12 +410,14 @@ async function addOrder(event: SubmitEvent) {
     source: text('source'), status: text('status'), created_at: when.toISOString(),
     customer_name: text('customer_name'), customer_phone: text('customer_phone'), customer_email: text('customer_email'),
     governorate: text('governorate'), city: text('city'), area: text('area'), address: text('address'), notes: text('notes'),
-    items: items.map(({ id: _id, ...item }) => item), delivery_fee: t.delivery, discount: t.discount
+    items: items.map(({ id: _id, ...item }) => item), delivery_fee: t.delivery, discount: t.discount,
+    customer_id: chosenCustomer?.customer_id || null
   } });
   button.disabled = false;
   if (r.error) { toast(missingSql(r.error.message) ? 'Run supabase/order_editing.sql in Supabase first.' : `Could not add the order: ${r.error.message}`, 'error'); return; }
   const order = r.data as any;
   drafts.delete(NEW);
+  setChosenCustomer(null);
   newOrderDialog.close();
   catalog = null;   // stock changed
   orders.unshift(order);
@@ -419,6 +428,63 @@ async function addOrder(event: SubmitEvent) {
   toast(`Order ${order.order_number} added (${money(order.total)}).`);
 }
 newOrderForm.addEventListener('submit', addOrder);
+
+// Choosing an existing customer (Admin → Customers list): fills in their details. A customer with an
+// account is linked to the order, so it shows in their account and in their order history.
+type PickedCustomer = { customer_key: string; customer_id: string | null; name: string | null; email: string | null; phone: string | null; governorate: string | null; orders_count: number };
+let chosenCustomer: PickedCustomer | null = null;
+let customerResults: PickedCustomer[] = [];
+let customerTimer = 0;
+const phoneDigitsKey = (p: unknown) => String(p ?? '').replace(/\D/g, '').replace(/^00/, '').replace(/^961/, '').replace(/^0/, '');
+function setChosenCustomer(c: PickedCustomer | null) {
+  chosenCustomer = c;
+  const box = $('#customer-chosen');
+  box.hidden = !c;
+  box.innerHTML = c ? `<span>👤 <strong>${esc(c.name || 'Customer')}</strong> · ${c.customer_id ? 'has an account: the order will show in their account' : 'guest: details filled in from their last order'}</span><button type="button" class="small-button" id="customer-clear" aria-label="Remove the chosen customer">✕</button>` : '';
+  $<HTMLInputElement>('#customer-search').value = '';
+  $('#customer-results').innerHTML = '';
+}
+async function searchCustomers() {
+  const q = $<HTMLInputElement>('#customer-search').value.trim();
+  const results = $('#customer-results');
+  if (q.length < 2) { results.innerHTML = ''; return; }
+  const r = await supabase.rpc('admin_list_customers', { p_search: q, p_limit: 8, p_offset: 0 });
+  if ($<HTMLInputElement>('#customer-search').value.trim() !== q) return; // typed more meanwhile
+  if (r.error) { results.innerHTML = '<p class="muted">Customers can only be searched by staff with access to Customers.</p>'; return; }
+  customerResults = (r.data ?? []) as PickedCustomer[];
+  results.innerHTML = customerResults.length ? customerResults.map((c, i) => `<button type="button" class="picker-option" data-pick-customer="${i}"><span><b>${esc(c.name || 'No name')}</b>${c.customer_id ? ' <em class="cust-account">Account</em>' : ''}<br><small>${esc([c.phone, c.email].filter(Boolean).join(' · '))}</small></span><small>${Number(c.orders_count)} order${Number(c.orders_count) === 1 ? '' : 's'}</small></button>`).join('') : '<p class="muted">No customer found. Fill in the details below.</p>';
+}
+/** Fills the form with the customer's details: their profile (accounts), else their last order. */
+async function pickCustomer(c: PickedCustomer) {
+  setChosenCustomer(c);
+  const field = (name: string) => newOrderForm.elements.namedItem(name) as HTMLInputElement;
+  const set = (name: string, value: unknown) => { if (value !== null && value !== undefined && String(value).trim() !== '') field(name).value = String(value); };
+  set('customer_name', c.name); set('customer_phone', c.phone); set('customer_email', c.email); set('governorate', c.governorate);
+  const key = phoneDigitsKey(c.phone);
+  const [profile, last] = await Promise.all([
+    c.customer_id ? supabase.from('customer_profiles').select('full_name,phone,governorate,city,area,address').eq('id', c.customer_id).maybeSingle() : Promise.resolve({ data: null }),
+    c.customer_id || key
+      ? (c.customer_id ? supabase.from('orders').select('customer_phone,customer_email,governorate,city,area,address').eq('customer_id', c.customer_id) : supabase.from('orders').select('customer_phone,customer_email,governorate,city,area,address').ilike('customer_phone', `%${key.split('').join('%')}%`)).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      : Promise.resolve({ data: null })
+  ]);
+  if (chosenCustomer !== c) return; // another customer was chosen meanwhile
+  const p = (profile.data || {}) as Record<string, string | null>;
+  const o = (last.data || {}) as Record<string, string | null>;
+  set('governorate', p.governorate || o.governorate);
+  set('city', p.city || o.city);
+  set('area', p.area || o.area);
+  set('address', p.address || o.address);
+  if (!field('customer_phone').value) set('customer_phone', p.phone || o.customer_phone);
+  if (!field('customer_email').value) set('customer_email', o.customer_email);
+  updateTotals(NEW);   // the delivery fee follows the governorate
+}
+$('#customer-search').addEventListener('input', () => { clearTimeout(customerTimer); customerTimer = window.setTimeout(searchCustomers, 250); });
+$('#customer-pick').addEventListener('click', (event) => {
+  const target = event.target instanceof Element ? event.target : null;
+  const pick = target?.closest<HTMLElement>('[data-pick-customer]');
+  if (pick) { const c = customerResults[Number(pick.dataset.pickCustomer)]; if (c) pickCustomer(c); return; }
+  if (target?.closest('#customer-clear')) setChosenCustomer(null);
+});
 $('#new-order-open').addEventListener('click', openNewOrder);
 ['#new-order-close', '#new-order-cancel'].forEach((sel) => $(sel).addEventListener('click', () => newOrderDialog.close()));
 $('#new-order-governorate').addEventListener('input', () => updateTotals(NEW));
@@ -679,6 +745,13 @@ init();
 .new-order-items{margin:0 0 8px;font-size:1rem}
 .new-order-note{margin:0;color:var(--muted);font-size:.85rem;font-weight:600}
 .new-order-actions{display:flex;gap:10px;flex-wrap:wrap}
+.customer-pick{display:grid;gap:6px;padding:12px;border-radius:14px;background:var(--surface-2)}
+.customer-pick label{color:var(--muted);font-size:.78rem;font-weight:800}
+.customer-pick label span{font-weight:600}
+.customer-pick .admin-input{color:var(--ink);font-weight:600}
+.customer-chosen{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:10px;background:#e7f7ec;color:#166534;font-size:.9rem;font-weight:600}
+.customer-chosen[hidden]{display:none}
+.cust-account{display:inline-block;padding:0 7px;border-radius:999px;background:#e7f7ec;color:#166534;font-size:.7rem;font-style:normal;font-weight:800}
 @media(max-width:700px){.new-order-grid{grid-template-columns:1fr}}
 @media(max-width:560px){.new-order-dialog .wa-dialog-form{padding:16px}.edit-table td,.edit-table th{padding:8px 5px}.qty-input{width:50px;padding:6px 4px}.edit-table .price-input{width:66px;padding:6px 4px}.edit-table .percent-field{margin-left:4px}.edit-table td:last-child,.edit-table th:last-child{width:32px}.remove-line{width:28px;height:28px}}
 @media(max-width:1100px){.order-row{grid-template-columns:1fr auto;grid-template-areas:"toggle total" "customer status" "edit edit"}.order-toggle{grid-area:toggle}.order-customer{grid-area:customer}.order-total{grid-area:total;text-align:right}.order-row .status-pill{grid-area:status;justify-self:end}.order-status-edit{grid-area:edit;justify-content:flex-start}.orders-filters{grid-template-columns:1fr 1fr}.orders-filters #order-search{grid-column:1/-1}.order-detail-grid{grid-template-columns:1fr}}

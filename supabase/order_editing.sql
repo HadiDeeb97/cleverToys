@@ -8,6 +8,7 @@
 --    follows the change (an item removed goes back into stock, an item added is taken from it), except
 --    for cancelled orders, whose stock was already put back.
 --  - admin_create_order(details): adds an order from WhatsApp, Instagram, a phone call, the shop…
+--    Optionally for a customer with an account (customer_id), so it shows in their account and history.
 --    Its items are taken from stock like a website order. Empty prices use the toy's current price; an
 --    empty delivery fee uses the delivery fees from Admin → Discounts & delivery.
 --  Only admins with access to orders can use them; changes appear in the Activity log and the stock
@@ -211,8 +212,15 @@ DECLARE
   delivery_value numeric(10,2);
   discount_value numeric(10,2);
   number_value text;
+  customer_value uuid;
 BEGIN
   IF NOT public.admin_has('orders') THEN RAISE EXCEPTION 'You do not have access to orders.'; END IF;
+  BEGIN
+    customer_value := nullif(p->>'customer_id', '')::uuid;
+  EXCEPTION WHEN others THEN RAISE EXCEPTION 'Check the customer.'; END;
+  IF customer_value IS NOT NULL AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = customer_value) THEN
+    RAISE EXCEPTION 'This customer account no longer exists.';
+  END IF;
   IF name_value = '' OR length(name_value) > 120 THEN RAISE EXCEPTION 'Enter the customer''s name.'; END IF;
   IF length(phone_value) > 40 THEN RAISE EXCEPTION 'Check the phone number.'; END IF;
   IF status_value NOT IN ('pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled') THEN RAISE EXCEPTION 'Unknown status.'; END IF;
@@ -239,9 +247,9 @@ BEGIN
   LOOP
     number_value := 'CT-' || to_char(when_value, 'YYYYMMDD') || '-' || upper(substr(md5(random()::text || clock_timestamp()::text), 1, 6));
     BEGIN
-      INSERT INTO public.orders (order_number, customer_name, customer_phone, customer_email, governorate, city, area, address, notes,
+      INSERT INTO public.orders (order_number, customer_id, customer_name, customer_phone, customer_email, governorate, city, area, address, notes,
                                  subtotal, delivery_fee, discount, total, payment_method, status, source, created_at, updated_at)
-      VALUES (number_value, name_value, phone_value, nullif(trim(coalesce(p->>'customer_email', '')), ''), governorate_value,
+      VALUES (number_value, customer_value, name_value, phone_value, nullif(trim(coalesce(p->>'customer_email', '')), ''), governorate_value,
               nullif(trim(coalesce(p->>'city', '')), ''), nullif(trim(coalesce(p->>'area', '')), ''), nullif(trim(coalesce(p->>'address', '')), ''),
               nullif(trim(coalesce(p->>'notes', '')), ''), subtotal_value, delivery_value, discount_value,
               greatest(0, subtotal_value - discount_value) + delivery_value, 'cash_on_delivery', status_value, source_value, when_value, now())

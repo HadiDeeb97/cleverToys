@@ -83,12 +83,14 @@ async function show(c: Customer) {
   document.querySelectorAll('#rows tr').forEach((tr) => tr.classList.toggle('is-selected', (tr as HTMLElement).dataset.key === selected));
   const detail = $('#detail');
   detail.innerHTML = '<p class="cms-empty">Loading…</p>';
-  // Orders: by account, or (guests) by phone number written in any format.
+  // Orders: by account, or (guests) by phone number written in any format. Phones are saved with
+  // spaces ("+961 78 815 280"), so the search allows anything between the digits; the exact
+  // number is then checked below.
   let query = supabase.from('orders').select('order_number,status,total,discount,coupon_code,created_at,governorate,city,address,customer_phone').order('created_at', { ascending: false }).limit(200);
   const key = phoneKey(c.phone);
-  query = c.customer_id ? query.eq('customer_id', c.customer_id) : query.ilike('customer_phone', `%${key.slice(-6)}%`);
+  query = c.customer_id ? query.eq('customer_id', c.customer_id) : query.ilike('customer_phone', `%${key.split('').join('%')}%`);
   const [orders, profile] = await Promise.all([
-    query,
+    c.customer_id || key ? query : Promise.resolve({ data: [] }),
     c.customer_id ? supabase.from('customer_profiles').select('*').eq('id', c.customer_id).maybeSingle() : Promise.resolve({ data: null })
   ]);
   if (selected !== c.customer_key) return;
