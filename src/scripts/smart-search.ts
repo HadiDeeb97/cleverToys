@@ -8,7 +8,7 @@ export const searchWords = (value: unknown) =>
   String(value ?? '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').split(/[^\p{L}\p{N}]+/u).filter(Boolean);
 
 /** Whether two words differ by at most `max` letters (stops early). */
-function within(a: string, b: string, max: number) {
+export function within(a: string, b: string, max: number) {
   if (Math.abs(a.length - b.length) > max) return false;
   // Two swapped neighbouring letters ("lnia" → lina) count as one mistake.
   let before: number[] = [];
