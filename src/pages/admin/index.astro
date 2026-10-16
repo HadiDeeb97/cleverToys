@@ -199,10 +199,20 @@ let productFilter = 'all';
 const DUPLICATE_MATCH = 0.8;
 let duplicates = new Map<string, Candidate<Row>[]>();
 let notDuplicates = new Set<string>();
+// Product → the products it was marked "Not a duplicate" of (the Not duplicates view).
+let notDuplicateOf = new Map<string, string[]>();
 let notDuplicatesReady = false;
 const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 function findProductDuplicates() {
   duplicates = new Map();
+  notDuplicateOf = new Map();
+  const known = new Set(products.map((p) => String(p.id)));
+  for (const key of notDuplicates) {
+    const [a, b] = key.split('|');
+    if (!known.has(a) || !known.has(b)) continue;
+    notDuplicateOf.set(a, [...(notDuplicateOf.get(a) || []), b]);
+    notDuplicateOf.set(b, [...(notDuplicateOf.get(b) || []), a]);
+  }
   for (const [id, list] of findDuplicates(products, DUPLICATE_MATCH)) {
     const left = list.filter((c) => !notDuplicates.has(pairKey(id, c.product.id)));
     if (left.length) duplicates.set(id, left);
@@ -216,7 +226,7 @@ let lowStockAt = 5;
 let storageBase = '';
 const isOwnPhoto = (url: unknown) => Boolean(storageBase) && String(url || '').startsWith(storageBase);
 const params = new URLSearchParams(location.search);
-if (['active', 'hidden', 'featured', 'low', 'out', 'duplicates'].includes(params.get('filter') || '')) productFilter = String(params.get('filter'));
+if (['active', 'hidden', 'featured', 'low', 'out', 'duplicates', 'not-duplicates'].includes(params.get('filter') || '')) productFilter = String(params.get('filter'));
 // ?q= (from the admin search) starts with that text in the search box.
 if (params.get('q')) (document.getElementById('search') as HTMLInputElement).value = params.get('q') || '';
 
@@ -294,7 +304,8 @@ const FILTERS: Array<[string, string, (p: Row) => boolean]> = [
   ['featured', 'Featured', (p) => p.is_featured],
   ['low', 'Low stock', (p) => p.stock_quantity > 0 && p.stock_quantity <= lowStockAt],
   ['out', 'Out of stock', (p) => p.stock_quantity <= 0],
-  ['duplicates', 'Possible duplicates', (p) => duplicates.has(p.id)]
+  ['duplicates', 'Possible duplicates', (p) => duplicates.has(p.id)],
+  ['not-duplicates', 'Not duplicates', (p) => notDuplicateOf.has(p.id)]
 ];
 
 // The "Filters" panel: extra filters and sorting on top of the chips, the search and the category.
@@ -335,9 +346,10 @@ const SORTS: Record<string, (a: Row, b: Row) => number> = {
 };
 
 function renderProducts() {
-  if (productFilter === 'duplicates' && !duplicates.size) productFilter = 'all';
-  // The duplicates chip only shows when there are some.
-  $('#product-filters').innerHTML = FILTERS.filter(([id]) => id !== 'duplicates' || duplicates.size).map(([id, label, test]) => `<button type="button" class="chip${productFilter === id ? ' active' : ''}${id === 'duplicates' ? ' dup-chip' : ''}" data-filter="${id}">${id === 'duplicates' ? '⚠ ' : ''}${label} <b>${products.filter(test).length}</b></button>`).join('');
+  // The duplicates chips only show when there are some.
+  const chipShown = (id: string) => (id === 'duplicates' ? duplicates.size > 0 : id === 'not-duplicates' ? notDuplicateOf.size > 0 : true);
+  if (!chipShown(productFilter)) productFilter = 'all';
+  $('#product-filters').innerHTML = FILTERS.filter(([id]) => chipShown(id)).map(([id, label, test]) => `<button type="button" class="chip${productFilter === id ? ' active' : ''}${id === 'duplicates' ? ' dup-chip' : ''}" data-filter="${id}">${id === 'duplicates' ? '⚠ ' : ''}${label} <b>${products.filter(test).length}</b></button>`).join('');
   const q = $<HTMLInputElement>('#search').value.trim().toLowerCase();
   const cat = $<HTMLSelectElement>('#category-filter').value;
   const test = FILTERS.find(([id]) => id === productFilter)?.[2] ?? (() => true);
@@ -348,7 +360,8 @@ function renderProducts() {
   const list = smartFilter(products.filter((p) => test(p) && (!inCategory || inCategory.has(p.id) || p.category_id === cat) && passesMore(p, more)), q, (p: any) => [[p.name, 3], [p.sku, 2], [p.brand, 2], [catName.get(p.category_id), 1], [p.short_description, 1]]);
   // Search results stay in best-match order unless a sort is chosen.
   if (SORTS[more.sort]) list.sort(SORTS[more.sort]);
-  else if (productFilter === 'duplicates' && !q) list.splice(0, list.length, ...duplicateOrder(list));
+  else if (productFilter === 'duplicates' && !q) list.splice(0, list.length, ...pairOrder(list, (id) => (duplicates.get(id) || []).map((c) => c.product.id), (p) => duplicates.get(p.id)?.[0]?.score ?? 0));
+  else if (productFilter === 'not-duplicates' && !q) list.splice(0, list.length, ...pairOrder(list, (id) => notDuplicateOf.get(id) || [], () => 0));
   const extra = ['only', 'priceMin', 'priceMax', 'age', 'brand', 'label'].filter((k) => (more as any)[k] !== null && (more as any)[k] !== '').length + (more.sort !== 'newest' ? 1 : 0);
   $('#more-filters-toggle').textContent = extra ? `Filters (${extra})` : 'Filters';
   $('#filter-result').textContent = `Showing ${list.length} of ${products.length} products`;
@@ -358,7 +371,7 @@ function renderProducts() {
     const stockClass = p.stock_quantity <= 0 ? 'out' : p.stock_quantity <= lowStockAt ? 'low' : '';
     return `<div class="product-row${editingId === p.id ? ' editing' : ''}${p.is_active ? '' : ' is-hidden'}">
       <div class="product-thumb">${p.primary_image_url ? `<img src="${esc(p.primary_image_url)}" alt="" loading="lazy" />` : '🧸'}</div>
-      <div class="product-main"><button type="button" class="product-name" data-edit="${p.id}">${esc(p.name)}</button><small>${esc(p.sku || 'No SKU')} · ${money(price)}${p.sale_price != null ? ` <s>${money(p.price)}</s>` : ''}${p.cost_price != null && p.cost_price !== '' ? ` · cost ${money(p.cost_price)}${price ? ` (${Math.round(((price - Number(p.cost_price)) / price) * 100)}% margin)` : ''}` : ' · <span class="no-cost">no cost set</span>'}${p.is_featured ? ' · ⭐ Featured' : ''}${p.in_feed === false ? ' · <span class="off-catalog">not in Google/Meta</span>' : ''}${p.ad_label ? ` · 🏷️ ${esc(p.ad_label)}` : ''}${duplicates.has(p.id) && productFilter !== 'duplicates' ? ' · <span class="dup-flag">possible duplicate</span>' : ''}</small>${productFilter === 'duplicates' ? duplicateNote(p) : ''}</div>
+      <div class="product-main"><button type="button" class="product-name" data-edit="${p.id}">${esc(p.name)}</button><small>${esc(p.sku || 'No SKU')} · ${money(price)}${p.sale_price != null ? ` <s>${money(p.price)}</s>` : ''}${p.cost_price != null && p.cost_price !== '' ? ` · cost ${money(p.cost_price)}${price ? ` (${Math.round(((price - Number(p.cost_price)) / price) * 100)}% margin)` : ''}` : ' · <span class="no-cost">no cost set</span>'}${p.is_featured ? ' · ⭐ Featured' : ''}${p.in_feed === false ? ' · <span class="off-catalog">not in Google/Meta</span>' : ''}${p.ad_label ? ` · 🏷️ ${esc(p.ad_label)}` : ''}${duplicates.has(p.id) && productFilter !== 'duplicates' ? ' · <span class="dup-flag">possible duplicate</span>' : ''}</small>${productFilter === 'duplicates' ? duplicateNote(p) : productFilter === 'not-duplicates' ? notDuplicateNote(p) : ''}</div>
       ${withOptions.has(p.id)
         ? `<label class="stock-edit ${stockClass} from-options" title="Total of this toy's options. Change the stock in its options.">Stock<input type="number" value="${Number(p.stock_quantity)}" readonly tabindex="-1" aria-label="Stock for ${esc(p.name)}: total of its options" /></label>`
         : `<label class="stock-edit ${stockClass}" title="Stock">Stock<input type="number" min="0" value="${Number(p.stock_quantity)}" data-stock="${p.id}" aria-label="Stock for ${esc(p.name)}" /></label>`}
@@ -368,18 +381,22 @@ function renderProducts() {
   }).join('') : '<div class="empty-state"><h2>No products here</h2><p>Try another filter or add a product.</p></div>';
 }
 
-/** The possible duplicates list: each group of look-alike products together, the closest pairs first. */
-function duplicateOrder(list: Row[]) {
-  const shown = new Set(list.map((p) => p.id));
-  const best = (p: Row) => duplicates.get(p.id)?.[0]?.score ?? 0;
+/** The duplicates lists: each product followed by the products it is paired with, the best pairs first. */
+function pairOrder(list: Row[], partners: (id: string) => string[], best: (p: Row) => number) {
+  const shown = new Map(list.map((p) => [p.id, p]));
   const out: Row[] = [];
   const placed = new Set<string>();
   for (const p of [...list].sort((a, b) => best(b) - best(a) || String(a.name).localeCompare(String(b.name)))) {
     if (placed.has(p.id)) continue;
     out.push(p); placed.add(p.id);
-    for (const c of duplicates.get(p.id) || []) if (shown.has(c.product.id) && !placed.has(c.product.id)) { out.push(c.product); placed.add(c.product.id); }
+    for (const id of partners(p.id)) if (shown.has(id) && !placed.has(id)) { out.push(shown.get(id)!); placed.add(id); }
   }
   return out;
+}
+/** "Marked different from" line in the Not duplicates list, with Undo (the pair is suggested again). */
+function notDuplicateNote(p: Row) {
+  const others = (notDuplicateOf.get(p.id) || []).map((id) => products.find((x) => x.id === id)).filter(Boolean) as Row[];
+  return others.length ? `<div class="dup-note not-dup-note"><span>Marked different from</span>${others.map((o) => `<span class="dup-match"><button type="button" class="text-link" data-edit="${o.id}">${esc(o.name)}</button>${o.is_active ? '' : ' <small>hidden</small>'}<button type="button" class="small-button" data-undo-not-dup="${pairKey(p.id, o.id)}" title="Show this pair in Possible duplicates again">Undo</button></span>`).join('')}</div>` : '';
 }
 /** "Looks like" line under a product in the Possible duplicates list. */
 function duplicateNote(p: Row) {
@@ -687,7 +704,19 @@ document.addEventListener('click', async (event) => {
     notDuplicates.add(pairKey(product_a, product_b));
     findProductDuplicates();
     renderProducts();
-    toast('Marked as different toys.');
+    toast('Marked as different toys. See them under “Not duplicates”.');
+    return;
+  }
+  const undoNotDup = t.closest<HTMLButtonElement>('[data-undo-not-dup]');
+  if (undoNotDup) {
+    const [product_a, product_b] = undoNotDup.dataset.undoNotDup!.split('|');
+    undoNotDup.disabled = true;
+    const r = await supabase.from('product_not_duplicates').delete().eq('product_a', product_a).eq('product_b', product_b);
+    if (r.error) { undoNotDup.disabled = false; toast(r.error.message, 'error'); return; }
+    notDuplicates.delete(pairKey(product_a, product_b));
+    findProductDuplicates();
+    renderProducts();
+    toast('Undone: the pair is back in Possible duplicates (if their names still look alike).');
     return;
   }
   const del = t.closest<HTMLElement>('[data-del]');
@@ -1832,7 +1861,7 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .profit-hint{margin:-6px 0 0;color:var(--muted);font-size:.85rem;font-weight:700}
 .profit-hint.gain{color:var(--success)}.profit-hint.loss{color:var(--danger)}
 .no-cost{color:#8a5a00}
-.dup-flag{color:#92400e;font-weight:700}.chip.dup-chip{border-color:#f5d27a}.chip.dup-chip.active{background:#fff7e0;color:#92400e;border-color:#f5d27a}
+.dup-flag{color:#92400e;font-weight:700}.dup-note.not-dup-note{background:var(--surface,#fff);border:1px solid var(--line,#e2e5ea)}.dup-note.not-dup-note>span:first-child{color:var(--muted,#555)}.chip.dup-chip{border-color:#f5d27a}.chip.dup-chip.active{background:#fff7e0;color:#92400e;border-color:#f5d27a}
 .dup-note{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin-top:6px;padding:6px 10px;border-radius:10px;background:#fff7e0;font-size:.85rem}.dup-note>span:first-child{font-weight:700;color:#92400e}
 .dup-match{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}.dup-match .text-link{background:none;border:0;border-bottom:1.5px solid currentColor;border-radius:0;padding:0;font:inherit;font-weight:700;color:var(--ink);cursor:pointer}
 .category-picker{margin:0;padding:12px;border:1.5px solid var(--line);border-radius:14px}
