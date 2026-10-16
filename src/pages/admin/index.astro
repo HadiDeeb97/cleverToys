@@ -954,10 +954,17 @@ function photoSlot(header: string) {
   return /^(?:main[\s_-]*)?(?:image|photo|picture)$/.test(h) ? 1 : 0;
 }
 
+// Web links in a cell: several may share one cell (separated by spaces, commas or new lines).
+const LINKS = /https?:\/\/[^\s,;|"'<>]+/gi;
+// Extra photo columns may be named anything with image/photo/picture/img/pic/gallery, or have no name.
+const PHOTO_HEADER = /image|photo|picture|\bimg|\bpic|gallery|صور/i;
+
 /**
- * Photos for each sheet row, in order: image_1 first (the main photo), then image_2… Pictures in other
- * columns of the row come last. Web links typed in the image cells (or the older primary_image_url
- * column) count too.
+ * Photos for each sheet row, in order: image_1 first (the main photo), then image_2… Pictures and links
+ * in other photo columns (named image/photo/… without a number, or with no name) come last.
+ * Web links count too: typed in the cell (several per cell is fine), a cell's hyperlink, or the older
+ * primary_image_url column. Cells are read straight from the sheet, so columns with the same name or
+ * with no name are not lost.
  */
 function photosByRow(ws: any, XLSX: any, pictures: SheetPicture[], rows: Row[]) {
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
@@ -965,7 +972,7 @@ function photosByRow(ws: any, XLSX: any, pictures: SheetPicture[], rows: Row[]) 
   const slotOfCol = new Map<number, number>();
   const headerOfCol = new Map<number, string>();
   for (let c = range.s.c; c <= range.e.c; c++) {
-    const text = String(ws[XLSX.utils.encode_cell({ r: headerRow, c })]?.v ?? '');
+    const text = String(ws[XLSX.utils.encode_cell({ r: headerRow, c })]?.v ?? '').trim();
     headerOfCol.set(c, text);
     const slot = photoSlot(text);
     if (slot) slotOfCol.set(c, slot);
@@ -977,13 +984,22 @@ function photosByRow(ws: any, XLSX: any, pictures: SheetPicture[], rows: Row[]) 
     // A floating picture that spills into the next column still belongs to its image column.
     const col = slotOfCol.has(picture.col) ? picture.col : picture.cols.find((c) => slotOfCol.has(c));
     const slot = col !== undefined ? slotOfCol.get(col)! : 100000 + picture.col;
-    add(picture.row, { slot, order: picture.col, picture: picture.url ? undefined : picture, url: picture.url });
+    add(picture.row, { slot, order: picture.col * 1000, picture: picture.url ? undefined : picture, url: picture.url });
   }
   for (const row of rows) {
     const sheetRow = Number(row.__rowNum__);
-    for (const [col, slot] of slotOfCol) {
-      const text = String(row[headerOfCol.get(col) || ''] ?? '').trim();
-      if (/^https?:\/\//i.test(text)) add(sheetRow, { slot, order: col, url: text });
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const header = headerOfCol.get(c) || '';
+      const slot = slotOfCol.get(c);
+      if (/^primary_image_url$/i.test(header) || (slot === undefined && header && !PHOTO_HEADER.test(header))) continue;
+      const cell = ws[XLSX.utils.encode_cell({ r: sheetRow, c })];
+      const text = String(cell?.v ?? '').trim();
+      const links = text.match(LINKS) || [];
+      const target = String(cell?.l?.Target || '').trim();
+      if (/^https?:\/\//i.test(target) && !links.includes(target)) links.push(target);
+      // A column without an image_N name only counts when the cell holds nothing but links.
+      if (slot === undefined && text.replace(LINKS, '').replace(/[\s,;|]+/g, '') && !target) continue;
+      links.forEach((url, k) => add(sheetRow, { slot: slot ?? 100000 + c, order: c * 1000 + k + 1, url }));
     }
     const legacy = String(row.primary_image_url || '').trim();
     if (/^https?:\/\//i.test(legacy) && !(byRow.get(sheetRow) || []).some((p) => p.slot === 1)) add(sheetRow, { slot: 1, order: -1, url: legacy });

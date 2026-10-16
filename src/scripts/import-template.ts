@@ -33,7 +33,7 @@ const INSTRUCTIONS = [
   ['short_description / description', 'Short and full descriptions.'],
   ['image_1', `MAIN PHOTO. ${PICTURE_HELP}`],
   ['image_2 … image_5', `More photos, shown in this order. ${PICTURE_HELP}`],
-  ['image_6, image_7 …', 'As many photos as you want: add more columns named image_6, image_7, image_8… (any number). Several pictures placed over the same cell are all kept too.'],
+  ['image_6, image_7 …', 'As many photos as you want: add more columns named image_6, image_7, image_8… (any number). Columns to the right named "image", "photo" or with no name are read too. Several pictures placed over the same cell are all kept, and a cell may hold several web links (separated by spaces, commas or new lines).'],
   ['', 'A row with pictures replaces that product’s photos. A row with no pictures keeps the photos it already has.'],
   ['', 'Pictures are resized and saved as light WebP files. Use PNG or JPG pictures (not EMF or TIFF).'],
   ['seo_title / seo_description', 'Optional text for Google.'],
