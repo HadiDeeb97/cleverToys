@@ -166,3 +166,26 @@ export function rankCandidates<P extends Named>(products: P[], name: string, pri
     .sort((x, y) => y.score - x.score)
     .slice(0, limit);
 }
+
+/**
+ * Products on the site that look like the same toy listed twice (Admin → Products → Possible
+ * duplicates): for each product, the other products whose name scores `min` or more, best first.
+ * Toys with different numbers ("Magnetic Tiles 60 pcs" / "… 100 pcs") are never paired.
+ */
+export function findDuplicates<P extends Named>(products: P[], min = STRONG_MATCH): Map<string, Candidate<P>[]> {
+  const weigh = weigher(products);
+  const out = new Map<string, Candidate<P>[]>();
+  const add = (a: P, b: P, score: number) => {
+    const list = out.get(a.id) || [];
+    list.push({ product: b, score });
+    out.set(a.id, list);
+  };
+  for (let i = 0; i < products.length; i++) {
+    for (let j = i + 1; j < products.length; j++) {
+      const score = nameSimilarity(tokensOf(products[i]), tokensOf(products[j]), weigh);
+      if (score >= min) { add(products[i], products[j], score); add(products[j], products[i], score); }
+    }
+  }
+  for (const list of out.values()) list.sort((x, y) => y.score - x.score);
+  return out;
+}
