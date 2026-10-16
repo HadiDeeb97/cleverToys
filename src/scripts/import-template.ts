@@ -2,10 +2,15 @@
  * The Excel file for Admin → Products → Excel import ("Download Excel template"): a Products sheet
  * with one example row and an Instructions sheet. Rows are tall and picture columns wide, so
  * pictures can be placed in (or over) the image_1…image_5 cells. SheetJS (window.XLSX) writes it.
+ * There is no limit on photos: more columns (image_6, image_7…) can be added.
  */
-export const IMAGE_COLUMNS = ['image_1', 'image_2', 'image_3', 'image_4', 'image_5'];
+/** image_1 … image_<count>. */
+export const imageColumns = (count: number) => Array.from({ length: Math.max(1, count) }, (_, i) => `image_${i + 1}`);
+export const IMAGE_COLUMNS = imageColumns(5);
 
-export const TEMPLATE_HEADERS = ['name', 'slug', 'sku', 'categories', 'price', 'sale_price', 'cost_price', 'stock_quantity', 'age_min', 'age_max', 'brand', 'short_description', 'description', ...IMAGE_COLUMNS, 'seo_title', 'seo_description', 'is_active', 'is_featured'];
+/** The Products sheet's columns, with `images` photo columns (5 in the template; the export adds more when needed). */
+export const headersWithImages = (images = 5) => ['name', 'slug', 'sku', 'categories', 'price', 'sale_price', 'cost_price', 'stock_quantity', 'age_min', 'age_max', 'brand', 'short_description', 'description', ...imageColumns(images), 'seo_title', 'seo_description', 'is_active', 'is_featured'];
+export const TEMPLATE_HEADERS = headersWithImages(5);
 
 const EXAMPLE = ['Example Toy', 'example-toy', 'CT-001', 'Educational Toys, Outdoor Toys', 9.99, '', 5.5, 10, 3, 8, 'Clever Toys', 'Short description', 'Full description', '', '', '', '', '', 'Example Toy | Clever Toys', 'Shop toys in Lebanon.', true, false];
 
@@ -28,6 +33,7 @@ const INSTRUCTIONS = [
   ['short_description / description', 'Short and full descriptions.'],
   ['image_1', `MAIN PHOTO. ${PICTURE_HELP}`],
   ['image_2 … image_5', `More photos, shown in this order. ${PICTURE_HELP}`],
+  ['image_6, image_7 …', 'As many photos as you want: add more columns named image_6, image_7, image_8… (any number). Several pictures placed over the same cell are all kept too.'],
   ['', 'A row with pictures replaces that product’s photos. A row with no pictures keeps the photos it already has.'],
   ['', 'Pictures are resized and saved as light WebP files. Use PNG or JPG pictures (not EMF or TIFF).'],
   ['seo_title / seo_description', 'Optional text for Google.'],
