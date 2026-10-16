@@ -14,7 +14,7 @@ export const TEMPLATE_HEADERS = headersWithImages(5);
 
 const EXAMPLE = ['Example Toy', 'example-toy', 'CT-001', 'Educational Toys, Outdoor Toys', 9.99, '', 5.5, 10, 3, 8, 'Clever Toys', 'Short description', 'Full description', '', '', '', '', '', 'Example Toy | Clever Toys', 'Shop toys in Lebanon.', true, false];
 
-const PICTURE_HELP = 'Picture: put it INSIDE this cell (Excel: Insert → Pictures → Place in Cell) or OVER this cell (Insert → Pictures → Place over Cells, or paste), or type a web link (https://…).';
+const PICTURE_HELP = 'Picture: put it INSIDE this cell (Excel: Insert → Pictures → Place in Cell) or OVER this cell (Insert → Pictures → Place over Cells, or paste), or type a web link (https://…): the photo is downloaded and saved in your own storage.';
 
 const INSTRUCTIONS = [
   ['Column', 'Instructions'],

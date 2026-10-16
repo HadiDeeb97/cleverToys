@@ -32,6 +32,13 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
         <button class="tab" data-tab="categories" type="button" role="tab">Categories</button>
         <button class="tab" data-tab="import" type="button" role="tab">Excel import</button>
       </div>
+      <!-- Photos still loaded from other websites (older imports): copy them into the store's storage. -->
+      <div id="outside-photos" class="outside-photos" hidden>
+        <p id="outside-text"></p>
+        <div class="outside-actions"><button id="outside-copy" class="button" type="button">Copy photos to my storage</button><button id="outside-stop" class="small-button" type="button" hidden>Stop</button></div>
+        <p id="outside-msg" class="muted" role="status"></p>
+        <div id="outside-errors" class="import-errors" hidden></div>
+      </div>
 
       <section id="products-tab" class="catalog-layout">
         <div class="catalog-list admin-panel">
@@ -142,7 +149,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
       <section id="import-tab" class="admin-panel import-card" hidden>
         <h2>Excel import</h2>
         <p>Download the template, fill it in, then import. Each row is matched to the toy on your site with the same slug or SKU, or a similar name; in the preview you choose what to update, skip or add. Empty cells keep what the toy already has. Put comma-separated category names in the <strong>categories</strong> column.</p>
-        <p><strong>Photos:</strong> put pictures in the <strong>image_1</strong>, <strong>image_2</strong>… columns (as many as you want: add <strong>image_6</strong>, <strong>image_7</strong>… columns for more): inside the cell (Excel: Insert → Pictures → Place in Cell) or over the cell, or type a web link. <strong>image_1</strong> becomes the main photo. A row with pictures replaces that product’s photos; a row without keeps them.</p>
+        <p><strong>Photos:</strong> put pictures in the <strong>image_1</strong>, <strong>image_2</strong>… columns (as many as you want: add <strong>image_6</strong>, <strong>image_7</strong>… columns for more): inside the cell (Excel: Insert → Pictures → Place in Cell) or over the cell, or type a web link (the photo is downloaded and saved in your own storage as WebP). <strong>image_1</strong> becomes the main photo. A row with pictures replaces that product’s photos; a row without keeps them.</p>
         <div class="import-actions"><button id="template" class="button secondary-button" type="button">Download Excel template</button><input id="file" type="file" accept=".xlsx,.xls,.csv" /><button id="import" class="button" type="button">Preview import</button></div>
         <p id="msg" role="status"></p>
         <div id="undo-box" class="undo-box" hidden><span id="undo-text"></span><button id="undo-import" class="button secondary-button" type="button">↩ Undo last import</button><button id="undo-keep" class="small-button" type="button" title="Keep the import and free the old photos">Keep changes</button></div>
@@ -191,6 +198,9 @@ let productFilter = 'all';
 let withOptions = new Set<string>();
 // "Low stock" limit from Admin → Branding & settings (supabase/cms.sql); 5 before that.
 let lowStockAt = 5;
+// Public address of the store's own photo storage (set in init); other addresses are outside photos.
+let storageBase = '';
+const isOwnPhoto = (url: unknown) => Boolean(storageBase) && String(url || '').startsWith(storageBase);
 const params = new URLSearchParams(location.search);
 if (['active', 'hidden', 'featured', 'low', 'out'].includes(params.get('filter') || '')) productFilter = String(params.get('filter'));
 // ?q= (from the admin search) starts with that text in the search box.
@@ -236,6 +246,7 @@ async function load() {
   renderCategories();
   const active = products.filter((x) => x.is_active).length;
   $('#catalog-summary').textContent = `${products.length} products (${active} visible) · ${categories.length} categories`;
+  await renderOutsidePhotos();
 }
 
 const currentCategoryIds = () => [...form.querySelectorAll<HTMLInputElement>('#category-checks input:checked')].map((x) => x.value);
@@ -885,17 +896,136 @@ function photosByRow(ws: any, XLSX: any, pictures: SheetPicture[], rows: Row[]) 
   return byRow;
 }
 
-/** Uploads one photo (resized to WebP) and returns its address; web links are kept as they are. */
-async function uploadImportPhoto(productId: string, photo: ImportPhoto, n: number) {
-  if (photo.url) return photo.url;
-  const picture = photo.picture!;
-  if (!BROWSER_IMAGE.test(picture.type || '')) throw new Error(`picture ${n} is a .${picture.type} file, which can't be used on the website. Insert it as a PNG or JPG picture.`);
-  const blob = await toWebp(new Blob([picture.data as BlobPart], { type: `image/${picture.type}` }));
+/**
+ * Downloads a photo from another website through the store's server (/api/admin/fetch-image), since
+ * browsers may not read pictures from other sites themselves.
+ */
+async function fetchOutsidePhoto(url: string) {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error('Please sign in again.');
+  const response = await fetch('/api/admin/fetch-image', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ url }) });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(`${body.error || `the photo could not be downloaded (${response.status})`} ${url}`);
+  }
+  return response.blob();
+}
+
+/** Resizes a photo to WebP, saves it in the store's storage under the product and returns its address. */
+async function storeProductPhoto(productId: string, source: Blob, n: number | string) {
+  const blob = await toWebp(source);
   const path = `${productId}/${Date.now()}-${n}.webp`;
   const up = await supabase.storage.from('product-images').upload(path, blob, { contentType: 'image/webp', upsert: false });
   if (up.error) throw new Error(up.error.message);
   return supabase.storage.from('product-images').getPublicUrl(path).data.publicUrl;
 }
+
+/**
+ * Saves one photo of an import row and returns its address. Pictures in the file and web links are
+ * both saved in the store's own storage as WebP; only links to photos already in that storage (for
+ * example from "Export Excel") are kept as they are.
+ */
+async function uploadImportPhoto(productId: string, photo: ImportPhoto, n: number) {
+  if (photo.url) return isOwnPhoto(photo.url) ? photo.url : storeProductPhoto(productId, await fetchOutsidePhoto(photo.url), n);
+  const picture = photo.picture!;
+  if (!BROWSER_IMAGE.test(picture.type || '')) throw new Error(`picture ${n} is a .${picture.type} file, which can't be used on the website. Insert it as a PNG or JPG picture.`);
+  return storeProductPhoto(productId, new Blob([picture.data as BlobPart], { type: `image/${picture.type}` }), n);
+}
+
+// ---------- Photos loaded from other websites → the store's own storage ----------
+let copyingOutside = false, stopOutside = false;
+const outsideHost = (url: string) => { try { return new URL(url).hostname; } catch { return 'another website'; } };
+
+/** Shows the "Copy photos to my storage" box when some products still use photos from other websites. */
+async function renderOutsidePhotos() {
+  if (copyingOutside || !storageBase) return;
+  const box = $('#outside-photos');
+  const q = await supabase.from('product_images').select('id', { count: 'exact', head: true }).not('image_url', 'like', `${storageBase}%`);
+  const outsideProducts = products.filter((p) => p.primary_image_url && !isOwnPhoto(p.primary_image_url));
+  const count = q.error ? 0 : q.count || 0;
+  box.hidden = !count && !outsideProducts.length;
+  if (box.hidden) return;
+  const hosts = [...new Set(outsideProducts.map((p) => outsideHost(p.primary_image_url)))].slice(0, 3).join(', ');
+  $('#outside-text').innerHTML = `<strong>${count.toLocaleString()} photo${count === 1 ? '' : 's'}</strong> of <strong>${outsideProducts.length} product${outsideProducts.length === 1 ? '' : 's'}</strong> are loaded from other websites${hosts ? ` (${esc(hosts)})` : ''}. If those sites change or remove them, the photos disappear from your store. Copy them into your own storage (saved as WebP, smaller and faster).`;
+}
+
+/**
+ * Copies every outside photo into the store's storage as WebP and points the product, its photo list
+ * and its options at the copy. Photos that fail stay as they are, so pressing the button again
+ * continues with what is left.
+ */
+$('#outside-copy').addEventListener('click', async () => {
+  if (copyingOutside) return;
+  const button = $<HTMLButtonElement>('#outside-copy'), stop = $<HTMLButtonElement>('#outside-stop'), msg = $('#outside-msg');
+  copyingOutside = true; stopOutside = false;
+  button.disabled = true; stop.hidden = false;
+  const leaveWarning = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+  window.addEventListener('beforeunload', leaveWarning);
+  const errors: string[] = [];
+  let done = 0, copied = 0;
+  try {
+    msg.textContent = 'Finding the photos…';
+    const rows: Row[] = [];
+    for (let from = 0; ; from += 1000) {
+      const r = await supabase.from('product_images').select('id,product_id,image_url,sort_order').not('image_url', 'like', `${storageBase}%`).order('product_id').order('sort_order').range(from, from + 999);
+      if (r.error) throw new Error(r.error.message);
+      rows.push(...((r.data ?? []) as Row[]));
+      if ((r.data ?? []).length < 1000) break;
+    }
+    // Main photos that are not in the photo list are copied too.
+    const listed = new Set(rows.map((r) => `${r.product_id} ${r.image_url}`));
+    for (const p of products) if (p.primary_image_url && !isOwnPhoto(p.primary_image_url) && !listed.has(`${p.id} ${p.primary_image_url}`)) rows.push({ id: null, product_id: p.id, image_url: p.primary_image_url });
+    const total = rows.length;
+    // The same address is downloaded once, even when several products use it (kept only until its last use).
+    const copies = new Map<string, Promise<Blob>>();
+    const uses = new Map<string, number>();
+    for (const r of rows) uses.set(String(r.image_url), (uses.get(String(r.image_url)) || 0) + 1);
+    let next = 0;
+    const worker = async () => {
+      while (!stopOutside && next < rows.length) {
+        const index = next++;
+        const row = rows[index];
+        const old = String(row.image_url);
+        try {
+          if (!copies.has(old)) copies.set(old, fetchOutsidePhoto(old));
+          const source = copies.get(old)!;
+          const left = (uses.get(old) || 1) - 1;
+          uses.set(old, left);
+          if (!left) copies.delete(old);
+          const url = await storeProductPhoto(row.product_id, await source, `c${index}`);
+          if (row.id) { const u = await supabase.from('product_images').update({ image_url: url }).eq('id', row.id); if (u.error) throw new Error(u.error.message); }
+          else { const i = await supabase.from('product_images').insert({ product_id: row.product_id, image_url: url, alt_text: products.find((p) => p.id === row.product_id)?.name || '', sort_order: 0, is_primary: true }); if (i.error) throw new Error(i.error.message); }
+          const main = await supabase.from('products').update({ primary_image_url: url }).eq('id', row.product_id).eq('primary_image_url', old);
+          if (main.error) throw new Error(main.error.message);
+          // Options with their own photo (older databases have no option photos: nothing to do).
+          const opt = await supabase.from('product_variants').update({ image_url: url }).eq('product_id', row.product_id).eq('image_url', old);
+          if (opt.error && !/image_url/.test(opt.error.message)) throw new Error(opt.error.message);
+          copied++;
+        } catch (error) {
+          const name = products.find((p) => p.id === row.product_id)?.name || 'A product';
+          errors.push(`${name}: ${error instanceof Error ? error.message : 'the photo could not be copied'}`);
+        }
+        done++;
+        msg.textContent = `Copying photo ${done} of ${total}…${errors.length ? ` (${errors.length} could not be copied)` : ''}`;
+      }
+    };
+    await Promise.all(Array.from({ length: 4 }, worker));
+    msg.textContent = `${stopOutside ? 'Stopped. ' : ''}${copied} photo${copied === 1 ? '' : 's'} copied to your storage${errors.length ? `, ${errors.length} could not be copied (they still show from the other website; press the button again to retry)` : ''}.`;
+    toast(msg.textContent, errors.length ? 'error' : 'success');
+  } catch (error) {
+    msg.textContent = error instanceof Error ? error.message : 'Copying failed.';
+  } finally {
+    window.removeEventListener('beforeunload', leaveWarning);
+    copyingOutside = false;
+    button.disabled = false; stop.hidden = true;
+    const errBox = $('#outside-errors');
+    errBox.hidden = !errors.length;
+    errBox.innerHTML = errors.length ? '<strong>Photos that could not be copied</strong>' + errors.slice(0, 50).map((t) => `<p>${esc(t)}</p>`).join('') : '';
+    await load();
+  }
+});
+$('#outside-stop').addEventListener('click', () => { stopOutside = true; $('#outside-msg').textContent = 'Stopping after the photos in progress…'; });
 
 /**
  * The product's photos become exactly these, the first one as the main photo. Old uploaded files are
@@ -1439,7 +1569,7 @@ async function importRowPhotos(x: ImportItem, productId: string, uploaded: strin
   for (let n = 0; n < x.photos.length; n++) {
     const photo = x.photos[n];
     if (photo.picture && !BROWSER_IMAGE.test(photo.picture.type || '')) continue; // shown in the preview notes
-    try { const url = await uploadImportPhoto(productId, photo, n + 1); urls.push(url); if (!photo.url) uploaded.push(url); }
+    try { const url = await uploadImportPhoto(productId, photo, n + 1); urls.push(url); if (url !== photo.url) uploaded.push(url); }
     catch (error) { errors.push(`Row ${x.sheetRow + 1} (${x.name}): ${error instanceof Error ? error.message : 'a picture could not be uploaded'}`); }
   }
   return [...new Set(urls)];
@@ -1557,6 +1687,7 @@ async function init() {
     const cfg = $('#cfg');
     const url = cfg.dataset.url, key = cfg.dataset.key;
     if (!url || !key) throw new Error('Supabase browser configuration is missing.');
+    storageBase = `${url.replace(/\/$/, '')}/storage/v1/object/public/product-images/`;
     supabase = createClient(url, key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) { location.href = '/login?next=%2Fadmin'; return; }
@@ -1728,6 +1859,7 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .import-table tr.is-possible td{background:#fffbeb}
 .import-table tr.import-none td:not(:last-child){opacity:.7}
 .import-chip.skip-choice{background:var(--surface-2);color:var(--muted)}
+.outside-photos{display:grid;gap:8px;margin:0 0 16px;padding:14px 16px;border-radius:14px;background:#fff7e0;border:1.5px solid #f5d27a}.outside-photos p{margin:0}.outside-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 .undo-box{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px;border-radius:12px;background:#eef6ff;border:1.5px solid #c9defc}
 .undo-box[hidden]{display:none}
 .undo-box span{flex:1 1 260px}
