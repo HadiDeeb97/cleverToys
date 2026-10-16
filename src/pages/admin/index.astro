@@ -209,11 +209,25 @@ if (params.get('q')) (document.getElementById('search') as HTMLInputElement).val
 const form = $<HTMLFormElement>('#product-form');
 const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
 
+/**
+ * Every row of a query. The database sends at most 1000 rows per request, so bigger lists (photos,
+ * category links…) are read 1000 at a time. The query needs an order that ends on a unique column.
+ */
+async function selectAll(query: () => any): Promise<{ data: Row[]; error: { message: string } | null }> {
+  const data: Row[] = [];
+  for (let from = 0; ; from += 1000) {
+    const r = await query().range(from, from + 999);
+    if (r.error) return { data, error: r.error };
+    data.push(...((r.data ?? []) as Row[]));
+    if ((r.data ?? []).length < 1000) return { data, error: null };
+  }
+}
+
 async function load() {
   const [c, p, l, st, vo] = await Promise.all([
     supabase.from('categories').select('*').order('sort_order').order('name'),
-    supabase.from('products').select('*').order('created_at', { ascending: false }),
-    supabase.from('product_categories').select('product_id,category_id'),
+    selectAll(() => supabase.from('products').select('*').order('created_at', { ascending: false }).order('id')),
+    selectAll(() => supabase.from('product_categories').select('product_id,category_id').order('product_id').order('category_id')),
     supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle(),
     supabase.from('product_variants').select('product_id').eq('is_active', true)
   ]);
@@ -966,13 +980,9 @@ $('#outside-copy').addEventListener('click', async () => {
   let done = 0, copied = 0;
   try {
     msg.textContent = 'Finding the photos…';
-    const rows: Row[] = [];
-    for (let from = 0; ; from += 1000) {
-      const r = await supabase.from('product_images').select('id,product_id,image_url,sort_order').not('image_url', 'like', `${storageBase}%`).order('product_id').order('sort_order').range(from, from + 999);
-      if (r.error) throw new Error(r.error.message);
-      rows.push(...((r.data ?? []) as Row[]));
-      if ((r.data ?? []).length < 1000) break;
-    }
+    const found = await selectAll(() => supabase.from('product_images').select('id,product_id,image_url,sort_order').not('image_url', 'like', `${storageBase}%`).order('product_id').order('sort_order').order('id'));
+    if (found.error) throw new Error(found.error.message);
+    const rows = found.data;
     // Main photos that are not in the photo list are copied too.
     const listed = new Set(rows.map((r) => `${r.product_id} ${r.image_url}`));
     for (const p of products) if (p.primary_image_url && !isOwnPhoto(p.primary_image_url) && !listed.has(`${p.id} ${p.primary_image_url}`)) rows.push({ id: null, product_id: p.id, image_url: p.primary_image_url });
@@ -1052,8 +1062,8 @@ $('#export-catalog').addEventListener('click', async () => {
   button.disabled = true;
   try {
     const [im, va] = await Promise.all([
-      supabase.from('product_images').select('product_id,image_url,sort_order').order('sort_order'),
-      supabase.from('product_variants').select('*').order('created_at')
+      selectAll(() => supabase.from('product_images').select('product_id,image_url,sort_order').order('sort_order').order('id')),
+      selectAll(() => supabase.from('product_variants').select('*').order('created_at').order('id'))
     ]);
     if (im.error) throw new Error(im.error.message);
     const photosOf = new Map<string, string[]>();
@@ -1456,7 +1466,7 @@ $('#import').addEventListener('click', async () => {
     if (!rows.length) { clearImportPreview(); msg.textContent = 'The file has no product rows.'; return; }
     const photos = photosByRow(ws, XLSX, readSheetPictures(buffer), rows);
     // Current photos of every product, to see whether the file's photos are new.
-    const im = await supabase.from('product_images').select('product_id,image_url,sort_order').order('sort_order');
+    const im = await selectAll(() => supabase.from('product_images').select('product_id,image_url,sort_order').order('sort_order').order('id'));
     sitePhotos = new Map();
     for (const p of products) sitePhotos.set(p.id, p.primary_image_url ? [p.primary_image_url] : []);
     for (const r of (im.data ?? []) as Row[]) { const list = sitePhotos.get(r.product_id); if (list && !list.includes(r.image_url)) list.push(r.image_url); }
