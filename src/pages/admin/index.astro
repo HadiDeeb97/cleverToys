@@ -165,7 +165,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
 import { smartFilter } from '../../scripts/smart-search';
 import { readSheetPictures, type SheetPicture } from '../../scripts/xlsx-images';
-import { exactMatch, similarProducts } from '../../scripts/import-match';
+import { exactMatch, rankCandidates, POSSIBLE_MATCH, STRONG_MATCH } from '../../scripts/import-match';
 import { downloadImportTemplate, TEMPLATE_HEADERS } from '../../scripts/import-template';
 import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 
@@ -968,6 +968,8 @@ type ImportItem = {
   matched: Row[]; unknownCategories: string[]; photos: ImportPhoto[]; thumbs?: string[];
   problems: string[]; warnings: string[];
   kind: ImportKind; site?: Row; how?: 'slug' | 'sku' | 'name'; score?: number; canAdd: boolean; action: ImportAction;
+  /** Site toys with a similar name, best first (src/scripts/import-match.ts); the admin can pick one. */
+  candidates: Array<{ product: Row; score: number }>;
 };
 type ImportBucket = 'problems' | 'new' | 'possible' | 'updates' | 'nochange';
 
@@ -1060,7 +1062,7 @@ function plannedChanges(x: ImportItem): ImportChange[] {
       continue;
     }
     // A similar-name match keeps the name it has on the site.
-    if (field === 'name' && x.kind === 'possible') continue;
+    if (field === 'name' && x.how === 'name') continue;
     if (field === 'sku' && String(value).toLowerCase() === String(p.sku || '').trim().toLowerCase()) continue;
     if (sameValue(field, p[field], value)) continue;
     out.push({ group, field, value, label: describeChange(field, p[field], value) });
@@ -1142,10 +1144,14 @@ function prepareImport(rows: Row[], photos: Map<number, ImportPhoto[]>): ImportI
     // Which product on the site is it?
     const exact = name || sku ? exactMatch(products as Array<Row & { id: string; name: string }>, name ? slug : '', sku) : null;
     let kind: ImportKind = 'new', site: Row | undefined, how: ImportItem['how'], score: number | undefined;
+    let candidates: ImportItem['candidates'] = [];
     if (exact) { kind = 'exact'; site = exact.product; how = exact.how; }
     else if (name) {
-      const best = similarProducts(products as Array<Row & { id: string; name: string }>, name)[0];
-      if (best) { kind = 'possible'; site = best.product; how = 'name'; score = best.score; }
+      // Similar names: a good one makes a possible match (starts on Skip); weaker ones are only
+      // offered in the row's choices, and the row starts as a new toy.
+      candidates = rankCandidates(products as Array<Row & { id: string; name: string }>, name, price);
+      const best = candidates[0];
+      if (best && best.score >= POSSIBLE_MATCH) { kind = 'possible'; site = best.product; how = 'name'; score = best.score; }
     }
     if (kind === 'exact' && site) {
       const earlier = usedSite.get(site.id);
@@ -1162,7 +1168,7 @@ function prepareImport(rows: Row[], photos: Map<number, ImportPhoto[]>): ImportI
     rowPhotos.forEach((p, n) => { if (p.picture && !BROWSER_IMAGE.test(p.picture.type || '')) warnings.push(`Picture ${n + 1} is a .${p.picture.type} file and will be skipped`); });
     if (site && withOptions.has(site.id) && cellText(row, 'stock_quantity')) warnings.push('Its stock comes from its options, so the stock cell is not used');
     const action: ImportAction = problems.length ? 'skip' : kind === 'exact' ? 'update' : kind === 'possible' ? 'skip' : 'new';
-    return { id: i, sheetRow, row, name, slug, price, sku, matched, unknownCategories, photos: rowPhotos, problems, warnings, kind, site, how, score, canAdd, action };
+    return { id: i, sheetRow, row, name, slug, price, sku, matched, unknownCategories, photos: rowPhotos, problems, warnings, kind, site, how, score, canAdd, action, candidates };
   });
 }
 
@@ -1220,8 +1226,8 @@ function renderImportPreview() {
     const fileFacts = [x.sku && `SKU ${esc(x.sku)}`, x.price !== null && money(x.price), v.stock_quantity !== undefined && `stock ${v.stock_quantity}`].filter(Boolean).join(' · ');
     const p = x.site;
     const siteCell = p
-      ? `<div class="import-site">${p.primary_image_url ? `<img src="${esc(p.primary_image_url)}" alt="" loading="lazy" />` : '<span class="import-site-ph">🧸</span>'}<div><strong>${esc(p.name)}</strong><small>${x.how === 'name' ? `<span class="import-match possible">Similar name · ${Math.round((x.score || 0) * 100)}%</span>` : `<span class="import-match exact">Same ${x.how === 'sku' ? 'SKU' : 'web address'}</span>`} ${money(p.sale_price ?? p.price)} · stock ${Number(p.stock_quantity || 0)}</small><a class="text-link" href="/admin?edit=${esc(p.id)}" target="_blank" rel="noopener">Open ↗</a></div></div>`
-      : '<span class="import-match new">Not on the site</span>';
+      ? `<div class="import-site">${p.primary_image_url ? `<img src="${esc(p.primary_image_url)}" alt="" loading="lazy" />` : '<span class="import-site-ph">🧸</span>'}<div><strong>${esc(p.name)}</strong><small>${x.how === 'name' ? `<span class="import-match ${(x.score || 0) >= STRONG_MATCH ? 'strong' : 'possible'}">${(x.score || 0) >= STRONG_MATCH ? 'Strong match' : 'Similar name'} · ${Math.round((x.score || 0) * 100)}%</span>` : `<span class="import-match exact">Same ${x.how === 'sku' ? 'SKU' : 'web address'}</span>`} ${money(p.sale_price ?? p.price)} · stock ${Number(p.stock_quantity || 0)}</small><a class="text-link" href="/admin?edit=${esc(p.id)}" target="_blank" rel="noopener">Open ↗</a></div></div>`
+      : `<span class="import-match new">Not on the site</span>${x.candidates.length ? `<small class="import-closest">Closest: ${x.candidates.map((c) => `${esc(c.product.name)} (${Math.round(c.score * 100)}%)`).join(', ')}</small>` : ''}`;
     const newFacts = [x.price !== null && `Price ${money(x.price)}`, `stock ${v.stock_quantity ?? 0}`, x.matched.length && x.matched.map((c) => esc(c.name)).join(', '), x.photos.length && `${usablePhotos(x).length} photo${usablePhotos(x).length === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
     const changeList = x.problems.length
       ? `<ul class="import-notes">${x.problems.map((t) => `<li class="bad">${esc(t)}</li>`).join('')}</ul>`
@@ -1229,9 +1235,16 @@ function renderImportPreview() {
       : changes.length ? `<ul class="import-changes${does === 'update' ? '' : ' muted-list'}">${changes.map((c) => `<li>${esc(c.label)}</li>`).join('')}</ul>`
       : x.site ? '<span class="import-status nochange">No changes</span>' : '';
     const notes = (x.warnings.length || conflictWith !== undefined) ? `<ul class="import-notes">${conflictWith !== undefined ? `<li class="bad">Row ${conflictWith + 1} already updates this product. Choose Skip${x.canAdd && x.kind !== 'exact' ? ' or Add as new' : ''}.</li>` : ''}${x.warnings.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '';
-    const choices: Array<[ImportAction, string]> = x.problems.length ? [] : x.kind === 'exact' ? [['update', 'Update it'], ['skip', 'Skip']] : x.kind === 'possible' ? [['skip', 'Skip'], ['update', 'Same toy: update it'], ...(x.canAdd ? [['new', 'Different toy: add as new'] as [ImportAction, string]] : [])] : [['new', 'Add it'], ['skip', 'Skip']];
+    // Choices: for a similar name, which of the closest toys it is ("match:0" = the best one).
+    const short = (t: string) => (t.length > 34 ? `${t.slice(0, 32)}…` : t);
+    const sameAs = x.candidates.map((c, i): [string, string] => [`match:${i}`, `Same toy as: ${short(c.product.name)} (${Math.round(c.score * 100)}%)`]);
+    const choices: Array<[string, string]> = x.problems.length ? []
+      : x.kind === 'exact' ? [['update', 'Update it'], ['skip', 'Skip']]
+      : x.kind === 'possible' ? [['skip', 'Skip'], ...sameAs, ...(x.canAdd ? [['new', 'Different toy: add as new'] as [string, string]] : [])]
+      : [['new', 'Add it as a new toy'], ['skip', 'Skip'], ...sameAs];
+    const selected = x.action === 'update' && x.how === 'name' ? `match:${Math.max(0, x.candidates.findIndex((c) => c.product.id === x.site?.id))}` : x.action;
     const actionCell = choices.length
-      ? `<label class="sr-only" for="import-action-${x.id}">What to do with row ${x.sheetRow + 1}</label><select id="import-action-${x.id}" class="admin-input import-action" data-import-action="${x.id}">${choices.map(([value, label]) => `<option value="${value}"${x.action === value ? ' selected' : ''}>${label}</option>`).join('')}</select>${x.kind === 'exact' && !changes.length ? '<small class="muted">Nothing to update</small>' : ''}`
+      ? `<label class="sr-only" for="import-action-${x.id}">What to do with row ${x.sheetRow + 1}</label><select id="import-action-${x.id}" class="admin-input import-action" data-import-action="${x.id}">${choices.map(([value, label]) => `<option value="${value}"${selected === value ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>${x.kind === 'exact' && !changes.length ? '<small class="muted">Nothing to update</small>' : ''}`
       : '<span class="import-status skip">Skipped</span>';
     return `<tr class="import-${does}${bucket === 'problems' ? ' is-skipped' : ''}${bucket === 'possible' ? ' is-possible' : ''}">
       <td class="import-rownum">${x.sheetRow + 1}</td>
@@ -1253,7 +1266,19 @@ function renderImportPreview() {
 // Choices in the preview: the action of a row, the tabs, "for all shown", and the update options.
 $('#import-preview').addEventListener('change', (event) => {
   const el = event.target as HTMLInputElement;
-  if (el.dataset.importAction) { const x = pendingImport?.find((i) => i.id === Number(el.dataset.importAction)); if (x) x.action = el.value as ImportAction; }
+  if (el.dataset.importAction) {
+    const x = pendingImport?.find((i) => i.id === Number(el.dataset.importAction));
+    if (x) {
+      const pick = /^match:(\d+)$/.exec(el.value);
+      const c = pick ? x.candidates[Number(pick[1])] : undefined;
+      if (c) { x.action = 'update'; x.site = c.product; x.how = 'name'; x.score = c.score; }
+      else {
+        x.action = el.value as ImportAction;
+        // A row added as new again: forget the toy that was picked for it.
+        if (x.kind === 'new') { x.site = undefined; x.how = undefined; x.score = undefined; }
+      }
+    }
+  }
   else if (el.dataset.importGroup) { if (el.checked) importOptions.groups.add(el.dataset.importGroup as FieldGroup); else importOptions.groups.delete(el.dataset.importGroup as FieldGroup); }
   else if (el.name === 'import-stock-mode') importOptions.stockMode = el.value === 'add' ? 'add' : 'set';
   else return;
@@ -1688,7 +1713,8 @@ html[data-area=admin] .admin-tabs{margin-bottom:18px}
 .import-site img,.import-site-ph{flex:none;width:44px;height:44px;border-radius:8px;object-fit:cover;border:1.5px solid var(--line);display:grid;place-items:center;background:var(--surface-2)}
 .import-site a{font-size:.78rem}
 .import-match{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.72rem;font-weight:800}
-.import-match.exact{background:#e8f0fe;color:#1d4ed8}.import-match.possible{background:#fff7e0;color:#92400e}.import-match.new{background:#e7f7ec;color:#166534}
+.import-match.exact,.import-match.strong{background:#e8f0fe;color:#1d4ed8}
+.import-closest{display:block;margin-top:4px;color:var(--muted);font-size:.76rem;font-weight:600}.import-match.possible{background:#fff7e0;color:#92400e}.import-match.new{background:#e7f7ec;color:#166534}
 .import-changes{margin:0;padding-left:16px;display:grid;gap:2px}
 .import-changes.muted-list{color:var(--muted)}
 .import-adds{margin:0;color:#166534;font-weight:600}
