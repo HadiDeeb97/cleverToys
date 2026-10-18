@@ -103,6 +103,9 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
   else if (sort === 'price-desc') query = query.order('price', { ascending: false });
   else if (sort === 'name') query = query.order('name', { ascending: true });
   else query = query.order('created_at', { ascending: false });
+  // Toys with the same price (or name, or date) keep one fixed order. Without it the database may list
+  // them in a different order for each page, so one toy shows on two pages and another on none.
+  query = query.order('id', { ascending: true });
 
   const [categoriesResult, variantsResult, productsResult] = await Promise.all([
     supabase.from('categories').select('id, name, slug').eq('is_active', true).order('sort_order', { ascending: true }),
