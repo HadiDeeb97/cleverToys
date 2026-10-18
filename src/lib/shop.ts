@@ -99,19 +99,25 @@ export async function loadShop(Astro: AstroGlobal, { basePath, fixedCategory }: 
     relevancePage = ordered.slice(from, to + 1);
     query = buildProductsQuery().in('id', relevancePage.length ? relevancePage : ['00000000-0000-0000-0000-000000000000']);
   }
-  if (sort === 'price-asc') query = query.order('price', { ascending: true });
-  else if (sort === 'price-desc') query = query.order('price', { ascending: false });
-  else if (sort === 'name') query = query.order('name', { ascending: true });
-  else query = query.order('created_at', { ascending: false });
-  // Toys with the same price (or name, or date) keep one fixed order. Without it the database may list
-  // them in a different order for each page, so one toy shows on two pages and another on none.
-  query = query.order('id', { ascending: true });
+  // Price sorts use the price customers see: the sale price when there is one (products.shown_price,
+  // kept by supabase/shown_price.sql). Before that file is run, the regular price is used.
+  const sorted = (q: typeof query, priceColumn: 'shown_price' | 'price') => {
+    if (sort === 'price-asc') q = q.order(priceColumn, { ascending: true });
+    else if (sort === 'price-desc') q = q.order(priceColumn, { ascending: false });
+    else if (sort === 'name') q = q.order('name', { ascending: true });
+    else q = q.order('created_at', { ascending: false });
+    // Toys with the same price (or name, or date) keep one fixed order. Without it the database may list
+    // them in a different order for each page, so one toy shows on two pages and another on none.
+    q = q.order('id', { ascending: true });
+    return relevancePage ? q : q.range(from, to);
+  };
 
-  const [categoriesResult, variantsResult, productsResult] = await Promise.all([
+  let [categoriesResult, variantsResult, productsResult] = await Promise.all([
     supabase.from('categories').select('id, name, slug').eq('is_active', true).order('sort_order', { ascending: true }),
     supabase.from('product_variants').select('name').eq('is_active', true).order('name', { ascending: true }),
-    relevancePage ? query : query.range(from, to)
+    sorted(query, 'shown_price')
   ]);
+  if (productsResult.error && /shown_price/.test(productsResult.error.message || '')) productsResult = await sorted(query, 'price');
 
   const categories = (categoriesResult.data || []) as ShopCategory[];
   const variantOptions = [...new Set((variantsResult.data || []).map(v => String(v.name || '').trim()).filter(Boolean))];
