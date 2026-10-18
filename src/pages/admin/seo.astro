@@ -243,6 +243,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
+import { selectAll } from '../../lib/select-all';
 import { exportPdf, exportXlsx } from '../../scripts/table-export';
 import { googleConversion, googleTagId } from '../../lib/seo';
 
@@ -926,7 +927,7 @@ function wire() {
 async function load() {
   const [p, pr, c, s] = await Promise.all([
     supabase.from('seo_pages').select('*').order('path_key'),
-    supabase.from('products').select('id,name,slug,is_active,seo_title,seo_description,short_description,description,primary_image_url,product_images(id,image_url,alt_text,sort_order)').order('name'),
+    selectAll(() => supabase.from('products').select('id,name,slug,is_active,seo_title,seo_description,short_description,description,primary_image_url,product_images(id,image_url,alt_text,sort_order)').order('name').order('id')),
     supabase.from('categories').select('id,name,slug,is_active,seo_title,seo_description,description,image_url').order('sort_order'),
     supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle()
   ]);

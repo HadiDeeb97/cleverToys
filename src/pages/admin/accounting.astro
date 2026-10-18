@@ -389,7 +389,8 @@ function render() {
 async function fetchAll(table: string, select: string, build: (q: any) => any = (q) => q) {
   const rows: Row[] = [];
   for (let from = 0; ; from += 1000) {
-    const r = await build(supabase.from(table).select(select)).range(from, from + 999);
+    // Ends on the id, so rows with the same date (or no order at all) can't repeat or go missing between pages.
+    const r = await build(supabase.from(table).select(select)).order('id').range(from, from + 999);
     if (r.error) throw r.error;
     rows.push(...(r.data ?? []));
     if ((r.data ?? []).length < 1000) return rows;
@@ -408,9 +409,8 @@ async function load() {
   items = [];
   const ids = orders.map((x) => x.id);
   for (let i = 0; i < ids.length; i += 150) {
-    const r = await supabase.from('order_items').select('order_id,product_id,variant_id,product_name,variant_name,quantity,unit_price,total_price').in('order_id', ids.slice(i, i + 150));
-    if (r.error) throw r.error;
-    items.push(...(r.data ?? []));
+    const chunk = ids.slice(i, i + 150);
+    items.push(...(await fetchAll('order_items', 'order_id,product_id,variant_id,product_name,variant_name,quantity,unit_price,total_price', (q) => q.in('order_id', chunk))));
   }
   try { expenses = await fetchAll('expenses', '*', (q) => q.order('spent_on', { ascending: false })); expensesAvailable = true; }
   catch { expenses = []; expensesAvailable = false; }

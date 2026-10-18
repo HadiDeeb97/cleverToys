@@ -170,6 +170,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
+import { selectAll } from '../../lib/select-all';
 import { smartFilter } from '../../scripts/smart-search';
 import { readSheetPictures, type SheetPicture } from '../../scripts/xlsx-images';
 import { exactMatch, rankCandidates, findDuplicates, POSSIBLE_MATCH, STRONG_MATCH, type Candidate } from '../../scripts/import-match';
@@ -232,20 +233,6 @@ if (params.get('q')) (document.getElementById('search') as HTMLInputElement).val
 
 const form = $<HTMLFormElement>('#product-form');
 const field = (name: string) => form.elements.namedItem(name) as HTMLInputElement;
-
-/**
- * Every row of a query. The database sends at most 1000 rows per request, so bigger lists (photos,
- * category links…) are read 1000 at a time. The query needs an order that ends on a unique column.
- */
-async function selectAll(query: () => any): Promise<{ data: Row[]; error: { message: string } | null }> {
-  const data: Row[] = [];
-  for (let from = 0; ; from += 1000) {
-    const r = await query().range(from, from + 999);
-    if (r.error) return { data, error: r.error };
-    data.push(...((r.data ?? []) as Row[]));
-    if ((r.data ?? []).length < 1000) return { data, error: null };
-  }
-}
 
 async function load() {
   const [c, p, l, st, vo] = await Promise.all([

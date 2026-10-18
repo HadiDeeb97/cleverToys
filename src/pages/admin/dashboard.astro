@@ -65,6 +65,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
+import { selectAll } from '../../lib/select-all';
 
 // Order fields come from anonymous checkout input, so everything rendered as HTML is escaped.
 const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
@@ -88,9 +89,9 @@ const delta = (current: number, previous: number) => {
 async function load() {
   const since = new Date(Date.now() - 60 * DAY).toISOString();
   const [ordersRes, productsRes, variantsRes, settingsRes] = await Promise.all([
-    supabase.from('orders').select('id,order_number,customer_name,total,status,created_at').gte('created_at', since).order('created_at', { ascending: false }).limit(2000),
-    supabase.from('products').select('id,name,stock_quantity,is_active,primary_image_url'),
-    supabase.from('product_variants').select('id,product_id,name,stock_quantity,is_active'),
+    selectAll(() => supabase.from('orders').select('id,order_number,customer_name,total,status,created_at').gte('created_at', since).order('created_at', { ascending: false }).order('id')),
+    selectAll(() => supabase.from('products').select('id,name,stock_quantity,is_active,primary_image_url').order('id')),
+    selectAll(() => supabase.from('product_variants').select('id,product_id,name,stock_quantity,is_active').order('id')),
     supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle()
   ]);
   // "Low stock" limit from Admin → Branding & settings (supabase/cms.sql); 5 before that.
@@ -131,7 +132,7 @@ async function load() {
   const ids = last30.map((o) => o.id).slice(0, 300);
   let top: [string, number][] = [];
   if (ids.length) {
-    const items = await supabase.from('order_items').select('order_id,product_name,quantity').in('order_id', ids);
+    const items = await selectAll(() => supabase.from('order_items').select('order_id,product_name,quantity').in('order_id', ids).order('id'));
     const tally = new Map<string, number>();
     for (const item of (items.data ?? []) as any[]) tally.set(item.product_name, (tally.get(item.product_name) || 0) + Number(item.quantity || 0));
     top = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);

@@ -5,6 +5,7 @@
 import type { APIRoute } from 'astro';
 import { supabase } from '../lib/supabase';
 import { PRIVATE_PATH, STATIC_PAGES, parseSeoSettings } from '../lib/seo';
+import { selectAll } from '../lib/select-all';
 
 const xmlEscape = (value: string) => value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c] as string);
 const CHANGEFREQ = new Set(['always', 'hourly', 'daily', 'weekly', 'monthly', 'yearly', 'never']);
@@ -16,7 +17,8 @@ export const GET: APIRoute = async ({ site }) => {
   const [settingsResult, pagesResult, productsResult, categoriesResult, contentPagesResult] = await Promise.all([
     supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle(),
     supabase.from('seo_pages').select('*'),
-    supabase.from('products').select('slug, name, updated_at, primary_image_url, product_images(image_url, alt_text)').eq('is_active', true),
+    // Every visible toy, 1000 at a time (the database sends no more per request).
+    selectAll(() => supabase.from('products').select('slug, name, updated_at, primary_image_url, product_images(image_url, alt_text)').eq('is_active', true).order('id')),
     supabase.from('categories').select('slug, name, updated_at, image_url').eq('is_active', true),
     // Pages created in Admin → Pages (supabase/cms.sql); the four built-in ones are in STATIC_PAGES.
     supabase.from('pages').select('slug, updated_at, is_system').eq('is_published', true)

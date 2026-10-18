@@ -78,6 +78,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage, enableOrderNotifications, markOrdersSeen } from '../../scripts/admin-access';
+import { selectAll } from '../../lib/select-all';
 import { smartFilter } from '../../scripts/smart-search';
 import { exportXlsxSheets, exportName } from '../../scripts/table-export';
 
@@ -293,7 +294,7 @@ function updateTotals(id: string) {
 // The toys to add, loaded the first time the search is used.
 let catalog: Promise<any[]> | null = null;
 function loadCatalog() {
-  catalog ??= Promise.resolve(supabase.from('products').select('id,name,sku,price,sale_price,stock_quantity,is_active,product_variants(id,name,sku,price,sale_price,stock_quantity,is_active)').order('name').limit(5000))
+  catalog ??= selectAll(() => supabase.from('products').select('id,name,sku,price,sale_price,stock_quantity,is_active,product_variants(id,name,sku,price,sale_price,stock_quantity,is_active)').order('name').order('id'))
     .then((r) => { if (r.error) { catalog = null; toast(`Could not load the toys: ${r.error.message}`, 'error'); return []; } return (r.data ?? []) as any[]; });
   return catalog;
 }
@@ -543,7 +544,7 @@ async function exportExcel() {
     const items: any[] = [];
     const ids = rows.map((o) => o.id);
     for (let i = 0; i < ids.length; i += 150) {
-      const r = await supabase.from('order_items').select('order_id,product_name,variant_name,sku,quantity,unit_price,total_price').in('order_id', ids.slice(i, i + 150));
+      const r = await selectAll(() => supabase.from('order_items').select('order_id,product_name,variant_name,sku,quantity,unit_price,total_price').in('order_id', ids.slice(i, i + 150)).order('id'));
       if (r.error) throw new Error(r.error.message);
       items.push(...(r.data ?? []));
     }
@@ -575,7 +576,8 @@ async function exportExcel() {
 }
 
 async function load() {
-  const r = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(1000);
+  // Every order, 1000 at a time (the database sends no more per request).
+  const r = await selectAll(() => supabase.from('orders').select('*').order('created_at', { ascending: false }).order('id'));
   if (r.error) throw new Error(r.error.message);
   orders = (r.data ?? []) as any[];
   render();

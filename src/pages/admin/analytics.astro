@@ -105,6 +105,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
 <script>
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
+import { selectAll } from '../../lib/select-all';
 import { exportPdf, exportXlsx, type ExportColumn } from '../../scripts/table-export';
 
 type Session = { session_id: string; visitor_id: string; started_at: string; last_seen_at: string; landing_path: string; current_path: string; entry_referrer: string | null; country: string | null; device: string; browser: string; os: string; page_count: number; duration: number; source: string };
@@ -222,9 +223,10 @@ async function load() {
   document.querySelectorAll<HTMLElement>('[data-range]').forEach((c) => { const on = Number(c.dataset.range) === range; c.classList.toggle('active', on); c.setAttribute('aria-checked', String(on)); });
   $('#period-label').textContent = range === 1 ? `Today, ${now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}` : `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${now.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
   const [s, e, prevS, prevE, active] = await Promise.all([
-    supabase.from('visitor_sessions').select('session_id,visitor_id,started_at,last_seen_at,landing_path,current_path,entry_referrer,country,device,browser,os,page_count').gte('started_at', start.toISOString()).order('last_seen_at', { ascending: false }).limit(10000),
-    supabase.from('visitor_events').select('visitor_id,path,created_at').gte('created_at', start.toISOString()).eq('event_type', 'pageview').limit(50000),
-    supabase.from('visitor_sessions').select('visitor_id').gte('started_at', prevStart.toISOString()).lt('started_at', start.toISOString()).limit(10000),
+    // Read 1000 rows at a time (the database sends no more per request), up to a generous cap.
+    selectAll(() => supabase.from('visitor_sessions').select('session_id,visitor_id,started_at,last_seen_at,landing_path,current_path,entry_referrer,country,device,browser,os,page_count').gte('started_at', start.toISOString()).order('last_seen_at', { ascending: false }).order('session_id'), 50000),
+    selectAll(() => supabase.from('visitor_events').select('visitor_id,path,created_at').gte('created_at', start.toISOString()).eq('event_type', 'pageview').order('id'), 200000),
+    selectAll(() => supabase.from('visitor_sessions').select('visitor_id').gte('started_at', prevStart.toISOString()).lt('started_at', start.toISOString()).order('session_id'), 50000),
     supabase.from('visitor_events').select('visitor_id', { count: 'exact', head: true }).gte('created_at', prevStart.toISOString()).lt('created_at', start.toISOString()).eq('event_type', 'pageview'),
     supabase.from('visitor_sessions').select('session_id', { count: 'exact', head: true }).gte('last_seen_at', new Date(Date.now() - 5 * 60e3).toISOString())
   ]);
@@ -371,8 +373,8 @@ init();
 .donut-legend li{display:flex;align-items:center;gap:8px;font-weight:700}
 .donut-legend i{width:12px;height:12px;border-radius:4px}
 .donut-legend strong{margin-left:auto}
-.rank{display:grid;gap:12px}
-.rank-item{display:grid;gap:6px}
+.rank{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.rank-item{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;min-width:0}
 .rank-top{display:flex;justify-content:space-between;gap:10px;font-weight:700;font-size:.9rem}
 .rank-top span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rank-top small{color:var(--muted);font-weight:700}
@@ -398,6 +400,6 @@ init();
 .table-pager .small-button:disabled{opacity:.4;cursor:default;transform:none}
 .privacy-note{margin:18px 0 0;padding:14px 16px;border-radius:14px;background:var(--surface-2);color:var(--muted);font-size:.86rem}
 .privacy-note strong{color:var(--ink)}
-@media(max-width:1200px){.v-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.v-grid-main{grid-template-columns:1fr}.v-grid-3{grid-template-columns:1fr 1fr}}
-@media(max-width:760px){.v-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.v-kpi strong{font-size:1.4rem}.v-grid-3,.v-grid-2{grid-template-columns:1fr}.table-filters{grid-template-columns:1fr 1fr}.table-filters #t-search{grid-column:1/-1}.trend svg{height:200px}.visitors-actions{width:100%}}
+@media(max-width:1200px){.v-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.v-grid-main{grid-template-columns:minmax(0,1fr)}.v-grid-3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.v-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.v-kpi strong{font-size:1.4rem}.v-grid-3,.v-grid-2{grid-template-columns:minmax(0,1fr)}.table-filters{grid-template-columns:1fr 1fr}.table-filters #t-search{grid-column:1/-1}.trend svg{height:200px}.visitors-actions{width:100%}}
 </style>

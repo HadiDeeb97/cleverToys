@@ -19,6 +19,7 @@
 import type { APIRoute } from 'astro';
 import { supabase } from '../lib/supabase';
 import { parseSeoSettings } from '../lib/seo';
+import { selectAll } from '../lib/select-all';
 
 const xml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[c] as string)
   // Characters XML does not allow.
@@ -45,10 +46,12 @@ export const GET: APIRoute = async ({ site, url }) => {
   const origin = url.origin || site?.origin || '';
   const forMeta = url.searchParams.get('for') === 'meta';
   const [productsResult, settingsResult] = await Promise.all([
-    supabase.from('products')
+    // Every visible toy, 1000 at a time (the database sends no more per request).
+    selectAll(() => supabase.from('products')
       .select('*,categories:category_id(name),product_images(image_url,sort_order),product_variants(id,name,sku,price,sale_price,stock_quantity,attributes,is_active,image_url)')
       .eq('is_active', true)
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+      .order('id')),
     supabase.from('store_settings').select('*').eq('id', 'default').maybeSingle()
   ]);
   if (productsResult.error) return new Response('The product feed is not available right now.', { status: 503, headers: { 'content-type': 'text/plain; charset=utf-8', 'retry-after': '600' } });
