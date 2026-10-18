@@ -2,7 +2,7 @@
 // (entry point, static assets, bindings) when it builds the site.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "clever-toys",
+  "name": "clevertoys",
   "compatibility_date": "2026-09-11",
   // The Supabase database is in Tokyo (ap-northeast-1) and every page makes several requests to it.
   // Targeted placement runs the Worker right next to the database, so those requests take a few
