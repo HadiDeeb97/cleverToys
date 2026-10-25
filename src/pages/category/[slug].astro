@@ -50,6 +50,9 @@ if (category && Astro.url.searchParams.has('filters') && !chosenCategories.lengt
   return Astro.redirect(`/products${qs ? `?${qs}` : ''}`);
 }
 const shop = category ? await loadShop(Astro, { basePath: `/category/${category.slug}`, fixedCategory: category }) : null;
+// Page 2, 3… of the category point to themselves (only when nothing else is filtered or sorted).
+const categoryPage = shop && !('redirect' in shop) && shop.currentPage > 1 && [...Astro.url.searchParams.keys()].every((k) => k === 'page') ? shop.currentPage : 1;
+const pagedCanonicalUrl = categoryPage > 1 ? `${canonicalUrl}?page=${categoryPage}` : canonicalUrl;
 if (shop && 'redirect' in shop) return Astro.redirect(shop.redirect ?? Astro.url.pathname);
 // Started by the middleware for the header, so this is already loaded (no extra request).
 const { hasSale } = await getPageData(Astro);
@@ -57,11 +60,11 @@ const { hasSale } = await getPageData(Astro);
 <head>
   <title>{title}</title>
   <meta name="description" content={description} />
-  {category ? <link rel="canonical" href={canonicalUrl} /> : <meta name="robots" content="noindex" />}
+  {category ? <link rel="canonical" href={pagedCanonicalUrl} /> : <meta name="robots" content="noindex" />}
   <meta property="og:title" content={title} />
   <meta property="og:description" content={description} />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content={canonicalUrl} />
+  <meta property="og:url" content={pagedCanonicalUrl} />
   {category?.image_url && <meta property="og:image" content={category.image_url} />}
   {/* Hints for the /category/* SEO template in src/middleware.ts */}
   {category && <meta name="clever-seo-name" content={category.name} />}

@@ -21,7 +21,13 @@ const selectedCategoryNames = categories.filter(c => selectedCategorySlugs.inclu
 const activeCategoryTitle = selectedCategoryNames.length === 1 ? selectedCategoryNames[0] : selectedCategoryNames.length > 1 ? 'Filtered toys' : '';
 const title = saleOnly && !activeCategoryTitle && !search ? 'Toys on Sale | Clever Toys' : activeCategoryTitle ? `${activeCategoryTitle} Toys | Clever Toys` : search ? `Search results for ${search} | Clever Toys` : 'Shop Toys | Clever Toys';
 const description = saleOnly && !activeCategoryTitle ? 'Toys on sale at Clever Toys: discounted prices, cash on delivery across Lebanon.' : activeCategoryTitle ? `Shop ${activeCategoryTitle.toLowerCase()} toys at Clever Toys.` : 'Shop toys for children of all ages at Clever Toys. Discover fun, educational and exciting toys.';
-const canonicalUrl = new URL(saleOnly && !search && !selectedCategorySlugs.length ? '/products?sale=1' : '/products', Astro.site ?? Astro.url.origin).href;
+// Page 2, 3… of the plain shop (or Sale) list point to themselves, so Google reads every page. Filtered,
+// sorted or searched views point to the plain list, so they never count as separate pages.
+const plainList = [...Astro.url.searchParams.keys()].every((k) => k === 'page' || (k === 'sale' && saleOnly));
+const canonicalQuery = new URLSearchParams();
+if (saleOnly && !search && !selectedCategorySlugs.length) canonicalQuery.set('sale', '1');
+if (plainList && shop.currentPage > 1) canonicalQuery.set('page', String(shop.currentPage));
+const canonicalUrl = new URL(`/products${canonicalQuery.toString() ? `?${canonicalQuery}` : ''}`, Astro.site ?? Astro.url.origin).href;
 // Started by the middleware for the header, so this is already loaded (no extra request).
 const { hasSale } = await getPageData(Astro);
 const heading = saleOnly && !activeCategoryTitle && !search ? 'Toys on sale' : activeCategoryTitle || (search ? `Results for “${search}”` : 'Shop all toys');
