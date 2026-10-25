@@ -127,6 +127,28 @@ if (product) {
 const pageTitle = product ? product.seo_title || `${product.name} | Clever Toys` : 'Product Not Found | Clever Toys';
 const pageDescription = product ? product.seo_description || product.short_description || `Shop ${product.name} at Clever Toys.` : 'The requested product could not be found.';
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin).href;
+// Delivery and returns for Google, from Admin → Branding & settings (read on every visit, so a new fee
+// or return window shows here at once). Delivery: the standard fee anywhere in Lebanon, or free when
+// this toy alone reaches the free-delivery amount. Governorate fees (Admin → Discounts & delivery) are
+// not listed: Google takes one fee per country. Returns: store_settings.return_days (0 = no returns,
+// supabase/return_policy.sql); left out until that setting exists.
+const settings = pageData.storeSettings;
+const deliveryFee = Math.max(0, Number(settings.cod_delivery_price) || 0);
+const freeFrom = Math.max(0, Number(settings.free_delivery_threshold) || 0);
+const shippingDetails = {
+  '@type': 'OfferShippingDetails',
+  shippingRate: { '@type': 'MonetaryAmount', value: (freeFrom > 0 && baseDisplayPrice >= freeFrom ? 0 : deliveryFee).toFixed(2), currency: 'USD' },
+  shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'LB' }
+};
+const returnDays = settings.return_days == null || settings.return_days === '' ? null : Math.max(0, Math.floor(Number(settings.return_days) || 0));
+const returnPolicy = returnDays === null ? undefined : {
+  '@type': 'MerchantReturnPolicy',
+  applicableCountry: 'LB',
+  merchantReturnLink: new URL('/shipping-returns', canonicalUrl).href,
+  ...(returnDays > 0
+    ? { returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow', merchantReturnDays: returnDays }
+    : { returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted' })
+};
 const productSchema = product ? {
   '@context': 'https://schema.org',
   '@type': 'Product',
@@ -145,7 +167,9 @@ const productSchema = product ? {
     priceCurrency: 'USD',
     price: baseDisplayPrice.toFixed(2),
     itemCondition: 'https://schema.org/NewCondition',
-    availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock'
+    availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+    shippingDetails,
+    hasMerchantReturnPolicy: returnPolicy
   }
 } : null;
 const breadcrumbSchema = product ? {
