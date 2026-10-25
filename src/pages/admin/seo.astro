@@ -330,7 +330,8 @@ function itemChecks(kind: 'product' | 'category', item: Row, duplicates: Set<str
 }
 const duplicateTitles = (titles: string[]) => {
   const seen = new Map<string, number>();
-  for (const t of titles) seen.set(t.toLowerCase(), (seen.get(t.toLowerCase()) || 0) + 1);
+  // An empty title means "use the page's own title", so empty ones are never the same title.
+  for (const t of titles.map((x) => x.trim()).filter(Boolean)) seen.set(t.toLowerCase(), (seen.get(t.toLowerCase()) || 0) + 1);
   return new Set([...seen].filter(([, n]) => n > 1).map(([t]) => t));
 };
 
@@ -364,7 +365,8 @@ function renderOverview() {
   const publicPages = pages.filter((p) => !PRIVATE.test(p.path_key) && !String(p.path_key).includes('*') && p.path_key !== '/404');
   const pageDup = duplicateTitles(publicPages.map((p) => String(p.title || '')));
   push('error', publicPages.filter((p) => pageDup.has(String(p.title || '').toLowerCase())).length, 'pages share the same title.', 'pages');
-  push('warn', publicPages.filter((p) => lengthState('title', String(p.title || '')) !== 'ok').length, 'page titles are missing, too long or too short.', 'pages');
+  // Empty title = the page keeps its own title, so only titles typed here are checked.
+  push('warn', publicPages.filter((p) => String(p.title || '').trim() && lengthState('title', String(p.title || '')) !== 'ok').length, 'page titles are too long or too short.', 'pages');
   push('warn', publicPages.filter((p) => lengthState('description', String(p.description || '')) !== 'ok').length, 'page descriptions are missing, too long or too short.', 'pages');
   const home = pages.find((p) => p.path_key === '/');
   if (!home?.cover_image_url && !defaultImage) push('warn', 1, 'No share image is set. Links shared on WhatsApp and Facebook show no picture.', 'settings');
@@ -387,7 +389,7 @@ function renderOverview() {
   const maxPoints = all.length * 4 + publicPages.length * 2 + 4;
   let lost = 0;
   for (const r of all) for (const c of r.checks) lost += c.level === 'error' ? 2 : c.level === 'warn' ? 1 : 0.25;
-  for (const p of publicPages) { if (lengthState('title', String(p.title || '')) !== 'ok') lost += 1; if (lengthState('description', String(p.description || '')) !== 'ok') lost += 1; }
+  for (const p of publicPages) { if (String(p.title || '').trim() && lengthState('title', String(p.title || '')) !== 'ok') lost += 1; if (lengthState('description', String(p.description || '')) !== 'ok') lost += 1; }
   if (!seo.google_verification) lost += 2;
   if (!home?.cover_image_url && !defaultImage) lost += 2;
   const score = Math.max(0, Math.min(100, Math.round(100 * (1 - lost / Math.max(1, maxPoints)))));
@@ -432,7 +434,7 @@ function renderPageList() {
   const sorted = [...pages].sort((a, b) => (a.path_key === '/' ? -1 : b.path_key === '/' ? 1 : Number(a.path_key.includes('*')) - Number(b.path_key.includes('*')) || a.path_key.localeCompare(b.path_key)));
   const list = sorted.filter((p) => `${p.path_key} ${pageLabel(p.path_key)} ${p.title}`.toLowerCase().includes(q));
   $('#page-list').innerHTML = list.map((p) => {
-    const bad = !PRIVATE.test(p.path_key) && (lengthState('title', String(p.title || '')) !== 'ok' || lengthState('description', String(p.description || '')) !== 'ok');
+    const bad = !PRIVATE.test(p.path_key) && ((String(p.title || '').trim() && lengthState('title', String(p.title || '')) !== 'ok') || lengthState('description', String(p.description || '')) !== 'ok');
     const hidden = p.noindex === true || PRIVATE.test(p.path_key);
     return `<button type="button" class="seo-page-choice${selectedPage?.id === p.id ? ' selected' : ''}" data-page="${esc(p.id)}"><strong>${esc(pageLabel(p.path_key))}</strong><span>${esc(p.path_key)}</span><span class="seo-tags">${hidden ? '<em class="seo-tag">Hidden from Google</em>' : ''}${p.path_key.includes('*') ? '<em class="seo-tag">Template</em>' : ''}${bad ? '<em class="seo-tag seo-tag-warn">Check length</em>' : ''}</span></button>`;
   }).join('') || '<p class="muted">No pages found.</p>';
