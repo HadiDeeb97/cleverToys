@@ -27,17 +27,23 @@ export const ICONS = {
 };
 
 /** Square category picture, or a soft coloured tile with a toy emoji when there is no photo. */
+// Pictures inside the menus (the "Shop" mega menu and the phone menu) are written with data-menu-src
+// and only get their src when a menu is opened (public/store-ui.js). Otherwise they would be the first
+// pictures in every page's code, and Google would show these category pictures as the search thumbnail
+// of product pages instead of the product photo.
+const menuImg = (image: string | null | undefined) => (image && /^https?:\/\//.test(image) ? `<img data-menu-src="${esc(image)}" alt="" decoding="async" />` : '');
+
 export const tileMedia = (name: string, image: string | null | undefined, className = 'tile-media') => {
   const ph = placeholderFor(name);
   // The emoji stays underneath the picture, so a missing or failed picture still shows something.
-  const img = image && /^https?:\/\//.test(image) ? `<img src="${esc(image)}" alt="" loading="lazy" decoding="async" />` : '';
+  const img = menuImg(image);
   return `<span class="${className}" style="--ph-h:${ph.hue}"><span aria-hidden="true">${ph.emoji}</span>${img}</span>`;
 };
 
 /** Category tile with the hover arrow, the same markup as src/components/CategoryTile.astro (home page, /categories). */
 const categoryTileHtml = (c: MenuCategory, extraClass = '') => {
   const ph = placeholderFor(c.name);
-  const media = `<span aria-hidden="true">${ph.emoji}</span>${c.image_url && /^https?:\/\//.test(c.image_url) ? `<img src="${esc(c.image_url)}" alt="" loading="lazy" decoding="async" />` : ''}`;
+  const media = `<span aria-hidden="true">${ph.emoji}</span>${menuImg(c.image_url)}`;
   return `<a class="category-tile${extraClass ? ` ${extraClass}` : ''}" href="/category/${encodeURIComponent(c.slug)}"><span class="tile-media" style="--ph-h:${ph.hue}">${media}<span class="tile-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span></span><span><strong>${esc(c.name)}</strong></span></a>`;
 };
 

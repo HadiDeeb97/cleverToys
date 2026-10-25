@@ -281,8 +281,17 @@
   // ---------- Drawers: the menu (left) and the cart (right) ----------
   // Opening: remove [hidden], then add .is-open on the next frame so the slide-in animates.
   let lastTrigger = null;
+  // Menu pictures load when a menu opens (see menuImg in src/lib/storefront-chrome.ts).
+  const loadMenuImages = (root) => root?.querySelectorAll('img[data-menu-src]').forEach((img) => { img.src = img.dataset.menuSrc; img.removeAttribute('data-menu-src'); });
+  document.querySelectorAll('.nav-item').forEach((item) => {
+    if (!item.querySelector('img[data-menu-src]')) return;
+    const load = () => loadMenuImages(item);
+    item.addEventListener('pointerenter', load, { once: true });
+    item.addEventListener('focusin', load, { once: true });
+  });
   const openDrawer = (drawer, trigger, focusSelector) => {
     if (!drawer) return;
+    loadMenuImages(drawer);
     document.querySelectorAll('.drawer.is-open').forEach((d) => d !== drawer && closeDrawer(d, false));
     lastTrigger = trigger || document.activeElement;
     drawer.hidden = false;

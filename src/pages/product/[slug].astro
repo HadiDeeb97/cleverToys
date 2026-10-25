@@ -206,6 +206,7 @@ const similarCards = similarProducts as unknown as CardProduct[];
   <meta property="og:type" content="product" />
   <meta property="og:url" content={canonicalUrl} />
   {images[0] && <meta property="og:image" content={images[0].image_url} />}
+  {images[0] && <meta name="twitter:image" content={images[0].image_url} />}
   {images[0] && <link rel="preload" as="image" href={images[0].image_url} fetchpriority="high" />}
   {product && <meta name="clever-seo-name" content={product.name} />}
   {product && <meta name="clever-seo-custom" content={seoCustom} />}
