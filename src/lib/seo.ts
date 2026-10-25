@@ -2,6 +2,8 @@
 
 export type SeoSettings = {
   site_name: string;
+  /** Other names of the store, comma-separated (Admin → SEO → Settings); sent to Google as alternateName. */
+  alternate_names: string;
   default_image: string;
   google_verification: string;
   bing_verification: string;
@@ -24,6 +26,7 @@ export type SeoSettings = {
 
 export const defaultSeoSettings: SeoSettings = {
   site_name: 'Clever Toys',
+  alternate_names: 'Clever Toys Lebanon, clevertoyslb',
   default_image: '',
   google_verification: '',
   bing_verification: '',
@@ -64,10 +67,20 @@ export const googleConversion = (value: unknown) => {
   return m ? `${m[1]}/${m[2]}` : '';
 };
 
+/** The other names as a list for Google (without repeats or the main name), or undefined when there are none. */
+export function alternateNames(settings: SeoSettings): string[] | undefined {
+  const main = settings.site_name.toLowerCase();
+  const names = settings.alternate_names.split(',').map((n) => n.trim().slice(0, 80)).filter(Boolean)
+    .filter((n, i, all) => n.toLowerCase() !== main && all.findIndex((m) => m.toLowerCase() === n.toLowerCase()) === i).slice(0, 5);
+  return names.length ? names : undefined;
+}
+
 export function parseSeoSettings(value: unknown): SeoSettings {
   const s = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
   return {
     site_name: text(s.site_name, 80) || defaultSeoSettings.site_name,
+    // Never saved yet: the store's usual other names. Saved empty: no other names.
+    alternate_names: typeof s.alternate_names === 'string' ? text(s.alternate_names, 300) : defaultSeoSettings.alternate_names,
     default_image: httpUrl(s.default_image),
     google_verification: verificationCode(s.google_verification),
     bing_verification: verificationCode(s.bing_verification),

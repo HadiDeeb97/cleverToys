@@ -10,7 +10,7 @@
  */
 import type { MiddlewareHandler } from 'astro';
 import { supabaseConfig } from './lib/config';
-import { PRIVATE_PATH, fillTemplate, parseSeoSettings } from './lib/seo';
+import { PRIVATE_PATH, alternateNames, fillTemplate, parseSeoSettings } from './lib/seo';
 import { DEFAULT_WHATSAPP_URL, loadPageData, whatsappSendUrl } from './lib/page-data';
 import { FONT_PRESETS } from './lib/design';
 import { renderFloatingControls, renderFooter, renderHeader, renderMenuDrawer, type ChromeOptions } from './lib/storefront-chrome';
@@ -278,7 +278,7 @@ export const onRequest: MiddlewareHandler = async (context, next) => {
       const origin = new URL('/', context.site ?? context.url.origin).href;
       const sameAs = [instagramUrl, seoSettings.facebook_url, seoSettings.tiktok_url].filter((u) => u && !/instagram\.com\/?$/.test(u));
       const org = {
-        '@context': 'https://schema.org', '@type': 'Store', '@id': `${origin}#store`, name: seoSettings.site_name, alternateName: ['Clever Toys Lebanon', 'clevertoyslb'], url: origin,
+        '@context': 'https://schema.org', '@type': 'Store', '@id': `${origin}#store`, name: seoSettings.site_name, alternateName: alternateNames(seoSettings), url: origin,
         logo: logoUrl || undefined, image: seoSettings.default_image || logoUrl || undefined,
         telephone: seoSettings.org_phone || undefined, email: seoSettings.org_email || undefined,
         address: { '@type': 'PostalAddress', addressLocality: seoSettings.org_city || undefined, addressCountry: 'LB' },

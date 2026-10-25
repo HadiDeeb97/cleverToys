@@ -9,6 +9,7 @@
  */
 import { supabase } from '../lib/supabase';
 import { getPageData, DEFAULT_WHATSAPP_URL } from '../lib/page-data';
+import { alternateNames, parseSeoSettings } from '../lib/seo';
 import { AGE_RANGES, safeLink } from '../lib/design';
 import ProductCard, { type CardProduct } from '../components/ProductCard.astro';
 import QuickView from '../components/QuickView.astro';
@@ -47,7 +48,7 @@ const siteUrl = new URL('/', Astro.site ?? Astro.url.origin).href;
 const title = 'Clever Toys Lebanon | Educational & Fun Toys for Kids';
 const description = 'Shop fun, educational and exciting toys in Lebanon. Discover quality toys for babies, kids and growing learners at Clever Toys.';
 const webSiteSchema = {
-  '@context': 'https://schema.org', '@type': 'WebSite', name: 'Clever Toys', alternateName: ['Clever Toys Lebanon', 'clevertoyslb'], url: siteUrl,
+  '@context': 'https://schema.org', '@type': 'WebSite', name: 'Clever Toys', alternateName: alternateNames(parseSeoSettings(storeSettings.seo)), url: siteUrl,
   potentialAction: { '@type': 'SearchAction', target: `${new URL('/products', Astro.site ?? Astro.url.origin).href}?q={search_term_string}`, 'query-input': 'required name=search_term_string' }
 };
 ---

@@ -213,6 +213,7 @@ const { url: supabaseUrl, key: supabaseKey } = supabaseConfig();
             <h2>Business details</h2>
             <p class="muted">Added to your home page as structured data, so Google can show your store's name, logo and contact details.</p>
             <label class="seo-field">Store name<input id="o-name" class="admin-input" maxlength="80" /></label>
+            <label class="seo-field">Other names for your store <small class="muted">(comma-separated, e.g. how people search for you)</small><input id="o-alt-names" class="admin-input" maxlength="300" placeholder="Clever Toys Lebanon, clevertoyslb" /></label>
             <div class="seo-inline">
               <label class="seo-field">Phone<input id="o-phone" class="admin-input" type="tel" placeholder="+961 71 220 251" /></label>
               <label class="seo-field">Email<input id="o-email" class="admin-input" type="email" /></label>
@@ -245,7 +246,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { allowPage } from '../../scripts/admin-access';
 import { selectAll } from '../../lib/select-all';
 import { exportPdf, exportXlsx } from '../../scripts/table-export';
-import { googleConversion, googleTagId } from '../../lib/seo';
+import { defaultSeoSettings, googleConversion, googleTagId } from '../../lib/seo';
 
 // Product feed links (src/pages/products-feed.xml.ts) with Copy buttons.
 const feedUrl = `${location.origin}/products-feed.xml`;
@@ -734,6 +735,8 @@ function fillSettings() {
   $<HTMLInputElement>('#gads-purchase').value = seo.google_ads_purchase || '';
   $<HTMLInputElement>('#gads-lead').value = seo.google_ads_lead || '';
   $<HTMLInputElement>('#o-name').value = seo.site_name || 'Clever Toys';
+  // Never saved yet: the same default names the home page sends (src/lib/seo.ts).
+  $<HTMLInputElement>('#o-alt-names').value = typeof seo.alternate_names === 'string' ? seo.alternate_names : defaultSeoSettings.alternate_names;
   $<HTMLInputElement>('#o-phone').value = seo.org_phone || '';
   $<HTMLInputElement>('#o-email').value = seo.org_email || '';
   $<HTMLInputElement>('#o-city').value = seo.org_city || '';
@@ -919,7 +922,7 @@ function wire() {
     if (purchaseRaw && !googlePurchase) { toast('That purchase conversion does not look right. It looks like AW-123456789/AbC-dEf.', 'error'); return; }
     if (leadRaw && !googleLead) { toast('That WhatsApp conversion does not look right. It looks like AW-123456789/AbC-dEf.', 'error'); return; }
     const url = (sel: string) => { const v = $<HTMLInputElement>(sel).value.trim(); return /^https?:\/\//i.test(v) ? v : v ? `https://${v}` : ''; };
-    const saved = await saveSeoSettings({ meta_pixel_id: pixel, google_tag_id: googleTag, google_ads_purchase: googlePurchase, google_ads_lead: googleLead, google_verification: verification(g), bing_verification: verification(b), site_name: $<HTMLInputElement>('#o-name').value.trim() || 'Clever Toys', org_phone: $<HTMLInputElement>('#o-phone').value.trim(), org_email: $<HTMLInputElement>('#o-email').value.trim(), org_city: $<HTMLInputElement>('#o-city').value.trim(), facebook_url: url('#o-facebook'), tiktok_url: url('#o-tiktok'), default_image: defaultImage }, $<HTMLButtonElement>('#settings-save'));
+    const saved = await saveSeoSettings({ meta_pixel_id: pixel, google_tag_id: googleTag, google_ads_purchase: googlePurchase, google_ads_lead: googleLead, google_verification: verification(g), bing_verification: verification(b), site_name: $<HTMLInputElement>('#o-name').value.trim() || 'Clever Toys', alternate_names: $<HTMLInputElement>('#o-alt-names').value.trim(), org_phone: $<HTMLInputElement>('#o-phone').value.trim(), org_email: $<HTMLInputElement>('#o-email').value.trim(), org_city: $<HTMLInputElement>('#o-city').value.trim(), facebook_url: url('#o-facebook'), tiktok_url: url('#o-tiktok'), default_image: defaultImage }, $<HTMLButtonElement>('#settings-save'));
     if (saved) fillSettings();
   };
 }
